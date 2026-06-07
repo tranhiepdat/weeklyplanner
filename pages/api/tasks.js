@@ -31,6 +31,7 @@ export default async function handler(req, res) {
         done: p.Done?.checkbox || false,
         date: p["Due Date"]?.date?.start || null,
         taskType: p["Task Type"]?.select?.name || null,
+        session: p["Buổi"]?.select?.name || null,
         priority: p.Priority?.multi_select?.map((s) => s.name) || [],
         project: p.Project?.multi_select?.map((s) => s.name) || [],
       };
