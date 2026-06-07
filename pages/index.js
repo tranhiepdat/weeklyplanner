@@ -27,6 +27,7 @@ export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
   const [error, setError]   = useState("");
+  const [selectedDate, setSelectedDate] = useState(TODAY);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -72,6 +73,17 @@ export default function Home() {
   const sortedDates = Object.keys(groups).filter(k => k !== "no-date").sort();
   if (groups["no-date"]) sortedDates.push("no-date");
 
+  // 7 ngày trong tuần hiện tại (Thứ 2 → Chủ Nhật)
+  const weekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    weekDays.push(d.toISOString().split("T")[0]);
+  }
+  // Task của ngày đang chọn
+  const selectedTasks = groups[selectedDate] || [];
+  const noDateTasks = groups["no-date"] || [];
+
   const wine = "#7a4a4a", gold = "#c9a84c";
 
   return (
@@ -111,6 +123,8 @@ export default function Home() {
           padding:5px 2px;margin-bottom:8px;outline:none;}
         .gratitude::placeholder{color:#c9a0a0;font-style:italic;}
         @media(max-width:600px){.grid2{grid-template-columns:1fr!important}.stats-row{grid-template-columns:1fr 1fr!important}}
+        .day-tabs::-webkit-scrollbar{height:0;display:none}
+        .day-tabs{scrollbar-width:none}
       `}</style>
 
       <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
@@ -170,34 +184,97 @@ export default function Home() {
             </div>
           )}
 
-          {status === "ok" && sortedDates.map(date => {
-            const isToday = date === TODAY;
-            const d = new Date(date + "T00:00:00");
-            const dayName = date === "no-date" ? "Chưa có ngày" : `${DAYS[d.getDay()]} ${fmt(d)}`;
-            return (
-              <div key={date} style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".12em", color: isToday ? wine : "#8a6a6a", textTransform: "uppercase", marginBottom: 5, paddingLeft: 4, display: "flex", alignItems: "center", gap: 6 }}>
-                  {dayName}
-                  {isToday && <span style={{ background: wine, color: "#fff", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
+          {status === "ok" && (
+            <>
+              {/* TAB CHỌN NGÀY */}
+              <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10, marginBottom: 6, WebkitOverflowScrolling: "touch" }}>
+                {weekDays.map(date => {
+                  const d = new Date(date + "T00:00:00");
+                  const isToday = date === TODAY;
+                  const isSel = date === selectedDate;
+                  const dayShort = ["CN","T2","T3","T4","T5","T6","T7"][d.getDay()];
+                  const dayTasks = groups[date] || [];
+                  const allDone = dayTasks.length > 0 && dayTasks.every(t => t.done);
+                  const remaining = dayTasks.filter(t => !t.done).length;
+                  return (
+                    <button key={date} onClick={() => setSelectedDate(date)} style={{
+                      flex: "0 0 auto", minWidth: 48, padding: "8px 6px", borderRadius: 12,
+                      border: isSel ? `2px solid ${wine}` : "1px solid #e8c4b8",
+                      background: isSel ? wine : "rgba(255,255,255,.7)",
+                      color: isSel ? "#fff" : isToday ? wine : "#8a6a6a",
+                      cursor: "pointer", textAlign: "center", transition: "all .2s", position: "relative",
+                    }}>
+                      <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em" }}>{dayShort}</div>
+                      <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 600, lineHeight: 1.1 }}>{d.getDate()}</div>
+                      {dayTasks.length > 0 && (
+                        <div style={{
+                          fontSize: ".55rem", marginTop: 2,
+                          color: isSel ? "rgba(255,255,255,.85)" : allDone ? "#a8b89a" : "#c9a0a0",
+                        }}>
+                          {allDone ? "✓" : remaining}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* TÊN NGÀY ĐANG CHỌN */}
+              {(() => {
+                const d = new Date(selectedDate + "T00:00:00");
+                const isToday = selectedDate === TODAY;
+                return (
+                  <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: isToday ? wine : "#8a6a6a", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                    {DAYS[d.getDay()]} {fmt(d)}
+                    {isToday && <span style={{ background: wine, color: "#fff", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
+                  </div>
+                );
+              })()}
+
+              {/* TASK NGÀY ĐANG CHỌN */}
+              {selectedTasks.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px 10px", color: "#c9a0a0", fontSize: ".85rem", fontStyle: "italic" }}>
+                  🕊️ Không có việc nào ngày này
                 </div>
-                {groups[date].map(task => (
-                  <div key={task.id} className="task-row" style={{ opacity: task.done ? .45 : 1 }} onClick={() => toggle(task.id, !task.done)}>
-                    <div className={`check ${task.done ? "on" : ""}`}>{task.done ? "✓" : ""}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: ".87rem", color: "#4a3030", lineHeight: 1.4, textDecoration: task.done ? "line-through" : "none" }}>
-                        {task.icon} {task.name}
-                      </div>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
-                        {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
-                        {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
-                        {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
-                      </div>
+              ) : selectedTasks.map(task => (
+                <div key={task.id} className="task-row" style={{ opacity: task.done ? .45 : 1 }} onClick={() => toggle(task.id, !task.done)}>
+                  <div className={`check ${task.done ? "on" : ""}`}>{task.done ? "✓" : ""}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: ".9rem", color: "#4a3030", lineHeight: 1.4, textDecoration: task.done ? "line-through" : "none" }}>
+                      {task.icon} {task.name}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+                      {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
+                      {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
+                      {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
                     </div>
                   </div>
-                ))}
-              </div>
-            );
-          })}
+                </div>
+              ))}
+
+              {/* TASK CHƯA CÓ NGÀY */}
+              {noDateTasks.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "#8a6a6a", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
+                  {noDateTasks.map(task => (
+                    <div key={task.id} className="task-row" style={{ opacity: task.done ? .45 : 1 }} onClick={() => toggle(task.id, !task.done)}>
+                      <div className={`check ${task.done ? "on" : ""}`}>{task.done ? "✓" : ""}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: ".9rem", color: "#4a3030", lineHeight: 1.4, textDecoration: task.done ? "line-through" : "none" }}>
+                          {task.icon} {task.name}
+                        </div>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+                          {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
+                          {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
+                          {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* BOTTOM GRID */}
