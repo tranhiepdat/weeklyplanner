@@ -83,11 +83,11 @@ function Ring({ pct, label, sub, color, loading }) {
   );
 }
 
-function TaskRow({ task, onToggle }) {
+function TaskRow({ task, onToggle, onEdit }) {
   return (
-    <div className="task-row" style={{ opacity: task.done ? .45 : 1 }} onClick={() => onToggle(task.id, !task.done)}>
-      <div className={`check ${task.done ? "on" : ""}`}>{task.done ? "✓" : ""}</div>
-      <div style={{ flex: 1 }}>
+    <div className="task-row" style={{ opacity: task.done ? .45 : 1 }}>
+      <div className={`check ${task.done ? "on" : ""}`} onClick={() => onToggle(task.id, !task.done)}>{task.done ? "✓" : ""}</div>
+      <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
         <div style={{ fontSize: ".9rem", color: "#4a3030", lineHeight: 1.4, textDecoration: task.done ? "line-through" : "none" }}>
           {task.icon} {task.name}
         </div>
@@ -97,6 +97,11 @@ function TaskRow({ task, onToggle }) {
           {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
         </div>
       </div>
+      <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{
+        flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
+        background: "transparent", color: "#c9a0a0", cursor: "pointer", fontSize: "1rem",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }} title="Sửa">⋯</button>
     </div>
   );
 }
@@ -107,6 +112,7 @@ export default function Home() {
   const [error, setError]   = useState("");
   const [weekMonday, setWeekMonday] = useState(mondayOf(new Date()));
   const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [editTask, setEditTask] = useState(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -135,6 +141,27 @@ export default function Home() {
       if (!r.ok) throw new Error("failed");
     } catch {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !newDone } : t));
+    }
+  };
+
+  // Generic update (session / date / name) with optimistic UI + revert
+  const updateTask = async (id, patch) => {
+    const prevTask = tasks.find(t => t.id === id);
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+    try {
+      const body = { id };
+      if (patch.session !== undefined) body.session = patch.session;
+      if (patch.date !== undefined) body.date = patch.date;
+      if (patch.name !== undefined) body.name = patch.name;
+      const r = await fetch("/api/update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error("failed");
+    } catch {
+      // revert
+      setTasks(prev => prev.map(t => t.id === id ? prevTask : t));
     }
   };
 
@@ -334,13 +361,13 @@ export default function Home() {
                   {sessionGroups.map(sg => sg.items.length > 0 && (
                     <div key={sg.key} style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} />)}
+                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
                     </div>
                   ))}
                   {noSession.length > 0 && (
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "#8a6a6a", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} />)}
+                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
                     </div>
                   )}
                 </>
@@ -350,7 +377,7 @@ export default function Home() {
               {noDateTasks.length > 0 && selIsToday && (
                 <div style={{ marginTop: 18, borderTop: "1px dashed #e8c4b8", paddingTop: 14 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "#8a6a6a", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
-                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} />)}
+                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
                 </div>
               )}
             </>
@@ -400,7 +427,111 @@ export default function Home() {
           <span style={{ fontSize: ".72rem" }}>— 1 Thessalonians 5:18</span>
         </div>
 
+        {editTask && (
+          <EditModal
+            task={editTask}
+            weekDays={weekDays}
+            onClose={() => setEditTask(null)}
+            onSave={(patch) => { updateTask(editTask.id, patch); setEditTask(null); }}
+          />
+        )}
+
       </div>
     </>
+  );
+}
+
+function EditModal({ task, weekDays, onClose, onSave }) {
+  const [name, setName] = useState(task.name);
+  const [editingName, setEditingName] = useState(false);
+  const [session, setSession] = useState(task.session || "");
+  const [date, setDate] = useState(task.date || "");
+
+  const patch = {};
+  if (name !== task.name) patch.name = name;
+  if (session !== (task.session || "")) patch.session = session || null;
+  if (date !== (task.date || "")) patch.date = date || null;
+  const hasChange = Object.keys(patch).length > 0;
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(74,48,48,.4)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
+      animation: "fadeUp .2s ease",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "#fdf8f2", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
+        width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
+        maxHeight: "85vh", overflowY: "auto",
+      }}>
+        {/* Handle bar */}
+        <div style={{ width: 40, height: 4, background: "#e8c4b8", borderRadius: 2, margin: "0 auto 18px" }} />
+
+        {/* Name */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÊN CÔNG VIỆC</span>
+            <button onClick={() => setEditingName(v => !v)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: ".95rem", color: wine }}>✏️</button>
+          </div>
+          {editingName ? (
+            <input autoFocus value={name} onChange={e => setName(e.target.value)} style={{
+              width: "100%", padding: "10px 12px", border: `1.5px solid ${wine}`, borderRadius: 10,
+              fontFamily: "'Nunito',sans-serif", fontSize: ".95rem", color: "#4a3030", outline: "none",
+            }} />
+          ) : (
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", color: wine, fontWeight: 600 }}>
+              {task.icon} {name}
+            </div>
+          )}
+        </div>
+
+        {/* Session */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>BUỔI</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["🌅 Sáng","🏢 Office (11–7h)","🌙 Tối"].map(s => (
+              <button key={s} onClick={() => setSession(session === s ? "" : s)} style={{
+                padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: ".82rem", fontWeight: 600,
+                border: session === s ? `2px solid ${wine}` : "1px solid #e8c4b8",
+                background: session === s ? wine : "#fff", color: session === s ? "#fff" : "#8a6a6a",
+              }}>{s}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>NGÀY</div>
+          <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+            {weekDays.map(d => {
+              const dt = new Date(d + "T00:00:00");
+              const sel = d === date;
+              return (
+                <button key={d} onClick={() => setDate(d)} style={{
+                  flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
+                  border: sel ? `2px solid ${wine}` : "1px solid #e8c4b8",
+                  background: sel ? wine : "#fff", color: sel ? "#fff" : "#8a6a6a", textAlign: "center",
+                }}>
+                  <div style={{ fontSize: ".6rem", fontWeight: 700 }}>{DAYS_SHORT[dt.getDay()]}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600 }}>{dt.getDate()}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e8c4b8",
+            background: "#fff", color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
+          }}>Hủy</button>
+          <button onClick={() => hasChange ? onSave(patch) : onClose()} style={{
+            flex: 2, padding: "12px", borderRadius: 12, border: "none",
+            background: hasChange ? wine : "#c9a0a0", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
+          }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
