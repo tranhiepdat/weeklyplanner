@@ -59,10 +59,24 @@ export default function Home() {
     }
   };
 
-  const total    = tasks.length;
-  const done     = tasks.filter(t => t.done).length;
-  const todayRem = tasks.filter(t => t.date === TODAY && !t.done).length;
-  const pct      = total > 0 ? Math.round(done / total * 100) : 0;
+  // 7 ngày trong tuần hiện tại (Thứ 2 → Chủ Nhật)
+  const weekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    weekDays.push(d.toISOString().split("T")[0]);
+  }
+  const weekSet = new Set(weekDays);
+
+  // Stats CHỈ tính trong tuần này
+  const weekTasks = tasks.filter(t => t.date && weekSet.has(t.date));
+  const total    = weekTasks.length;
+  const done     = weekTasks.filter(t => t.done).length;
+  const todayTasks = tasks.filter(t => t.date === TODAY);
+  const todayDone  = todayTasks.filter(t => t.done).length;
+  const todayRem   = todayTasks.length - todayDone;
+  const pct        = total > 0 ? Math.round(done / total * 100) : 0;
+  const todayPct   = todayTasks.length > 0 ? Math.round(todayDone / todayTasks.length * 100) : 0;
 
   const groups = {};
   tasks.forEach(t => {
@@ -73,13 +87,6 @@ export default function Home() {
   const sortedDates = Object.keys(groups).filter(k => k !== "no-date").sort();
   if (groups["no-date"]) sortedDates.push("no-date");
 
-  // 7 ngày trong tuần hiện tại (Thứ 2 → Chủ Nhật)
-  const weekDays = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(mon);
-    d.setDate(mon.getDate() + i);
-    weekDays.push(d.toISOString().split("T")[0]);
-  }
   // Task của ngày đang chọn
   const selectedTasks = groups[selectedDate] || [];
   const noDateTasks = groups["no-date"] || [];
@@ -144,24 +151,45 @@ export default function Home() {
         <div className="f2" style={{ margin: "0 0 14px", padding: "16px 22px 16px 30px", background: "linear-gradient(135deg,rgba(122,74,74,.07),rgba(201,168,76,.07))", borderLeft: `3px solid ${gold}`, borderRadius: "0 12px 12px 0", position: "relative" }}>
           <span style={{ position: "absolute", top: -8, left: 12, fontSize: "1.7rem", color: gold, opacity: .4, fontFamily: "serif" }}>❝</span>
           <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.08rem", fontStyle: "italic", color: wine, lineHeight: 1.6 }}>
-            "Hãy phó thác đường đời cho Chúa, tin tưởng vào Người, Người sẽ ra tay."
+            "Hãy phó thác đường đời cho Chúa, tin tưởng vào Người, Người sẽ ra tay."<br/>
+            <span style={{ fontSize: ".92rem", color: "#8a6a6a" }}>"Commit your way to the Lord; trust in him, and he will act."</span>
           </p>
-          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "#8a6a6a", fontStyle: "normal" }}>— Thánh Vịnh 37:5 ✝️</cite>
+          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "#8a6a6a", fontStyle: "normal" }}>— Thánh Vịnh 37:5 · Psalm 37:5 ✝️</cite>
         </div>
 
-        {/* STATS */}
-        <div className="f2 stats-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
-          {[{ n: total, label: "TASKS TUẦN NÀY", bar: true }, { n: done, label: "ĐÃ HOÀN THÀNH" }, { n: todayRem, label: "CÒN LẠI HÔM NAY" }].map(({ n, label, bar }) => (
-            <div key={label} className="card" style={{ padding: "14px 16px", textAlign: "center" }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "2rem", fontWeight: 600, color: wine, lineHeight: 1 }}>
-                {status === "loading" ? "—" : n}
+        {/* STATS - VÒNG TRÒN */}
+        <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          {[
+            { pct: todayPct, done: todayDone, total: todayTasks.length, label: "HÔM NAY", color: "#7a4a4a" },
+            { pct: pct, done: done, total: total, label: "TUẦN NÀY", color: "#c9a84c" },
+          ].map(({ pct, done, total, label, color }) => {
+            const R = 30, C = 2 * Math.PI * R;
+            const offset = status === "loading" ? C : C - (pct / 100) * C;
+            return (
+              <div key={label} className="card" style={{ padding: "16px", display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
+                  <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="36" cy="36" r={R} fill="none" stroke="#f5e6e0" strokeWidth="6" />
+                    <circle cx="36" cy="36" r={R} fill="none" stroke={color} strokeWidth="6"
+                      strokeLinecap="round" strokeDasharray={C} strokeDashoffset={offset}
+                      style={{ transition: "stroke-dashoffset .8s ease" }} />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
+                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 600, color: wine, lineHeight: 1 }}>
+                      {status === "loading" ? "—" : pct + "%"}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>{label}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.4rem", fontWeight: 600, color: wine, lineHeight: 1.2 }}>
+                    {status === "loading" ? "—" : `${done}/${total}`}
+                  </div>
+                  <div style={{ fontSize: ".62rem", color: "#c9a0a0" }}>việc hoàn thành</div>
+                </div>
               </div>
-              <div style={{ fontSize: ".65rem", color: "#8a6a6a", marginTop: 3, letterSpacing: ".05em" }}>{label}</div>
-              {bar && <div style={{ width: "100%", height: 4, background: "#f5e6e0", borderRadius: 2, marginTop: 8, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: pct + "%", background: "linear-gradient(90deg,#a8b89a,#c9a84c)", borderRadius: 2, transition: "width .6s ease" }} />
-              </div>}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* TASKS */}
@@ -277,7 +305,31 @@ export default function Home() {
           )}
         </div>
 
-        {/* BOTTOM GRID */}
+        {/* LỜI CHÚA SONG NGỮ */}
+        <div className="f4 card" style={{ marginBottom: 14 }}>
+          <div className="card-title">📖 Lời Chúa trong tuần · Scripture</div>
+          <div className="grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+            <div>
+              <div style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".1em", color: gold, marginBottom: 6 }}>🇻🇳 TIẾNG VIỆT</div>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".95rem", fontStyle: "italic", color: wine, lineHeight: 1.75 }}>
+                "Chúa là mục tử chăn dắt tôi, tôi chẳng thiếu thốn gì.<br/>
+                Người cho tôi nằm nghỉ trên đồng cỏ xanh tươi,<br/>
+                dẫn tôi tới dòng nước trong lành."
+              </p>
+            </div>
+            <div>
+              <div style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".1em", color: gold, marginBottom: 6 }}>🇬🇧 ENGLISH</div>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".95rem", fontStyle: "italic", color: wine, lineHeight: 1.75 }}>
+                "The Lord is my shepherd; I shall not want.<br/>
+                He makes me lie down in green pastures.<br/>
+                He leads me beside still waters."
+              </p>
+            </div>
+          </div>
+          <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 10, textAlign: "center", borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— Thánh Vịnh 23:1–2 · Psalm 23:1–2</p>
+        </div>
+
+        {/* KINH NGUYỆN + TẠ ƠN */}
         <div className="f4 grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div className="card">
             <div className="card-title">🕊️ Kinh nguyện hằng ngày</div>
@@ -290,37 +342,17 @@ export default function Home() {
             <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 7 }}>— Kinh Thánh Phanxicô Assisi</p>
           </div>
           <div className="card">
-            <div className="card-title">📿 Lịch Mân Côi</div>
-            {[["Thứ Hai · Thứ Sáu","Mầu nhiệm Vui"],["Thứ Ba · Thứ Bảy","Mầu nhiệm Thương"],["Thứ Tư · Chúa Nhật","Mầu nhiệm Mừng"],["Thứ Năm","Mầu nhiệm Sáng"]].map(([day, mys]) => (
-              <div key={day} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(201,160,160,.15)", fontSize: ".78rem" }}>
-                <span style={{ color: "#8a6a6a", fontWeight: 700 }}>{day}</span>
-                <span style={{ fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", color: wine }}>{mys}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="f4 grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <div className="card">
             <div className="card-title">🙌 Tạ ơn hôm nay</div>
             {["Hôm nay con tạ ơn Chúa vì...","...","..."].map((ph, i) => (
               <input key={i} className="gratitude" placeholder={ph} />
             ))}
           </div>
-          <div className="card">
-            <div className="card-title">📖 Lời Chúa trong tuần</div>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".92rem", fontStyle: "italic", color: wine, lineHeight: 1.75 }}>
-              "Chúa là mục tử chăn dắt tôi, tôi chẳng thiếu thốn gì.<br/>
-              Người cho tôi nằm nghỉ trên đồng cỏ xanh tươi,<br/>
-              dẫn tôi tới dòng nước trong lành."
-            </p>
-            <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 7 }}>— Thánh Vịnh 23:1–2</p>
-          </div>
         </div>
 
         <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "#8a6a6a" }}>
           <div style={{ marginBottom: 5 }}>✝️ 🌸 ✝️</div>
-          "In everything give thanks, for this is God's will for you." — 1 Thessalonians 5:18
+          "Trong mọi hoàn cảnh, hãy tạ ơn Chúa." · "In everything give thanks."<br/>
+          <span style={{ fontSize: ".75rem" }}>— 1 Thessalonians 5:18</span>
         </div>
 
       </div>
