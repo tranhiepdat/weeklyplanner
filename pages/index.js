@@ -83,13 +83,53 @@ function Ring({ pct, label, sub, color, loading }) {
   );
 }
 
+// Pleasant ascending sparkle chime via Web Audio (no external file)
+let _audioCtx = null;
+function playDing() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    // C5, E5, G5, C6 — happy major arpeggio
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    const now = ctx.currentTime;
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      const t = now + i * 0.08;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    });
+    // sparkle shimmer on top
+    const shimmer = ctx.createOscillator();
+    const sGain = ctx.createGain();
+    shimmer.type = "sine";
+    shimmer.frequency.setValueAtTime(1568, now + 0.25);
+    shimmer.frequency.linearRampToValueAtTime(2093, now + 0.5);
+    sGain.gain.setValueAtTime(0, now + 0.25);
+    sGain.gain.linearRampToValueAtTime(0.08, now + 0.3);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    shimmer.connect(sGain);
+    sGain.connect(ctx.destination);
+    shimmer.start(now + 0.25);
+    shimmer.stop(now + 0.65);
+  } catch (e) { /* audio not available */ }
+}
+
 // Particle burst component
 function Particles({ onDone }) {
   const COLORS = ["#ff6b6b","#ffd93d","#6bcb77","#4d96ff","#c77dff","#ff9f43","#ff6eb4","#00d2d3"];
-  const SHAPES = ["✦","✧","⭒","★","✿","◆","●","▲"];
-  const particles = Array.from({ length: 22 }, (_, i) => {
-    const angle = (i / 22) * 360 + Math.random() * 16;
-    const dist = 45 + Math.random() * 55;
+  const SHAPES = ["✦","✧","⭐","★","✿","◆","●","💫"];
+  const particles = Array.from({ length: 28 }, (_, i) => {
+    const angle = (i / 28) * 360 + Math.random() * 14;
+    const dist = 60 + Math.random() * 80;
     const rad = (angle * Math.PI) / 180;
     return {
       id: i,
@@ -97,25 +137,26 @@ function Particles({ onDone }) {
       y: Math.sin(rad) * dist,
       color: COLORS[i % COLORS.length],
       shape: SHAPES[i % SHAPES.length],
-      size: 8 + Math.random() * 8,
-      delay: Math.random() * 120,
+      size: 12 + Math.random() * 12,
+      delay: Math.random() * 100,
       rotate: Math.random() * 720 - 360,
     };
   });
 
   useEffect(() => {
-    const t = setTimeout(onDone, 750);
+    const t = setTimeout(onDone, 900);
     return () => clearTimeout(t);
   }, [onDone]);
 
   return (
-    <div style={{ position: "absolute", top: "50%", left: "30%", pointerEvents: "none", zIndex: 50 }}>
+    <div style={{ position: "absolute", top: "50%", left: "50%", width: 0, height: 0, pointerEvents: "none", zIndex: 60 }}>
       {particles.map(p => (
         <div key={p.id} style={{
           position: "absolute",
           fontSize: p.size,
           color: p.color,
-          animation: `particle-fly 700ms ${p.delay}ms cubic-bezier(.2,.8,.3,1) forwards`,
+          textShadow: `0 0 6px ${p.color}`,
+          animation: `particle-fly 850ms ${p.delay}ms cubic-bezier(.15,.85,.3,1) forwards`,
           "--tx": `${p.x}px`,
           "--ty": `${p.y}px`,
           "--rot": `${p.rotate}deg`,
@@ -202,8 +243,9 @@ export default function Home() {
   const toggle = async (id, newDone) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
     if (newDone) {
+      playDing();
       setJustDone(id);
-      setTimeout(() => setJustDone(j => j === id ? null : j), 450);
+      setTimeout(() => setJustDone(j => j === id ? null : j), 1300);
     }
     try {
       const r = await fetch("/api/toggle", {
@@ -315,13 +357,13 @@ export default function Home() {
           100%{ background: linear-gradient(90deg,#ff6eb4,#ff6b6b); }
         }
         @keyframes shake{
-          0%,100%{transform:translateX(0) rotate(0)}
-          15%   {transform:translateX(-5px) rotate(-1.5deg)}
-          30%   {transform:translateX(5px)  rotate(1.5deg)}
-          45%   {transform:translateX(-4px) rotate(-1deg)}
-          60%   {transform:translateX(4px)  rotate(1deg)}
-          75%   {transform:translateX(-2px) rotate(-.5deg)}
-          90%   {transform:translateX(2px)  rotate(.5deg)}
+          0%,100%{transform:translateX(0) rotate(0) scale(1.08)}
+          15%   {transform:translateX(-6px) rotate(-2deg) scale(1.08)}
+          30%   {transform:translateX(6px)  rotate(2deg) scale(1.1)}
+          45%   {transform:translateX(-5px) rotate(-1.5deg) scale(1.08)}
+          60%   {transform:translateX(5px)  rotate(1.5deg) scale(1.1)}
+          75%   {transform:translateX(-3px) rotate(-1deg) scale(1.06)}
+          90%   {transform:translateX(3px)  rotate(1deg) scale(1.04)}
         }
         @keyframes particle-fly{
           0%  { opacity:1; transform:translate(0,0) rotate(0) scale(1); }
@@ -329,10 +371,14 @@ export default function Home() {
           100%{ opacity:0; transform:translate(var(--tx),var(--ty)) rotate(var(--rot)) scale(0.3); }
         }
         .task-rainbow{
-          animation: rainbow 480ms linear, shake 480ms cubic-bezier(.36,.07,.19,.97);
-          border-radius: 10px;
+          animation: rainbow 480ms linear, shake 560ms cubic-bezier(.36,.07,.19,.97);
+          border-radius: 12px;
           transform-origin: center;
+          box-shadow: 0 4px 20px rgba(199,125,255,.5);
+          z-index: 5;
+          position: relative;
         }
+        .task-rainbow .task-name-text{ color:#fff !important; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.2); }
         .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
         .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
@@ -408,7 +454,7 @@ export default function Home() {
         </div>
 
         {/* TASKS */}
-        <div className="f3 card" style={{ marginBottom: 14 }}>
+        <div className="f3 card" style={{ marginBottom: 14, overflow: "visible" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e8c4b8", paddingBottom: 8, marginBottom: 14 }}>
             <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", fontWeight: 600, color: wine }}>📋 Kế hoạch</span>
             <button onClick={load} style={{ fontSize: ".7rem", padding: "3px 12px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: "pointer" }}>↻ Làm mới</button>
