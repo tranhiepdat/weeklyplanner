@@ -446,6 +446,17 @@ function EditModal({ task, weekDays, onClose, onSave }) {
   const [editingName, setEditingName] = useState(false);
   const [session, setSession] = useState(task.session || "");
   const [date, setDate] = useState(task.date || "");
+  // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
+  const [modalMonday, setModalMonday] = useState(mondayOf(task.date ? new Date(task.date + "T00:00:00") : new Date()));
+
+  const modalWeekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(modalMonday);
+    d.setDate(modalMonday.getDate() + i);
+    modalWeekDays.push(iso(d));
+  }
+  const mSun = new Date(modalMonday); mSun.setDate(modalMonday.getDate() + 6);
+  const modalWeekLabel = `${fmt(modalMonday)} – ${fmt(mSun)}`;
 
   const patch = {};
   if (name !== task.name) patch.name = name;
@@ -501,16 +512,24 @@ function EditModal({ task, weekDays, onClose, onSave }) {
 
         {/* Date */}
         <div style={{ marginBottom: 22 }}>
-          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>NGÀY</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>NGÀY</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()-7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
+              <span style={{ fontSize: ".72rem", color: wine, fontWeight: 600, minWidth: 90, textAlign: "center" }}>{modalWeekLabel}</span>
+              <button onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()+7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
+            </div>
+          </div>
           <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
-            {weekDays.map(d => {
+            {modalWeekDays.map(d => {
               const dt = new Date(d + "T00:00:00");
               const sel = d === date;
+              const isT = d === TODAY;
               return (
                 <button key={d} onClick={() => setDate(d)} style={{
                   flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
-                  border: sel ? `2px solid ${wine}` : "1px solid #e8c4b8",
-                  background: sel ? wine : "#fff", color: sel ? "#fff" : "#8a6a6a", textAlign: "center",
+                  border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid #e8c4b8",
+                  background: sel ? wine : "#fff", color: sel ? "#fff" : isT ? gold : "#8a6a6a", textAlign: "center",
                 }}>
                   <div style={{ fontSize: ".6rem", fontWeight: 700 }}>{DAYS_SHORT[dt.getDay()]}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600 }}>{dt.getDate()}</div>
@@ -518,6 +537,9 @@ function EditModal({ task, weekDays, onClose, onSave }) {
               );
             })}
           </div>
+          {date && <div style={{ fontSize: ".72rem", color: "#8a6a6a", marginTop: 8 }}>
+            Đang chọn: <strong style={{ color: wine }}>{DAYS[new Date(date+"T00:00:00").getDay()]} {fmt(new Date(date+"T00:00:00"))}</strong>
+          </div>}
         </div>
 
         {/* Actions */}
