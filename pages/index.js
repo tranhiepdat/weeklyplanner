@@ -123,45 +123,66 @@ function playDing() {
   } catch (e) { /* audio not available */ }
 }
 
+// Soft descending tone for un-completing a task
+function playUndo() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(659.25, now);      // E5
+    osc.frequency.exponentialRampToValueAtTime(392, now + 0.22); // down to G4
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.13, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  } catch (e) { /* audio not available */ }
+}
+
 // Bible-themed particle burst emanating from the task box outline
-function Particles({ width, height, onDone }) {
-  const COLORS = ["#c9a84c","#e8c4b8","#a8b89a","#7a4a4a","#d4a5a5","#b8860b","#f0dea0","#9d8189"];
-  const SHAPES = ["✝️","🕊️","🐑","✨","🙏","😇","⛪","📖","🌿","👑","💛","🍞"];
+function Particles({ width, height, onDone, reverse }) {
+  const COLORS = ["#c9a84c","#e8c4b8","#a8b89a","#b8860b","#d4a5a5","#f0dea0"];
+  const SHAPES = ["✝️","🕊️","✨"]; // cross, dove, sparkle
   const W = Math.max(width || 280, 60);
   const H = Math.max(height || 48, 40);
 
   const particles = useMemo(() => {
-    const N = 30;
+    const N = reverse ? 16 : 24;
     const perim = 2 * (W + H);
     const arr = [];
     for (let i = 0; i < N; i++) {
-      // even spread around the rectangle perimeter + tiny jitter
       const t = ((i + Math.random() * 0.6) / N) * perim;
       let px, py, dirX, dirY;
       if (t < W) { px = -W/2 + t; py = -H/2; dirX = 0; dirY = -1; }
       else if (t < W + H) { px = W/2; py = -H/2 + (t - W); dirX = 1; dirY = 0; }
       else if (t < 2*W + H) { px = W/2 - (t - W - H); py = H/2; dirX = 0; dirY = 1; }
       else { px = -W/2; py = H/2 - (t - 2*W - H); dirX = -1; dirY = 0; }
-      const fly = 28 + Math.random() * 46;
+      const fly = 26 + Math.random() * 36;
       arr.push({
         id: i,
         sx: px, sy: py,
-        ex: px + dirX * fly + (Math.random() - 0.5) * 24,
-        ey: py + dirY * fly + (Math.random() - 0.5) * 24,
+        ex: px + dirX * fly + (Math.random() - 0.5) * 18,
+        ey: py + dirY * fly + (Math.random() - 0.5) * 18,
         color: COLORS[i % COLORS.length],
         shape: SHAPES[i % SHAPES.length],
-        size: 13 + Math.random() * 11,
-        delay: Math.random() * 90,
-        rotate: Math.random() * 540 - 270,
+        size: 11 + Math.random() * 6,
+        delay: Math.random() * (reverse ? 40 : 70),
+        rotate: Math.random() * 360 - 180,
       });
     }
     return arr;
-  }, [W, H]);
+  }, [W, H, reverse]);
 
   useEffect(() => {
-    const t = setTimeout(onDone, 950);
+    const t = setTimeout(onDone, reverse ? 560 : 900);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, [onDone, reverse]);
 
   return (
     <div style={{ position: "absolute", top: "50%", left: "50%", width: 0, height: 0, pointerEvents: "none", zIndex: 60 }}>
@@ -170,8 +191,8 @@ function Particles({ width, height, onDone }) {
           position: "absolute",
           fontSize: p.size,
           color: p.color,
-          textShadow: `0 0 5px ${p.color}88`,
-          animation: `particle-edge 880ms ${p.delay}ms cubic-bezier(.18,.9,.32,1) forwards`,
+          textShadow: `0 0 4px ${p.color}77`,
+          animation: `${reverse ? "particle-in" : "particle-edge"} ${reverse ? 520 : 860}ms ${p.delay}ms cubic-bezier(.05,.7,.15,1) forwards`,
           "--sx": `${p.sx}px`,
           "--sy": `${p.sy}px`,
           "--ex": `${p.ex}px`,
@@ -184,32 +205,39 @@ function Particles({ width, height, onDone }) {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, justDone }) {
-  const [phase, setPhase] = useState("idle"); // idle | celebrating | done
+function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
+  const [phase, setPhase] = useState("idle"); // idle | celebrating | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const rowRef = useRef(null);
 
   useEffect(() => {
     if (justDone && task.done) {
-      // measure box immediately so particles hug its outline
       if (rowRef.current) {
         setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
       }
       setPhase("celebrating"); // rainbow + shake + particles all start NOW
       const t = setTimeout(() => setPhase("done"), 1000);
       return () => clearTimeout(t);
+    } else if (justUndone && !task.done) {
+      if (rowRef.current) {
+        setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
+      }
+      setPhase("reversing"); // particles converge inward
+      const t = setTimeout(() => setPhase("idle"), 560);
+      return () => clearTimeout(t);
     } else if (!task.done) {
       setPhase("idle");
     }
-  }, [justDone, task.done]);
+  }, [justDone, justUndone, task.done]);
 
   const isDoneSettled = task.done && phase !== "celebrating";
   const celebrating = phase === "celebrating";
+  const reversing = phase === "reversing";
 
   return (
     <div style={{ position: "relative" }}>
       <div ref={rowRef}
-        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""}`}
+        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-reverse" : ""}`}
         style={{ opacity: isDoneSettled ? .55 : 1 }}>
         <div className={`check ${task.done ? "on" : ""}`}
           onClick={() => onToggle(task.id, !task.done)}>
@@ -234,6 +262,9 @@ function TaskRow({ task, onToggle, onEdit, justDone }) {
       {celebrating && (
         <Particles width={dims.w} height={dims.h} onDone={() => setPhase("done")} />
       )}
+      {reversing && (
+        <Particles width={dims.w} height={dims.h} reverse onDone={() => setPhase("idle")} />
+      )}
     </div>
   );
 }
@@ -246,6 +277,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [editTask, setEditTask] = useState(null);
   const [justDone, setJustDone] = useState(null);
+  const [justUndone, setJustUndone] = useState(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -268,7 +300,11 @@ export default function Home() {
     if (newDone) {
       playDing();
       setJustDone(id);
-      setTimeout(() => setJustDone(j => j === id ? null : j), 1300);
+      setTimeout(() => setJustDone(j => j === id ? null : j), 1100);
+    } else {
+      playUndo();
+      setJustUndone(id);
+      setTimeout(() => setJustUndone(j => j === id ? null : j), 650);
     }
     try {
       const r = await fetch("/api/toggle", {
@@ -389,9 +425,14 @@ export default function Home() {
           90%   {transform:translateX(3px)  rotate(1deg) scale(1.04)}
         }
         @keyframes particle-edge{
-          0%  { opacity:1; transform:translate(var(--sx),var(--sy)) rotate(0) scale(.5); }
-          25% { opacity:1; transform:translate(var(--sx),var(--sy)) rotate(calc(var(--rot) * .3)) scale(1.15); }
-          100%{ opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.45); }
+          0%  { opacity:0; transform:translate(var(--sx),var(--sy)) rotate(0) scale(.5); }
+          12% { opacity:1; }
+          100%{ opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.85); }
+        }
+        @keyframes particle-in{
+          0%  { opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.85); }
+          25% { opacity:.95; }
+          100%{ opacity:0; transform:translate(var(--sx),var(--sy)) rotate(0) scale(.4); }
         }
         .task-rainbow{
           animation: rainbow 480ms linear, shake 560ms cubic-bezier(.36,.07,.19,.97);
@@ -402,6 +443,12 @@ export default function Home() {
           position: relative;
         }
         .task-rainbow .task-name-text{ color:#fff !important; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.2); }
+        @keyframes reverseFade{
+          0%  { background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12)); transform:scale(1); }
+          40% { transform:scale(.97); }
+          100%{ background:rgba(255,255,255,0); transform:scale(1); }
+        }
+        .task-reverse{ animation: reverseFade 540ms ease-out; border-radius:10px; }
         .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
         .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
@@ -535,13 +582,13 @@ export default function Home() {
                   {sessionGroups.map(sg => sg.items.length > 0 && (
                     <div key={sg.key} style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
+                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                     </div>
                   ))}
                   {noSession.length > 0 && (
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "#8a6a6a", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
+                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                     </div>
                   )}
                 </>
@@ -551,7 +598,7 @@ export default function Home() {
               {noDateTasks.length > 0 && selIsToday && (
                 <div style={{ marginTop: 18, borderTop: "1px dashed #e8c4b8", paddingTop: 14 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "#8a6a6a", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
-                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
+                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                 </div>
               )}
             </>
