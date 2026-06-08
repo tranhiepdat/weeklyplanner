@@ -55,40 +55,40 @@ function tagStyle(type = "") {
 const wine = "#7a4a4a", gold = "#c9a84c";
 
 function Ring({ pct, label, sub, color, loading }) {
-  const R = 30, C = 2 * Math.PI * R;
+  const R = 26, C = 2 * Math.PI * R;
   const offset = loading ? C : C - (pct / 100) * C;
   return (
-    <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-      <div style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
-        <svg width="72" height="72" style={{ transform: "rotate(-90deg)" }}>
-          <circle cx="36" cy="36" r={R} fill="none" stroke="#f5e6e0" strokeWidth="6" />
-          <circle cx="36" cy="36" r={R} fill="none" stroke={color} strokeWidth="6"
+    <div className="card ring-card" style={{ padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ position: "relative", width: 62, height: 62, flexShrink: 0 }}>
+        <svg width="62" height="62" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx="31" cy="31" r={R} fill="none" stroke="#f5e6e0" strokeWidth="5.5" />
+          <circle cx="31" cy="31" r={R} fill="none" stroke={color} strokeWidth="5.5"
             strokeLinecap="round" strokeDasharray={C} strokeDashoffset={offset}
             style={{ transition: "stroke-dashoffset .8s ease" }} />
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 600, color: wine }}>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600, color: wine }}>
             {loading ? "—" : pct + "%"}
           </span>
         </div>
       </div>
-      <div>
-        <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>{label}</div>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.4rem", fontWeight: 600, color: wine, lineHeight: 1.2 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em", color: "#8a6a6a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 600, color: wine, lineHeight: 1.2 }}>
           {loading ? "—" : sub}
         </div>
-        <div style={{ fontSize: ".62rem", color: "#c9a0a0" }}>việc hoàn thành</div>
+        <div style={{ fontSize: ".58rem", color: "#c9a0a0" }}>hoàn thành</div>
       </div>
     </div>
   );
 }
 
-function TaskRow({ task, onToggle, onEdit }) {
+function TaskRow({ task, onToggle, onEdit, justDone }) {
   return (
-    <div className="task-row" style={{ opacity: task.done ? .45 : 1 }}>
+    <div className={`task-row ${task.done ? "task-done" : ""} ${justDone ? "just-done" : ""}`}>
       <div className={`check ${task.done ? "on" : ""}`} onClick={() => onToggle(task.id, !task.done)}>{task.done ? "✓" : ""}</div>
       <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
-        <div style={{ fontSize: ".9rem", color: "#4a3030", lineHeight: 1.4, textDecoration: task.done ? "line-through" : "none" }}>
+        <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4 }}>
           {task.icon} {task.name}
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
@@ -113,6 +113,7 @@ export default function Home() {
   const [weekMonday, setWeekMonday] = useState(mondayOf(new Date()));
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [editTask, setEditTask] = useState(null);
+  const [justDone, setJustDone] = useState(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -132,6 +133,10 @@ export default function Home() {
 
   const toggle = async (id, newDone) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
+    if (newDone) {
+      setJustDone(id);
+      setTimeout(() => setJustDone(j => j === id ? null : j), 450);
+    }
     try {
       const r = await fetch("/api/toggle", {
         method: "PATCH",
@@ -241,12 +246,19 @@ export default function Home() {
           color:${wine};margin-bottom:11px;display:flex;align-items:center;gap:6px;
           border-bottom:1px solid #e8c4b8;padding-bottom:7px;}
         .task-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;
-          border-radius:10px;margin-bottom:5px;cursor:pointer;transition:background .15s;}
+          border-radius:10px;margin-bottom:5px;cursor:pointer;
+          transition:background .35s ease, transform .25s cubic-bezier(.34,1.56,.64,1);}
         .task-row:hover{background:rgba(232,196,184,.22)}
+        .task-row .task-name-text{color:#4a3030;transition:color .35s ease;}
+        .task-done{background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12));}
+        .task-done:hover{background:linear-gradient(135deg,rgba(168,184,154,.34),rgba(168,184,154,.18));}
+        .task-done .task-name-text{color:#5a7050;}
+        .task-done.just-done{animation:pop .4s cubic-bezier(.34,1.56,.64,1);}
+        @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.025)}100%{transform:scale(1)}}
         .check{width:18px;height:18px;border:1.5px solid #c9a0a0;border-radius:5px;
           flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;
-          background:#fff;transition:all .2s;font-size:11px;color:#fff;}
-        .check.on{background:#a8b89a;border-color:#a8b89a;}
+          background:#fff;transition:all .25s cubic-bezier(.34,1.56,.64,1);font-size:11px;color:#fff;}
+        .check.on{background:#a8b89a;border-color:#a8b89a;transform:scale(1.08);}
         .tag{font-size:.62rem;padding:1px 7px;border-radius:10px;font-weight:700;}
         .gratitude{width:100%;border:none;border-bottom:1px solid #e8c4b8;background:transparent;
           font-family:'Nunito',sans-serif;font-size:.83rem;color:#4a3030;
@@ -297,7 +309,7 @@ export default function Home() {
         </div>
 
         {/* PROGRESS RINGS — selected day + selected week */}
-        <div className="f2 grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <Ring pct={dayPct} label={selIsToday ? "HÔM NAY" : (DAYS[selDateObj.getDay()] + " " + fmt(selDateObj)).toUpperCase()} sub={`${dayDone}/${dayTasks.length}`} color={wine} loading={status==="loading"} />
           <Ring pct={weekPct} label={isCurrentWeek ? "TUẦN NÀY" : "TUẦN ĐANG XEM"} sub={`${weekDone}/${weekTasks.length}`} color={gold} loading={status==="loading"} />
         </div>
@@ -361,13 +373,13 @@ export default function Home() {
                   {sessionGroups.map(sg => sg.items.length > 0 && (
                     <div key={sg.key} style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
+                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
                     </div>
                   ))}
                   {noSession.length > 0 && (
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "#8a6a6a", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
+                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
                     </div>
                   )}
                 </>
@@ -377,7 +389,7 @@ export default function Home() {
               {noDateTasks.length > 0 && selIsToday && (
                 <div style={{ marginTop: 18, borderTop: "1px dashed #e8c4b8", paddingTop: 14 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "#8a6a6a", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
-                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} />)}
+                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} />)}
                 </div>
               )}
             </>
