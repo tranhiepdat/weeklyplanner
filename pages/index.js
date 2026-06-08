@@ -288,8 +288,19 @@ export default function Home() {
   const [justUndone, setJustUndone] = useState(null);
   const [verse, setVerse] = useState(VERSES[0]);
 
-  // Pick a fresh random scripture on each app load
-  useEffect(() => { setVerse(randomVerse()); }, []);
+  // Fetch an unlimited random verse from the Bible API; fall back to local pool
+  const loadVerse = useCallback(() => {
+    setVerse(randomVerse()); // instant fallback while fetching
+    fetch("/api/verse")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (!d || !d.en) return;
+        setVerse({ en: [d.en], vi: d.vi || "", ref: d.ref, refVi: d.refVi || d.ref });
+      })
+      .catch(() => { /* keep local fallback verse */ });
+  }, []);
+
+  useEffect(() => { loadVerse(); }, [loadVerse]);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -512,8 +523,8 @@ export default function Home() {
           <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontStyle: "italic", color: wine, lineHeight: 1.55 }}>
             {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
           </p>
-          <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>
-          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "#8a6a6a", fontStyle: "normal" }}>— {v.ref} · {v.refVi} ✝️</cite>
+          {v.vi && <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>}
+          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "#8a6a6a", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
         </div>
 
         {/* WEEK NAVIGATION */}
@@ -621,12 +632,15 @@ export default function Home() {
         <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
           <img src="/img/jesus-water.jpg" alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
           <div style={{ padding: 18 }}>
-            <div className="card-title">📖 Scripture · Lời Chúa</div>
+            <div className="card-title" style={{ justifyContent: "space-between" }}>
+              <span>📖 Scripture · Lời Chúa</span>
+              <button onClick={loadVerse} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: "pointer" }}>🔄 Câu khác</button>
+            </div>
             <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
               {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
             </p>
-            <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>
-            <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref} · {v.refVi}</p>
+            {v.vi && <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>}
+            <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""}</p>
           </div>
         </div>
 
