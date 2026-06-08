@@ -20,18 +20,26 @@ function mondayOf(d) {
   return x;
 }
 
-// Scripture rotates per ISO week — English primary, Vietnamese secondary
+// Scripture pool — English primary, Vietnamese secondary. Picked at random each load.
 const VERSES = [
   { en: ["The Lord is my shepherd; I shall not want.","He makes me lie down in green pastures.","He leads me beside still waters."], vi:"Chúa là mục tử chăn dắt tôi, tôi chẳng thiếu thốn gì.", ref:"Psalm 23:1–2", refVi:"Thánh Vịnh 23" },
   { en: ["Commit your way to the Lord;","trust in him, and he will act."], vi:"Hãy phó thác đường đời cho Chúa, Người sẽ ra tay.", ref:"Psalm 37:5", refVi:"Thánh Vịnh 37:5" },
   { en: ["I can do all things","through Christ who strengthens me."], vi:"Tôi làm được mọi sự nhờ Đấng ban sức mạnh cho tôi.", ref:"Philippians 4:13", refVi:"Pl 4:13" },
   { en: ["Be still, and know","that I am God."], vi:"Hãy lặng yên và biết rằng Ta là Thiên Chúa.", ref:"Psalm 46:10", refVi:"Tv 46:10" },
   { en: ["Cast all your anxiety on him","because he cares for you."], vi:"Hãy trút mọi lo âu cho Người, vì Người chăm sóc bạn.", ref:"1 Peter 5:7", refVi:"1 Pr 5:7" },
+  { en: ["Trust in the Lord with all your heart,","and lean not on your own understanding."], vi:"Hãy hết lòng tin tưởng vào Chúa, đừng cậy vào sự hiểu biết của con.", ref:"Proverbs 3:5", refVi:"Cn 3:5" },
+  { en: ["The Lord is my light and my salvation;","whom shall I fear?"], vi:"Chúa là nguồn ánh sáng và ơn cứu độ của tôi, tôi còn sợ chi ai?", ref:"Psalm 27:1", refVi:"Tv 27:1" },
+  { en: ["For I know the plans I have for you,","plans to give you hope and a future."], vi:"Ta biết các kế hoạch Ta định làm cho ngươi: cho ngươi một tương lai và niềm hy vọng.", ref:"Jeremiah 29:11", refVi:"Gr 29:11" },
+  { en: ["Come to me, all who are weary,","and I will give you rest."], vi:"Tất cả những ai đang vất vả, hãy đến với Ta, Ta sẽ cho nghỉ ngơi bồi dưỡng.", ref:"Matthew 11:28", refVi:"Mt 11:28" },
+  { en: ["The joy of the Lord","is your strength."], vi:"Niềm vui trong Chúa là sức mạnh của anh em.", ref:"Nehemiah 8:10", refVi:"Nkm 8:10" },
+  { en: ["Do everything in love."], vi:"Hãy làm mọi sự vì lòng yêu mến.", ref:"1 Corinthians 16:14", refVi:"1 Cr 16:14" },
+  { en: ["This is the day the Lord has made;","let us rejoice and be glad in it."], vi:"Đây là ngày Chúa đã làm ra, nào ta hãy vui mừng hoan hỷ.", ref:"Psalm 118:24", refVi:"Tv 118:24" },
+  { en: ["Give thanks to the Lord,","for he is good; his love endures forever."], vi:"Hãy tạ ơn Chúa vì Chúa nhân từ, muôn ngàn đời Chúa vẫn trọn tình thương.", ref:"Psalm 107:1", refVi:"Tv 107:1" },
+  { en: ["Let all that you do","be done in love."], vi:"Mọi việc anh em làm, hãy làm vì đức ái.", ref:"1 Corinthians 16:14", refVi:"1 Cr 16:14" },
+  { en: ["Whatever you do, work at it","with all your heart, as working for the Lord."], vi:"Bất cứ làm việc gì, hãy làm tận tâm như thể làm cho Chúa.", ref:"Colossians 3:23", refVi:"Cl 3:23" },
 ];
-function weekIndex(monday) {
-  const start = new Date("2026-01-05"); // a Monday
-  const diff = Math.round((monday - start) / (7*24*3600*1000));
-  return ((diff % VERSES.length) + VERSES.length) % VERSES.length;
+function randomVerse() {
+  return VERSES[Math.floor(Math.random() * VERSES.length)];
 }
 
 const SESSIONS = [
@@ -278,6 +286,10 @@ export default function Home() {
   const [editTask, setEditTask] = useState(null);
   const [justDone, setJustDone] = useState(null);
   const [justUndone, setJustUndone] = useState(null);
+  const [verse, setVerse] = useState(VERSES[0]);
+
+  // Pick a fresh random scripture on each app load
+  useEffect(() => { setVerse(randomVerse()); }, []);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -377,8 +389,8 @@ export default function Home() {
 
   const noDateTasks = byDate["no-date"] || [];
 
-  // Verse for the visible week
-  const v = VERSES[weekIndex(weekMonday)];
+  // Random scripture, refreshed every page load
+  const v = verse;
 
   // Group selected day's tasks by session
   const sessionGroups = SESSIONS.map(s => ({
