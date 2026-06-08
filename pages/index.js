@@ -153,15 +153,15 @@ function playUndo() {
   } catch (e) { /* audio not available */ }
 }
 
-// Bible-themed particle burst emanating from the task box outline
-function Particles({ width, height, onDone, reverse }) {
-  const COLORS = ["#c9a84c","#e8c4b8","#a8b89a","#b8860b","#d4a5a5","#f0dea0"];
-  const SHAPES = ["✝️","🕊️","✨"]; // cross, dove, sparkle
+// Sparkle burst emanating from the task box outline (done celebration)
+function Particles({ width, height, onDone }) {
+  const COLORS = ["#c9a84c","#f0dea0","#e8c4b8","#d4a5a5","#b8860b","#dcc77a"];
+  const SHAPES = ["✦"]; // single 4-pointed sparkle star
   const W = Math.max(width || 280, 60);
   const H = Math.max(height || 48, 40);
 
   const particles = useMemo(() => {
-    const N = reverse ? 16 : 24;
+    const N = 24;
     const perim = 2 * (W + H);
     const arr = [];
     for (let i = 0; i < N; i++) {
@@ -180,17 +180,17 @@ function Particles({ width, height, onDone, reverse }) {
         color: COLORS[i % COLORS.length],
         shape: SHAPES[i % SHAPES.length],
         size: 11 + Math.random() * 6,
-        delay: Math.random() * (reverse ? 40 : 70),
+        delay: Math.random() * 70,
         rotate: Math.random() * 360 - 180,
       });
     }
     return arr;
-  }, [W, H, reverse]);
+  }, [W, H]);
 
   useEffect(() => {
-    const t = setTimeout(onDone, reverse ? 560 : 900);
+    const t = setTimeout(onDone, 900);
     return () => clearTimeout(t);
-  }, [onDone, reverse]);
+  }, [onDone]);
 
   return (
     <div style={{ position: "absolute", top: "50%", left: "50%", width: 0, height: 0, pointerEvents: "none", zIndex: 60 }}>
@@ -200,7 +200,7 @@ function Particles({ width, height, onDone, reverse }) {
           fontSize: p.size,
           color: p.color,
           textShadow: `0 0 4px ${p.color}77`,
-          animation: `${reverse ? "particle-in" : "particle-edge"} ${reverse ? 520 : 860}ms ${p.delay}ms cubic-bezier(.05,.7,.15,1) forwards`,
+          animation: `particle-edge 860ms ${p.delay}ms cubic-bezier(.05,.7,.15,1) forwards`,
           "--sx": `${p.sx}px`,
           "--sy": `${p.sy}px`,
           "--ex": `${p.ex}px`,
@@ -223,15 +223,12 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
       if (rowRef.current) {
         setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
       }
-      setPhase("celebrating"); // rainbow + shake + particles all start NOW
+      setPhase("celebrating"); // rainbow + shake + sparkles all start NOW
       const t = setTimeout(() => setPhase("done"), 1000);
       return () => clearTimeout(t);
     } else if (justUndone && !task.done) {
-      if (rowRef.current) {
-        setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
-      }
-      setPhase("reversing"); // particles converge inward
-      const t = setTimeout(() => setPhase("idle"), 560);
+      setPhase("reversing"); // red highlight pop, no particles
+      const t = setTimeout(() => setPhase("idle"), 460);
       return () => clearTimeout(t);
     } else if (!task.done) {
       setPhase("idle");
@@ -245,7 +242,7 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
   return (
     <div style={{ position: "relative" }}>
       <div ref={rowRef}
-        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-reverse" : ""}`}
+        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{ opacity: isDoneSettled ? .55 : 1 }}>
         <div className={`check ${task.done ? "on" : ""}`}
           onClick={() => onToggle(task.id, !task.done)}>
@@ -269,9 +266,6 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
       </div>
       {celebrating && (
         <Particles width={dims.w} height={dims.h} onDone={() => setPhase("done")} />
-      )}
-      {reversing && (
-        <Particles width={dims.w} height={dims.h} reverse onDone={() => setPhase("idle")} />
       )}
     </div>
   );
@@ -452,11 +446,6 @@ export default function Home() {
           12% { opacity:1; }
           100%{ opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.85); }
         }
-        @keyframes particle-in{
-          0%  { opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.85); }
-          25% { opacity:.95; }
-          100%{ opacity:0; transform:translate(var(--sx),var(--sy)) rotate(0) scale(.4); }
-        }
         .task-rainbow{
           animation: rainbow 480ms linear, shake 560ms cubic-bezier(.36,.07,.19,.97);
           border-radius: 12px;
@@ -466,12 +455,12 @@ export default function Home() {
           position: relative;
         }
         .task-rainbow .task-name-text{ color:#fff !important; font-weight:700; text-shadow:0 1px 3px rgba(0,0,0,.2); }
-        @keyframes reverseFade{
-          0%  { background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12)); transform:scale(1); }
-          40% { transform:scale(.97); }
-          100%{ background:rgba(255,255,255,0); transform:scale(1); }
+        @keyframes unpop{
+          0%  { background:rgba(220,38,38,0); transform:scale(1); }
+          30% { background:rgba(220,38,38,.20); transform:scale(1.03); }
+          100%{ background:rgba(220,38,38,0); transform:scale(1); }
         }
-        .task-reverse{ animation: reverseFade 540ms ease-out; border-radius:10px; }
+        .task-unpop{ animation: unpop 450ms cubic-bezier(.34,1.56,.64,1); border-radius:10px; }
         .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
         .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
