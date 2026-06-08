@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 
 const DAYS = ["Chủ Nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
@@ -123,28 +123,43 @@ function playDing() {
   } catch (e) { /* audio not available */ }
 }
 
-// Particle burst component
-function Particles({ onDone }) {
-  const COLORS = ["#ff6b6b","#ffd93d","#6bcb77","#4d96ff","#c77dff","#ff9f43","#ff6eb4","#00d2d3"];
-  const SHAPES = ["✦","✧","⭐","★","✿","◆","●","💫"];
-  const particles = Array.from({ length: 28 }, (_, i) => {
-    const angle = (i / 28) * 360 + Math.random() * 14;
-    const dist = 60 + Math.random() * 80;
-    const rad = (angle * Math.PI) / 180;
-    return {
-      id: i,
-      x: Math.cos(rad) * dist,
-      y: Math.sin(rad) * dist,
-      color: COLORS[i % COLORS.length],
-      shape: SHAPES[i % SHAPES.length],
-      size: 12 + Math.random() * 12,
-      delay: Math.random() * 100,
-      rotate: Math.random() * 720 - 360,
-    };
-  });
+// Bible-themed particle burst emanating from the task box outline
+function Particles({ width, height, onDone }) {
+  const COLORS = ["#c9a84c","#e8c4b8","#a8b89a","#7a4a4a","#d4a5a5","#b8860b","#f0dea0","#9d8189"];
+  const SHAPES = ["✝️","🕊️","🐑","✨","🙏","😇","⛪","📖","🌿","👑","💛","🍞"];
+  const W = Math.max(width || 280, 60);
+  const H = Math.max(height || 48, 40);
+
+  const particles = useMemo(() => {
+    const N = 30;
+    const perim = 2 * (W + H);
+    const arr = [];
+    for (let i = 0; i < N; i++) {
+      // even spread around the rectangle perimeter + tiny jitter
+      const t = ((i + Math.random() * 0.6) / N) * perim;
+      let px, py, dirX, dirY;
+      if (t < W) { px = -W/2 + t; py = -H/2; dirX = 0; dirY = -1; }
+      else if (t < W + H) { px = W/2; py = -H/2 + (t - W); dirX = 1; dirY = 0; }
+      else if (t < 2*W + H) { px = W/2 - (t - W - H); py = H/2; dirX = 0; dirY = 1; }
+      else { px = -W/2; py = H/2 - (t - 2*W - H); dirX = -1; dirY = 0; }
+      const fly = 28 + Math.random() * 46;
+      arr.push({
+        id: i,
+        sx: px, sy: py,
+        ex: px + dirX * fly + (Math.random() - 0.5) * 24,
+        ey: py + dirY * fly + (Math.random() - 0.5) * 24,
+        color: COLORS[i % COLORS.length],
+        shape: SHAPES[i % SHAPES.length],
+        size: 13 + Math.random() * 11,
+        delay: Math.random() * 90,
+        rotate: Math.random() * 540 - 270,
+      });
+    }
+    return arr;
+  }, [W, H]);
 
   useEffect(() => {
-    const t = setTimeout(onDone, 900);
+    const t = setTimeout(onDone, 950);
     return () => clearTimeout(t);
   }, [onDone]);
 
@@ -155,10 +170,12 @@ function Particles({ onDone }) {
           position: "absolute",
           fontSize: p.size,
           color: p.color,
-          textShadow: `0 0 6px ${p.color}`,
-          animation: `particle-fly 850ms ${p.delay}ms cubic-bezier(.15,.85,.3,1) forwards`,
-          "--tx": `${p.x}px`,
-          "--ty": `${p.y}px`,
+          textShadow: `0 0 5px ${p.color}88`,
+          animation: `particle-edge 880ms ${p.delay}ms cubic-bezier(.18,.9,.32,1) forwards`,
+          "--sx": `${p.sx}px`,
+          "--sy": `${p.sy}px`,
+          "--ex": `${p.ex}px`,
+          "--ey": `${p.ey}px`,
           "--rot": `${p.rotate}deg`,
           opacity: 0,
         }}>{p.shape}</div>
@@ -168,26 +185,32 @@ function Particles({ onDone }) {
 }
 
 function TaskRow({ task, onToggle, onEdit, justDone }) {
-  const [phase, setPhase] = useState("idle"); // idle | rainbow | particles | done
+  const [phase, setPhase] = useState("idle"); // idle | celebrating | done
+  const [dims, setDims] = useState({ w: 280, h: 48 });
+  const rowRef = useRef(null);
 
   useEffect(() => {
     if (justDone && task.done) {
-      setPhase("rainbow");
-      const t1 = setTimeout(() => setPhase("particles"), 480);
-      const t2 = setTimeout(() => setPhase("done"), 1050);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
+      // measure box immediately so particles hug its outline
+      if (rowRef.current) {
+        setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
+      }
+      setPhase("celebrating"); // rainbow + shake + particles all start NOW
+      const t = setTimeout(() => setPhase("done"), 1000);
+      return () => clearTimeout(t);
     } else if (!task.done) {
       setPhase("idle");
     }
   }, [justDone, task.done]);
 
-  const doneClass = task.done && phase === "done" ? "task-done" : "";
-  const rainbowClass = phase === "rainbow" ? "task-rainbow" : "";
+  const isDoneSettled = task.done && phase !== "celebrating";
+  const celebrating = phase === "celebrating";
 
   return (
     <div style={{ position: "relative" }}>
-      <div className={`task-row ${doneClass} ${rainbowClass}`}
-        style={{ opacity: (task.done && phase === "done") ? .55 : 1 }}>
+      <div ref={rowRef}
+        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""}`}
+        style={{ opacity: isDoneSettled ? .55 : 1 }}>
         <div className={`check ${task.done ? "on" : ""}`}
           onClick={() => onToggle(task.id, !task.done)}>
           {task.done ? "✓" : ""}
@@ -208,8 +231,8 @@ function TaskRow({ task, onToggle, onEdit, justDone }) {
           display: "flex", alignItems: "center", justifyContent: "center",
         }} title="Sửa">⋯</button>
       </div>
-      {phase === "particles" && (
-        <Particles onDone={() => setPhase("done")} />
+      {celebrating && (
+        <Particles width={dims.w} height={dims.h} onDone={() => setPhase("done")} />
       )}
     </div>
   );
@@ -365,10 +388,10 @@ export default function Home() {
           75%   {transform:translateX(-3px) rotate(-1deg) scale(1.06)}
           90%   {transform:translateX(3px)  rotate(1deg) scale(1.04)}
         }
-        @keyframes particle-fly{
-          0%  { opacity:1; transform:translate(0,0) rotate(0) scale(1); }
-          60% { opacity:1; }
-          100%{ opacity:0; transform:translate(var(--tx),var(--ty)) rotate(var(--rot)) scale(0.3); }
+        @keyframes particle-edge{
+          0%  { opacity:1; transform:translate(var(--sx),var(--sy)) rotate(0) scale(.5); }
+          25% { opacity:1; transform:translate(var(--sx),var(--sy)) rotate(calc(var(--rot) * .3)) scale(1.15); }
+          100%{ opacity:0; transform:translate(var(--ex),var(--ey)) rotate(var(--rot)) scale(.45); }
         }
         .task-rainbow{
           animation: rainbow 480ms linear, shake 560ms cubic-bezier(.36,.07,.19,.97);
