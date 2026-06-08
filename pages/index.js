@@ -83,25 +83,93 @@ function Ring({ pct, label, sub, color, loading }) {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, justDone }) {
+// Particle burst component
+function Particles({ onDone }) {
+  const COLORS = ["#ff6b6b","#ffd93d","#6bcb77","#4d96ff","#c77dff","#ff9f43","#ff6eb4","#00d2d3"];
+  const SHAPES = ["✦","✧","⭒","★","✿","◆","●","▲"];
+  const particles = Array.from({ length: 22 }, (_, i) => {
+    const angle = (i / 22) * 360 + Math.random() * 16;
+    const dist = 45 + Math.random() * 55;
+    const rad = (angle * Math.PI) / 180;
+    return {
+      id: i,
+      x: Math.cos(rad) * dist,
+      y: Math.sin(rad) * dist,
+      color: COLORS[i % COLORS.length],
+      shape: SHAPES[i % SHAPES.length],
+      size: 8 + Math.random() * 8,
+      delay: Math.random() * 120,
+      rotate: Math.random() * 720 - 360,
+    };
+  });
+
+  useEffect(() => {
+    const t = setTimeout(onDone, 750);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
   return (
-    <div className={`task-row ${task.done ? "task-done" : ""} ${justDone ? "just-done" : ""}`}>
-      <div className={`check ${task.done ? "on" : ""}`} onClick={() => onToggle(task.id, !task.done)}>{task.done ? "✓" : ""}</div>
-      <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
-        <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4 }}>
-          {task.icon} {task.name}
+    <div style={{ position: "absolute", top: "50%", left: "30%", pointerEvents: "none", zIndex: 50 }}>
+      {particles.map(p => (
+        <div key={p.id} style={{
+          position: "absolute",
+          fontSize: p.size,
+          color: p.color,
+          animation: `particle-fly 700ms ${p.delay}ms cubic-bezier(.2,.8,.3,1) forwards`,
+          "--tx": `${p.x}px`,
+          "--ty": `${p.y}px`,
+          "--rot": `${p.rotate}deg`,
+          opacity: 0,
+        }}>{p.shape}</div>
+      ))}
+    </div>
+  );
+}
+
+function TaskRow({ task, onToggle, onEdit, justDone }) {
+  const [phase, setPhase] = useState("idle"); // idle | rainbow | particles | done
+
+  useEffect(() => {
+    if (justDone && task.done) {
+      setPhase("rainbow");
+      const t1 = setTimeout(() => setPhase("particles"), 480);
+      const t2 = setTimeout(() => setPhase("done"), 1050);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    } else if (!task.done) {
+      setPhase("idle");
+    }
+  }, [justDone, task.done]);
+
+  const doneClass = task.done && phase === "done" ? "task-done" : "";
+  const rainbowClass = phase === "rainbow" ? "task-rainbow" : "";
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div className={`task-row ${doneClass} ${rainbowClass}`}
+        style={{ opacity: (task.done && phase === "done") ? .55 : 1 }}>
+        <div className={`check ${task.done ? "on" : ""}`}
+          onClick={() => onToggle(task.id, !task.done)}>
+          {task.done ? "✓" : ""}
         </div>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
-          {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
-          {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
-          {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
+        <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
+          <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4 }}>
+            {task.icon} {task.name}
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+            {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
+            {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
+            {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
+          </div>
         </div>
+        <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{
+          flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
+          background: "transparent", color: "#c9a0a0", cursor: "pointer", fontSize: "1rem",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} title="Sửa">⋯</button>
       </div>
-      <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{
-        flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
-        background: "transparent", color: "#c9a0a0", cursor: "pointer", fontSize: "1rem",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }} title="Sửa">⋯</button>
+      {phase === "particles" && (
+        <Particles onDone={() => setPhase("done")} />
+      )}
     </div>
   );
 }
@@ -238,6 +306,33 @@ export default function Home() {
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes rainbow{
+          0%  { background: linear-gradient(90deg,#ff6b6b,#ffd93d); }
+          20% { background: linear-gradient(90deg,#ffd93d,#6bcb77); }
+          40% { background: linear-gradient(90deg,#6bcb77,#4d96ff); }
+          60% { background: linear-gradient(90deg,#4d96ff,#c77dff); }
+          80% { background: linear-gradient(90deg,#c77dff,#ff6eb4); }
+          100%{ background: linear-gradient(90deg,#ff6eb4,#ff6b6b); }
+        }
+        @keyframes shake{
+          0%,100%{transform:translateX(0) rotate(0)}
+          15%   {transform:translateX(-5px) rotate(-1.5deg)}
+          30%   {transform:translateX(5px)  rotate(1.5deg)}
+          45%   {transform:translateX(-4px) rotate(-1deg)}
+          60%   {transform:translateX(4px)  rotate(1deg)}
+          75%   {transform:translateX(-2px) rotate(-.5deg)}
+          90%   {transform:translateX(2px)  rotate(.5deg)}
+        }
+        @keyframes particle-fly{
+          0%  { opacity:1; transform:translate(0,0) rotate(0) scale(1); }
+          60% { opacity:1; }
+          100%{ opacity:0; transform:translate(var(--tx),var(--ty)) rotate(var(--rot)) scale(0.3); }
+        }
+        .task-rainbow{
+          animation: rainbow 480ms linear, shake 480ms cubic-bezier(.36,.07,.19,.97);
+          border-radius: 10px;
+          transform-origin: center;
+        }
         .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
         .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
@@ -253,8 +348,6 @@ export default function Home() {
         .task-done{background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12));}
         .task-done:hover{background:linear-gradient(135deg,rgba(168,184,154,.34),rgba(168,184,154,.18));}
         .task-done .task-name-text{color:#5a7050;}
-        .task-done.just-done{animation:pop .4s cubic-bezier(.34,1.56,.64,1);}
-        @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.025)}100%{transform:scale(1)}}
         .check{width:18px;height:18px;border:1.5px solid #c9a0a0;border-radius:5px;
           flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;
           background:#fff;transition:all .25s cubic-bezier(.34,1.56,.64,1);font-size:11px;color:#fff;}
