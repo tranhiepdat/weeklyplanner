@@ -161,26 +161,28 @@ function Particles({ width, height, onDone }) {
   const H = Math.max(height || 48, 40);
 
   const particles = useMemo(() => {
-    const N = 24;
+    const N = 13;
     const perim = 2 * (W + H);
     const arr = [];
     for (let i = 0; i < N; i++) {
-      const t = ((i + Math.random() * 0.6) / N) * perim;
+      const t = ((i + Math.random() * 0.7) / N) * perim;
       let px, py, dirX, dirY;
       if (t < W) { px = -W/2 + t; py = -H/2; dirX = 0; dirY = -1; }
       else if (t < W + H) { px = W/2; py = -H/2 + (t - W); dirX = 1; dirY = 0; }
       else if (t < 2*W + H) { px = W/2 - (t - W - H); py = H/2; dirX = 0; dirY = 1; }
       else { px = -W/2; py = H/2 - (t - 2*W - H); dirX = -1; dirY = 0; }
-      const fly = 26 + Math.random() * 36;
+      const fly = 24 + Math.random() * 40;
+      // size contrast: ~⅓ big sparkles, rest small
+      const big = i % 3 === 0;
       arr.push({
         id: i,
         sx: px, sy: py,
         ex: px + dirX * fly + (Math.random() - 0.5) * 18,
         ey: py + dirY * fly + (Math.random() - 0.5) * 18,
         color: COLORS[i % COLORS.length],
-        shape: SHAPES[i % SHAPES.length],
-        size: 11 + Math.random() * 6,
-        delay: Math.random() * 70,
+        shape: SHAPES[0],
+        size: big ? 19 + Math.random() * 7 : 8 + Math.random() * 4,
+        delay: Math.random() * 80,
         rotate: Math.random() * 360 - 180,
       });
     }
@@ -281,20 +283,23 @@ export default function Home() {
   const [justDone, setJustDone] = useState(null);
   const [justUndone, setJustUndone] = useState(null);
   const [verse, setVerse] = useState(VERSES[0]);
+  const [verseLoading, setVerseLoading] = useState(false);
 
   // Fetch an unlimited random verse from the Bible API; fall back to local pool
-  const loadVerse = useCallback(() => {
-    setVerse(randomVerse()); // instant fallback while fetching
+  const loadVerse = useCallback((useFallback = false) => {
+    if (useFallback) setVerse(randomVerse()); // only on first mount so page isn't empty
+    setVerseLoading(true);
     fetch("/api/verse")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
-        if (!d || !d.en) return;
+        if (!d || !d.en) throw new Error("bad verse");
         setVerse({ en: [d.en], vi: d.vi || "", ref: d.ref, refVi: d.refVi || d.ref });
       })
-      .catch(() => { /* keep local fallback verse */ });
+      .catch(() => { if (!useFallback) setVerse(randomVerse()); })
+      .finally(() => setVerseLoading(false));
   }, []);
 
-  useEffect(() => { loadVerse(); }, [loadVerse]);
+  useEffect(() => { loadVerse(true); }, [loadVerse]);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -623,7 +628,7 @@ export default function Home() {
           <div style={{ padding: 18 }}>
             <div className="card-title" style={{ justifyContent: "space-between" }}>
               <span>📖 Scripture · Lời Chúa</span>
-              <button onClick={loadVerse} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: "pointer" }}>🔄 Câu khác</button>
+              <button onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
             </div>
             <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
               {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
