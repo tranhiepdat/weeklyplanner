@@ -126,66 +126,115 @@ function Ring({ pct, label, sub, color, loading }) {
   );
 }
 
-// Pleasant ascending sparkle chime via Web Audio (no external file)
-let _audioCtx = null;
-function playDing() {
+// ===== High-quality Web Audio sound engine =====
+let _audioCtx = null, _master = null, _reverb = null;
+function actx() {
+  if (typeof window === "undefined") return null;
   try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = _audioCtx;
-    if (ctx.state === "suspended") ctx.resume();
-    // C5, E5, G5, C6 — happy major arpeggio
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    const now = ctx.currentTime;
-    notes.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "triangle";
-      osc.frequency.value = freq;
-      const t = now + i * 0.08;
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.4);
-    });
-    // sparkle shimmer on top
-    const shimmer = ctx.createOscillator();
-    const sGain = ctx.createGain();
-    shimmer.type = "sine";
-    shimmer.frequency.setValueAtTime(1568, now + 0.25);
-    shimmer.frequency.linearRampToValueAtTime(2093, now + 0.5);
-    sGain.gain.setValueAtTime(0, now + 0.25);
-    sGain.gain.linearRampToValueAtTime(0.08, now + 0.3);
-    sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-    shimmer.connect(sGain);
-    sGain.connect(ctx.destination);
-    shimmer.start(now + 0.25);
-    shimmer.stop(now + 0.65);
-  } catch (e) { /* audio not available */ }
+    if (!_audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      _audioCtx = new AC();
+      // master compressor → destination (glue + protects from clipping)
+      _master = _audioCtx.createDynamicsCompressor();
+      _master.threshold.value = -16; _master.knee.value = 26; _master.ratio.value = 3.2;
+      _master.attack.value = 0.003; _master.release.value = 0.2;
+      _master.connect(_audioCtx.destination);
+      // lightweight algorithmic reverb (generated impulse) on a send bus
+      _reverb = _audioCtx.createConvolver();
+      const len = Math.floor(_audioCtx.sampleRate * 0.8);
+      const imp = _audioCtx.createBuffer(2, len, _audioCtx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = imp.getChannelData(ch);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8);
+      }
+      _reverb.buffer = imp;
+      _reverb.connect(_master);
+    }
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+  } catch { return null; }
+  return _audioCtx;
+}
+function rnd(a, b) { return a + Math.random() * (b - a); }
+
+// one oscillator voice: osc → lowpass → gain(env) → master (+ optional reverb send)
+function voice(ctx, { type = "triangle", freq, dur = 0.12, gain = 0.08, attack = 0.004, detune = 0, glideTo = null, glideAt = null, cutoff = 2400, reverb = 0, when = 0 }) {
+  const t0 = ctx.currentTime + when;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = cutoff;
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  if (detune) osc.detune.value = detune;
+  if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + (glideAt ?? dur));
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + dur);
+  osc.connect(lp); lp.connect(g); g.connect(_master);
+  if (reverb > 0) { const s = ctx.createGain(); s.gain.value = reverb; g.connect(s); s.connect(_reverb); }
+  osc.start(t0); osc.stop(t0 + attack + dur + 0.05);
+}
+// filtered noise transient — click texture & swooshes
+function noise(ctx, { dur = 0.03, gain = 0.05, type = "bandpass", freq = 2600, q = 0.8, sweepTo = null, reverb = 0, when = 0 }) {
+  const t0 = ctx.currentTime + when;
+  const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;
+  if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t0 + dur);
+  const g = ctx.createGain(); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(_master);
+  if (reverb > 0) { const s = ctx.createGain(); s.gain.value = reverb; g.connect(s); s.connect(_reverb); }
+  src.start(t0); src.stop(t0 + dur + 0.02);
 }
 
+// Semantic UI sounds — each call varies slightly so repeats feel organic
+const SFX = {
+  tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
+    noise(c, { dur: 0.018, gain: 0.03, freq: 2800 * v, q: 0.6 });
+    voice(c, { type: "triangle", freq: 900 * v, dur: 0.045, gain: 0.045, cutoff: 2600 });
+  },
+  pop() { const c = actx(); if (!c) return; const v = rnd(0.9, 1.1);
+    voice(c, { type: "sine", freq: 480 * v, dur: 0.085, gain: 0.075, cutoff: 1800, glideTo: 760 * v, glideAt: 0.07 });
+    noise(c, { dur: 0.012, gain: 0.018, freq: 3200, q: 0.5 });
+  },
+  confirm() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
+    voice(c, { freq: 587.33 * v, dur: 0.12, gain: 0.07, cutoff: 3000, reverb: 0.18 });
+    voice(c, { freq: 880 * v, dur: 0.16, gain: 0.06, cutoff: 3200, reverb: 0.22, when: 0.075 });
+    voice(c, { type: "sine", freq: 1760 * v, dur: 0.1, gain: 0.025, cutoff: 4000, when: 0.075, reverb: 0.3 });
+  },
+  soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
+    voice(c, { type: "sine", freq: 470 * v, dur: 0.12, gain: 0.06, cutoff: 1500, glideTo: 320 * v, glideAt: 0.11, reverb: 0.12 });
+  },
+  swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
+    noise(c, { dur: 0.16, gain: 0.045, type: "bandpass", freq: up ? 700 : 2400, q: 1.1, sweepTo: up ? 2600 : 650, reverb: 0.12 });
+  },
+  danger() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
+    voice(c, { type: "sawtooth", freq: 220 * v, dur: 0.16, gain: 0.05, cutoff: 1100, glideTo: 150 * v, glideAt: 0.14 });
+    noise(c, { dur: 0.02, gain: 0.028, freq: 1800, q: 0.7 });
+  },
+};
+function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
+
+// Celebration ding — randomly pick a major arpeggio so it feels fresh each time
+const DING_VARIANTS = [
+  [523.25, 659.25, 783.99, 1046.5],   // C major
+  [587.33, 739.99, 880.00, 1174.66],  // D major
+  [493.88, 622.25, 739.99, 987.77],   // B major
+  [659.25, 830.61, 987.77, 1318.51],  // E major
+  [440.00, 554.37, 659.25, 880.00],   // A major
+];
+function playDing() {
+  const c = actx(); if (!c) return;
+  const notes = DING_VARIANTS[Math.floor(Math.random() * DING_VARIANTS.length)];
+  notes.forEach((f, i) => voice(c, { type: "triangle", freq: f, dur: 0.34, gain: 0.16, cutoff: 3600, reverb: 0.25, when: i * 0.075 }));
+  voice(c, { type: "sine", freq: notes[3] * 1.5, dur: 0.32, gain: 0.05, cutoff: 5000, when: 0.22, reverb: 0.4, glideTo: notes[3] * 2, glideAt: 0.3 });
+}
 // Soft descending tone for un-completing a task
 function playUndo() {
-  try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = _audioCtx;
-    if (ctx.state === "suspended") ctx.resume();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(659.25, now);      // E5
-    osc.frequency.exponentialRampToValueAtTime(392, now + 0.22); // down to G4
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.13, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.3);
-  } catch (e) { /* audio not available */ }
+  const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
+  voice(c, { type: "triangle", freq: 659.25 * v, dur: 0.26, gain: 0.12, cutoff: 2200, glideTo: 392 * v, glideAt: 0.22, reverb: 0.12 });
 }
 
 // Sparkle burst emanating from the task box outline (done celebration)
@@ -345,7 +394,7 @@ function MoodSlider({ date, value, onChange }) {
           />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
             {MOOD_LEVELS.map(m => (
-              <button key={m.score} onClick={() => onChange(m.score)} title={m.label} style={{
+              <button key={m.score} data-sfx="pop" onClick={() => onChange(m.score)} title={m.label} style={{
                 border: "none", background: "transparent", cursor: "pointer", fontSize: ".82rem",
                 opacity: v === m.score ? 1 : .35, transform: v === m.score ? "scale(1.25)" : "scale(1)",
                 transition: "all .2s",
@@ -473,6 +522,24 @@ export default function Home() {
   }, []);
 
   useEffect(() => { loadVerse(true); }, [loadVerse]);
+
+  // Global button feedback: sound (by data-sfx) + springy press animation for EVERY button
+  useEffect(() => {
+    const onDown = (e) => {
+      const btn = e.target.closest && e.target.closest("button");
+      if (!btn || btn.disabled) return;
+      playClick(btn.dataset.sfx || "tick");
+      // spring press animation (CSS animation overrides inline transforms while running)
+      btn.classList.remove("btn-press");
+      // force reflow so the animation can retrigger on rapid taps
+      void btn.offsetWidth;
+      btn.classList.add("btn-press");
+      const done = () => btn.classList.remove("btn-press");
+      btn.addEventListener("animationend", done, { once: true });
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -722,6 +789,15 @@ export default function Home() {
         .mood-range::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #c9a84c;
           box-shadow:0 2px 8px rgba(122,74,74,.35);cursor:pointer;}
         @media(max-width:600px){.grid2{grid-template-columns:1fr!important}}
+        /* universal button feel */
+        button{transition:filter .12s ease, box-shadow .15s ease;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+        button:hover{filter:brightness(1.03);}
+        @keyframes btnPress{0%{transform:scale(1)}32%{transform:scale(.91)}100%{transform:scale(1)}}
+        .btn-press{animation:btnPress .22s cubic-bezier(.34,1.7,.5,1);}
+        @keyframes btnPressGlow{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(201,168,76,.5)}32%{transform:scale(.93)}100%{transform:scale(1);box-shadow:0 0 0 14px rgba(201,168,76,0)}}
+        .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1);}
+        @keyframes btnPressGlowRed{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,.5)}32%{transform:scale(.93)}100%{transform:scale(1);box-shadow:0 0 0 14px rgba(220,38,38,0)}}
+        .btn-press[data-sfx="danger"]{animation:btnPressGlowRed .42s cubic-bezier(.34,1.6,.5,1);}
       `}</style>
 
       <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
@@ -752,14 +828,14 @@ export default function Home() {
 
         {/* WEEK NAVIGATION */}
         <div className="f2" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
-          <button onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
+          <button data-sfx="swoosh" onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
             style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: wine }}>{weekLabel}</div>
             {isCurrentWeek && <div style={{ fontSize: ".6rem", color: gold, fontWeight: 700, letterSpacing: ".1em" }}>TUẦN NÀY</div>}
-            {!isCurrentWeek && <button onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "#8a6a6a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
+            {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "#8a6a6a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
           </div>
-          <button onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
+          <button data-sfx="swoosh" onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
             style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
@@ -809,7 +885,7 @@ export default function Home() {
                   const allDone = dt.length > 0 && dt.every(t => t.done);
                   const rem = dt.filter(t => !t.done).length;
                   return (
-                    <button key={date} onClick={() => setSelectedDate(date)} style={{
+                    <button key={date} data-sfx="pop" onClick={() => setSelectedDate(date)} style={{
                       flex: "0 0 auto", minWidth: 48, padding: "8px 6px", borderRadius: 12,
                       border: isSel ? `2px solid ${wine}` : "1px solid #e8c4b8",
                       background: isSel ? wine : "rgba(255,255,255,.7)",
@@ -867,7 +943,7 @@ export default function Home() {
           <div style={{ padding: 18 }}>
             <div className="card-title" style={{ justifyContent: "space-between" }}>
               <span>📖 Scripture · Lời Chúa</span>
-              <button onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
+              <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
             </div>
             <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
               {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
@@ -985,7 +1061,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
           <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>BUỔI</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["🌅 Sáng","🏢 Office (11–7h)","🌙 Tối"].map(s => (
-              <button key={s} onClick={() => setSession(session === s ? "" : s)} style={{
+              <button key={s} data-sfx="pop" onClick={() => setSession(session === s ? "" : s)} style={{
                 padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: ".82rem", fontWeight: 600,
                 border: session === s ? `2px solid ${wine}` : "1px solid #e8c4b8",
                 background: session === s ? wine : "#fff", color: session === s ? "#fff" : "#8a6a6a",
@@ -1002,7 +1078,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               const sel = taskType === tt;
               const c = typeColor(tt);
               return (
-                <button key={tt} onClick={() => setTaskType(sel ? "" : tt)} style={{
+                <button key={tt} data-sfx="pop" onClick={() => setTaskType(sel ? "" : tt)} style={{
                   padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
                   border: sel ? `2px solid ${c}` : "1px solid #e8c4b8",
                   background: sel ? `${c}1a` : "#fff", color: sel ? c : "#8a6a6a",
@@ -1017,9 +1093,9 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>NGÀY</span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()-7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()-7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
               <span style={{ fontSize: ".72rem", color: wine, fontWeight: 600, minWidth: 90, textAlign: "center" }}>{modalWeekLabel}</span>
-              <button onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()+7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()+7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
             </div>
           </div>
           <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
@@ -1028,7 +1104,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               const sel = d === date;
               const isT = d === TODAY;
               return (
-                <button key={d} onClick={() => setDate(d)} style={{
+                <button key={d} data-sfx="pop" onClick={() => setDate(d)} style={{
                   flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
                   border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid #e8c4b8",
                   background: sel ? wine : "#fff", color: sel ? "#fff" : isT ? gold : "#8a6a6a", textAlign: "center",
@@ -1046,11 +1122,11 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onClose} style={{
+          <button data-sfx="soft" onClick={onClose} style={{
             flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e8c4b8",
             background: "#fff", color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
-          <button onClick={() => hasChange ? onSave(patch) : onClose()} style={{
+          <button data-sfx="confirm" onClick={() => hasChange ? onSave(patch) : onClose()} style={{
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
             background: hasChange ? wine : "#c9a0a0", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
           }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
@@ -1059,18 +1135,18 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
         {/* Delete */}
         <div style={{ marginTop: 12, textAlign: "center" }}>
           {!confirmDel ? (
-            <button onClick={() => setConfirmDel(true)} style={{
+            <button data-sfx="danger" onClick={() => setConfirmDel(true)} style={{
               border: "none", background: "transparent", color: "#c08", cursor: "pointer",
               fontSize: ".8rem", fontWeight: 600, opacity: .8,
             }}>🗑️ Xóa công việc này</button>
           ) : (
             <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
               <span style={{ fontSize: ".8rem", color: "#b91c1c" }}>Xóa thật nhé?</span>
-              <button onClick={onDelete} style={{
+              <button data-sfx="danger" onClick={onDelete} style={{
                 padding: "7px 16px", borderRadius: 10, border: "none", background: "#dc2626",
                 color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".8rem",
               }}>Xóa</button>
-              <button onClick={() => setConfirmDel(false)} style={{
+              <button data-sfx="soft" onClick={() => setConfirmDel(false)} style={{
                 padding: "7px 14px", borderRadius: 10, border: "1px solid #e8c4b8", background: "#fff",
                 color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".8rem",
               }}>Thôi</button>
