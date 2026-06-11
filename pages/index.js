@@ -318,12 +318,15 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
 function MoodSlider({ date, value, onChange }) {
   const info = moodInfo(value || 3);
   const v = value || 3;
+  const isToday = date === TODAY;
+  const dObj = new Date(date + "T00:00:00");
+  const dayLabel = isToday ? "HÔM NAY" : `${DAYS[dObj.getDay()].toUpperCase()} ${fmt(dObj)}`;
   // gradient track wine -> gold
   const pct = ((v - 1) / 4) * 100;
   return (
     <div className="card" style={{ marginBottom: 14, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÂM TRẠNG HÔM NAY</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÂM TRẠNG · {dayLabel}</span>
         <span style={{ fontSize: ".66rem", color: "#c9a0a0" }}>Tv 118:24</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -363,6 +366,7 @@ function MoodSlider({ date, value, onChange }) {
 
 // ---- Weekly dual-line chart: task count + mood across the 7 days ----
 function WeekChart({ weekDays, byDate, moods }) {
+  const moodColor = "#8257b5"; // distinct violet for the mood line
   const W = 320, H = 170, padL = 16, padR = 16, padT = 24, padB = 26;
   const innerW = W - padL - padR, innerH = H - padT - padB;
 
@@ -395,8 +399,8 @@ function WeekChart({ weekDays, byDate, moods }) {
         <span style={{ fontSize: ".66rem", color: wine, display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ width: 14, height: 3, background: wine, display: "inline-block", borderRadius: 2 }} /> Số task
         </span>
-        <span style={{ fontSize: ".66rem", color: gold, display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 14, height: 3, background: gold, display: "inline-block", borderRadius: 2 }} /> Tâm trạng ✝️
+        <span style={{ fontSize: ".66rem", color: moodColor, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 14, height: 3, background: moodColor, display: "inline-block", borderRadius: 2 }} /> Tâm trạng ✝️
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
@@ -414,13 +418,16 @@ function WeekChart({ weekDays, byDate, moods }) {
             {counts[i] > 0 && <text x={p[0]} y={p[1] - 7} textAnchor="middle" fontSize="9" fill={wine} fontWeight="700">{counts[i]}</text>}
           </g>
         ))}
-        {/* mood line (gold) with cross markers */}
+        {/* mood line (violet) with cross markers */}
         {moodSegments.map((s, si) => (
-          <path key={"m" + si} d={linePath(s)} fill="none" stroke={gold} strokeWidth="2.5"
-            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1 0" />
+          <path key={"m" + si} d={linePath(s)} fill="none" stroke={moodColor} strokeWidth="2.5"
+            strokeLinejoin="round" strokeLinecap="round" />
         ))}
         {moodPts.map((p, i) => p && (
-          <text key={"mc" + i} x={p[0]} y={p[1] + 4} textAnchor="middle" fontSize="11" fill={gold}>✝</text>
+          <g key={"mc" + i}>
+            <circle cx={p[0]} cy={p[1]} r="6" fill="#fff" stroke={moodColor} strokeWidth="1.5" />
+            <text x={p[0]} y={p[1] + 3.5} textAnchor="middle" fontSize="9" fill={moodColor} fontWeight="700">✝</text>
+          </g>
         ))}
         {/* x axis labels */}
         {weekDays.map((d, i) => {
@@ -544,10 +551,15 @@ export default function Home() {
     }
   };
 
-  // Set mood for a date (localStorage + state)
+  // Set mood for a date (localStorage cache + state + Notion sync)
   const setMoodFor = (date, score) => {
-    saveMood(date, score);
+    saveMood(date, score);                       // instant local cache
     setMoods(prev => ({ ...prev, [date]: score }));
+    fetch("/api/mood", {                          // sync to Notion (best effort)
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, score }),
+    }).catch(() => { /* stays in local cache */ });
   };
 
   // Week days for current weekMonday
@@ -570,11 +582,25 @@ export default function Home() {
     // eslint-disable-next-line
   }, [weekMonday]);
 
-  // Load moods for the visible week from localStorage
+  // Load moods: local cache first (instant), then Notion to sync across devices
   useEffect(() => {
-    const m = {};
-    weekDays.forEach(d => { const v = getMood(d); if (v) m[d] = v; });
-    setMoods(m);
+    const local = {};
+    weekDays.forEach(d => { const v = getMood(d); if (v) local[d] = v; });
+    setMoods(local);
+    fetch("/api/mood")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (!d || !d.moods) return;
+        // merge Notion moods (source of truth) and refresh local cache
+        setMoods(prev => {
+          const merged = { ...prev };
+          weekDays.forEach(day => {
+            if (d.moods[day]) { merged[day] = d.moods[day]; saveMood(day, d.moods[day]); }
+          });
+          return merged;
+        });
+      })
+      .catch(() => { /* keep local cache */ });
     // eslint-disable-next-line
   }, [weekMonday]);
 
