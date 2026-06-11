@@ -98,12 +98,16 @@ function saveMood(date, score) {
 const wine = "#7a4a4a", gold = "#c9a84c";
 
 // ===== Productivity scoring system =====
-// Each task earns points. High-impact work scores most; small chores build "diligence".
+// Each completed task earns points toward one of four clear "realms".
+// Impactful work scores most; small chores still add up. Your strongest realm
+// of the day earns you a fun identity title.
 const SCORE_CATS = {
-  impact:    { key: "impact",    label: "Tác động",  emoji: "🔥", color: "#c0392b" },
-  diligence: { key: "diligence", label: "Chăm chỉ",  emoji: "🧹", color: "#b8860b" },
-  wellbeing: { key: "wellbeing", label: "An khang",  emoji: "🕊️", color: "#3aa17e" },
+  work:     { key: "work",     label: "Công Việc", emoji: "⚒️", color: "#2f6df0", title: "Thợ Cày Sự Nghiệp", desc: "việc ở công ty" },
+  personal: { key: "personal", label: "Bản Thân",  emoji: "🚀", color: "#7c3aed", title: "Nhà Kiến Tạo",      desc: "dự án & việc cá nhân" },
+  chore:    { key: "chore",    label: "Việc Nhà",  emoji: "🧹", color: "#c0883b", title: "Quán Quân Tổ Ấm",   desc: "dọn dẹp, chi tiêu, lặt vặt" },
+  care:     { key: "care",     label: "Chăm Sóc",  emoji: "🌿", color: "#3aa17e", title: "Trái Tim Ấm Áp",    desc: "gia đình, sức khỏe, nghỉ ngơi" },
 };
+const CAT_ORDER = ["work", "personal", "chore", "care"];
 function taskBaseScore(task) {
   const t = (task.taskType || "").toLowerCase();
   let base = 4;
@@ -121,26 +125,31 @@ function taskBaseScore(task) {
 }
 function taskCategory(task) {
   const t = (task.taskType || "").toLowerCase();
-  const pr = (task.priority || []).join(" ").toLowerCase();
-  if (t.includes("chore")) return "diligence";
-  if (t.includes("work") || t.includes("personal") || pr.includes("urgent") || pr.includes("important")) return "impact";
-  return "wellbeing"; // health, family, entertainment, vacation, untyped
+  if (t.includes("work")) return "work";
+  if (t.includes("personal")) return "personal";
+  if (t.includes("chore")) return "chore";
+  return "care"; // health, family, entertainment, vacation, untyped
 }
 // Analyze a set of tasks for one day → totals, completion, score by category, mood
 function analyzeDay(dayTasks, mood) {
-  const cats = { impact: { earned: 0, possible: 0, doneN: 0, n: 0 },
-                 diligence: { earned: 0, possible: 0, doneN: 0, n: 0 },
-                 wellbeing: { earned: 0, possible: 0, doneN: 0, n: 0 } };
+  const cats = {};
+  CAT_ORDER.forEach(k => { cats[k] = { earned: 0, possible: 0, doneN: 0, n: 0 }; });
   let done = 0;
   dayTasks.forEach(t => {
     const c = taskCategory(t), s = taskBaseScore(t);
     cats[c].possible += s; cats[c].n += 1;
     if (t.done) { cats[c].earned += s; cats[c].doneN += 1; done += 1; }
   });
-  const earned = cats.impact.earned + cats.diligence.earned + cats.wellbeing.earned;
-  const possible = cats.impact.possible + cats.diligence.possible + cats.wellbeing.possible;
+  const earned = CAT_ORDER.reduce((s, k) => s + cats[k].earned, 0);
+  const possible = CAT_ORDER.reduce((s, k) => s + cats[k].possible, 0);
   const total = dayTasks.length;
   return { total, done, rate: total ? done / total : 0, earned, possible, cats, mood: mood || null };
+}
+// Which realm earned the most points today → the day's identity (null if nothing done)
+function dominantCat(a) {
+  let best = null, bestV = 0;
+  CAT_ORDER.forEach(k => { if (a.cats[k].earned > bestV) { bestV = a.cats[k].earned; best = k; } });
+  return best;
 }
 // Rule-based motivational coach note (Bible-themed) for a day's analysis
 const COACH_VERSES = [
@@ -152,24 +161,26 @@ const COACH_VERSES = [
   "“Niềm vui trong Chúa là sức mạnh của anh em.” — Nkm 8:10",
 ];
 function coachNote(a, dayLabel) {
-  if (a.total === 0) return { tone: "rest", title: "Ngày nghỉ ngơi", body: `${dayLabel} chưa có việc nào. Một khoảng lặng để nạp lại năng lượng cũng là điều tốt lành.`, verse: COACH_VERSES[3] };
+  if (a.total === 0) return { tone: "rest", title: "Ngày nghỉ ngơi", body: `${dayLabel} chưa có việc nào. Một khoảng lặng để nạp lại năng lượng cũng là điều tốt lành.`, verse: COACH_VERSES[3], badge: null };
   const pct = Math.round(a.rate * 100);
-  const big = a.cats.impact.doneN, chores = a.cats.diligence.doneN, well = a.cats.wellbeing.doneN;
   let title, body, tone;
   if (pct === 100) { tone = "triumph"; title = "Trọn vẹn! 🏆"; body = `${dayLabel} bạn hoàn thành tất cả ${a.total} việc (${a.earned} điểm).`; }
   else if (pct >= 70) { tone = "great"; title = "Một ngày mạnh mẽ 💪"; body = `${dayLabel} xong ${a.done}/${a.total} việc, được ${a.earned} điểm.`; }
   else if (pct >= 40) { tone = "ok"; title = "Tiến đều 🌱"; body = `${dayLabel} xong ${a.done}/${a.total} việc. Mỗi bước nhỏ đều đáng quý.`; }
   else if (pct > 0) { tone = "low"; title = "Khởi đầu là được 🤍"; body = `${dayLabel} mới xong ${a.done}/${a.total}. Không sao, ngày mai lại tiếp tục.`; }
   else { tone = "low"; title = "Chưa bắt đầu 🌅"; body = `${dayLabel} còn ${a.total} việc đang chờ. Bắt đầu từ việc nhỏ nhất nhé.`; }
-  const bits = [];
-  if (big > 0) bits.push(`${big} việc tác động lớn`);
-  if (chores > 0) bits.push(`${chores} việc nhà chăm chỉ`);
-  if (well > 0) bits.push(`${well} việc chăm sóc bản thân`);
-  if (bits.length) body += ` Trong đó: ${bits.join(", ")}.`;
+  const dom = dominantCat(a);
+  let badge = null;
+  if (dom) {
+    const c = SCORE_CATS[dom];
+    badge = { emoji: c.emoji, title: c.title, color: c.color };
+    body += ` Hôm nay bạn nghiêng về ${c.label.toLowerCase()} — xứng danh ${c.title}.`;
+  }
   const verse = COACH_VERSES[Math.abs(hashStr(dayLabel)) % COACH_VERSES.length];
-  return { tone, title, body, verse };
+  return { tone, title, body, verse, badge };
 }
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
 
 
 function Ring({ pct, label, sub, color, loading }) {
@@ -263,56 +274,97 @@ function noise(ctx, { dur = 0.03, gain = 0.05, type = "bandpass", freq = 2600, q
   if (reverb > 0) { const s = ctx.createGain(); s.gain.value = reverb; g.connect(s); s.connect(_reverb); }
   src.start(t0); src.stop(t0 + dur + 0.02);
 }
+// woody / creamy-keyboard hit: soft lowpassed attack "thock" + struck wooden body
+// with fast decay and a slight downward pitch glide (like a marimba bar / keycap)
+function wood(ctx, { freq = 300, gain = 0.07, dur = 0.1, glide = 0.86, cutoff = 1500, reverb = 0.12, when = 0, click = 0.035, body = "triangle" }) {
+  const t0 = ctx.currentTime + when;
+  // attack transient — short lowpassed noise (the creamy "thock", warm not clicky)
+  if (click > 0) {
+    const n = Math.max(1, Math.floor(ctx.sampleRate * 0.018));
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff * 1.5;
+    const g = ctx.createGain(); g.gain.setValueAtTime(click, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+    src.connect(lp); lp.connect(g); g.connect(_master);
+    src.start(t0); src.stop(t0 + 0.025);
+  }
+  // body — struck wooden tone
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff;
+  osc.type = body; osc.frequency.setValueAtTime(freq, t0);
+  osc.frequency.exponentialRampToValueAtTime(freq * glide, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(lp); lp.connect(g); g.connect(_master);
+  if (reverb > 0) { const s = ctx.createGain(); s.gain.value = reverb; g.connect(s); s.connect(_reverb); }
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+  // soft sub layer for a deeper, cozier thock
+  const sub = ctx.createOscillator();
+  const sg = ctx.createGain();
+  sub.type = "sine"; sub.frequency.setValueAtTime(freq * 0.5, t0);
+  sg.gain.setValueAtTime(0.0001, t0);
+  sg.gain.exponentialRampToValueAtTime(gain * 0.5, t0 + 0.006);
+  sg.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.8);
+  sub.connect(sg); sg.connect(_master);
+  sub.start(t0); sub.stop(t0 + dur + 0.03);
+}
 
-// Semantic UI sounds — each call varies slightly so repeats feel organic
+// Semantic UI sounds — warm wood / creamy-keyboard, each call varies slightly
 const SFX = {
-  // cozy: warm wooden marimba-ish taps, soft attack, gentle reverb
-  tick() { const c = actx(); if (!c) return; const v = rnd(0.94, 1.06);
-    voice(c, { type: "sine", freq: 660 * v, dur: 0.11, gain: 0.06, attack: 0.006, cutoff: 1600, reverb: 0.12 });
-    voice(c, { type: "triangle", freq: 1320 * v, dur: 0.05, gain: 0.018, attack: 0.004, cutoff: 2000, reverb: 0.08 });
+  // generic tap — creamy keycap "thock"
+  tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
+    wood(c, { freq: 300 * v, gain: 0.07, dur: 0.085, cutoff: 1400, reverb: 0.1, click: 0.04 });
   },
+  // selection — light wooden marimba note (slightly brighter, two-tone)
   pop() { const c = actx(); if (!c) return; const v = rnd(0.92, 1.08);
-    voice(c, { type: "sine", freq: 523.25 * v, dur: 0.16, gain: 0.07, attack: 0.006, cutoff: 1500, glideTo: 659.25 * v, glideAt: 0.09, reverb: 0.18 });
-    voice(c, { type: "sine", freq: 1046 * v, dur: 0.08, gain: 0.02, attack: 0.005, cutoff: 2200, reverb: 0.12 });
+    wood(c, { freq: 392 * v, gain: 0.075, dur: 0.13, cutoff: 1700, reverb: 0.16, glide: 0.92, click: 0.03 });
+    wood(c, { freq: 588 * v, gain: 0.03, dur: 0.09, cutoff: 2000, reverb: 0.14, when: 0.04, click: 0 });
   },
+  // confirm/save — warm ascending wooden marimba C–E–G (low octave), cozy tail
   confirm() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
-    // warm major third → fifth, marimba-like with tail
-    voice(c, { type: "sine", freq: 523.25 * v, dur: 0.22, gain: 0.07, attack: 0.006, cutoff: 1800, reverb: 0.3 });
-    voice(c, { type: "sine", freq: 659.25 * v, dur: 0.24, gain: 0.06, attack: 0.006, cutoff: 1900, when: 0.08, reverb: 0.32 });
-    voice(c, { type: "sine", freq: 783.99 * v, dur: 0.28, gain: 0.05, attack: 0.006, cutoff: 2000, when: 0.16, reverb: 0.36 });
+    wood(c, { freq: 261.63 * v, gain: 0.08, dur: 0.2, cutoff: 1500, reverb: 0.28, glide: 0.96 });
+    wood(c, { freq: 329.63 * v, gain: 0.07, dur: 0.22, cutoff: 1600, reverb: 0.3, glide: 0.96, when: 0.085, click: 0.02 });
+    wood(c, { freq: 392.00 * v, gain: 0.065, dur: 0.26, cutoff: 1700, reverb: 0.34, glide: 0.96, when: 0.17, click: 0.02 });
   },
+  // cancel/close — low descending wooden thock
   soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
-    voice(c, { type: "sine", freq: 440 * v, dur: 0.2, gain: 0.055, attack: 0.008, cutoff: 1300, glideTo: 329.63 * v, glideAt: 0.18, reverb: 0.2 });
+    wood(c, { freq: 294 * v, gain: 0.07, dur: 0.16, cutoff: 1200, reverb: 0.16, glide: 0.78 });
   },
+  // nav — airy brush + low wooden body
   swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
-    // softer airy sweep + a warm tonal body
-    noise(c, { dur: 0.2, gain: 0.03, type: "lowpass", freq: up ? 900 : 2200, q: 0.4, sweepTo: up ? 2200 : 700, reverb: 0.18 });
-    voice(c, { type: "sine", freq: up ? 392 : 587, dur: 0.18, gain: 0.04, attack: 0.01, cutoff: 1500, glideTo: up ? 587 : 392, glideAt: 0.16, reverb: 0.2 });
+    noise(c, { dur: 0.18, gain: 0.022, type: "lowpass", freq: up ? 800 : 2000, q: 0.3, sweepTo: up ? 2000 : 700, reverb: 0.16 });
+    wood(c, { freq: up ? 330 : 392, gain: 0.05, dur: 0.14, cutoff: 1300, reverb: 0.18, glide: up ? 1.18 : 0.82, click: 0 });
   },
+  // delete — deep hollow wooden knock
   danger() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
-    voice(c, { type: "triangle", freq: 311.13 * v, dur: 0.22, gain: 0.06, attack: 0.006, cutoff: 1100, glideTo: 233.08 * v, glideAt: 0.2, reverb: 0.18 });
+    wood(c, { freq: 174.61 * v, gain: 0.08, dur: 0.2, cutoff: 900, reverb: 0.16, glide: 0.7, click: 0.05 });
   },
 };
 function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
 
-// Celebration ding — randomly pick a major arpeggio so it feels fresh each time
+// Celebration ding — warm wooden marimba arpeggio (cozy), random key each time
 const DING_VARIANTS = [
-  [523.25, 659.25, 783.99, 1046.5],   // C major
-  [587.33, 739.99, 880.00, 1174.66],  // D major
-  [493.88, 622.25, 739.99, 987.77],   // B major
-  [659.25, 830.61, 987.77, 1318.51],  // E major
-  [440.00, 554.37, 659.25, 880.00],   // A major
+  [261.63, 329.63, 392.00, 523.25],  // C major
+  [293.66, 369.99, 440.00, 587.33],  // D major
+  [220.00, 277.18, 329.63, 440.00],  // A major
+  [246.94, 311.13, 369.99, 493.88],  // B major
+  [196.00, 246.94, 293.66, 392.00],  // G major
 ];
 function playDing() {
   const c = actx(); if (!c) return;
   const notes = DING_VARIANTS[Math.floor(Math.random() * DING_VARIANTS.length)];
-  notes.forEach((f, i) => voice(c, { type: "triangle", freq: f, dur: 0.34, gain: 0.16, cutoff: 3600, reverb: 0.25, when: i * 0.075 }));
-  voice(c, { type: "sine", freq: notes[3] * 1.5, dur: 0.32, gain: 0.05, cutoff: 5000, when: 0.22, reverb: 0.4, glideTo: notes[3] * 2, glideAt: 0.3 });
+  notes.forEach((f, i) => wood(c, { freq: f, gain: 0.11, dur: 0.34, cutoff: 1900, reverb: 0.3, glide: 0.97, when: i * 0.08, click: i === 0 ? 0.04 : 0.02 }));
+  // soft warm shimmer to round it off
+  wood(c, { freq: notes[3] * 1.5, gain: 0.035, dur: 0.3, cutoff: 2400, reverb: 0.42, glide: 1.0, when: 0.24, click: 0 });
 }
-// Soft descending tone for un-completing a task
+// Soft descending wooden thock for un-completing a task
 function playUndo() {
   const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
-  voice(c, { type: "triangle", freq: 659.25 * v, dur: 0.26, gain: 0.12, cutoff: 2200, glideTo: 392 * v, glideAt: 0.22, reverb: 0.12 });
+  wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
 }
 
 // Sparkle burst emanating from the task box outline (done celebration)
@@ -572,7 +624,7 @@ function WeekChart({ weekDays, byDate, moods }) {
   );
 }
 
-// ---- Stacked score bar chart: impact / diligence / wellbeing earned per day ----
+// ---- Stacked score bar chart: 4 realms earned per day ----
 function ScoreChart({ weekDays, byDate, moods }) {
   const W = 320, H = 180, padL = 16, padR = 16, padT = 22, padB = 30;
   const innerW = W - padL - padR, innerH = H - padT - padB;
@@ -580,7 +632,7 @@ function ScoreChart({ weekDays, byDate, moods }) {
   const maxEarned = Math.max(10, ...days.map(a => a.earned));
   const slot = innerW / 7;
   const barW = Math.min(26, slot * 0.6);
-  const order = ["impact", "diligence", "wellbeing"];
+  const order = CAT_ORDER;
   const yTop = v => padT + innerH - (innerH * v) / maxEarned;
 
   const weekTotal = days.reduce((s, a) => s + a.earned, 0);
@@ -679,9 +731,16 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
             <span style={{ fontSize: ".66rem", color: "#c9a0a0", marginLeft: 3 }}>/{a.possible} điểm</span>
           </div>
         </div>
-        <ScoreBar cat="impact" earned={a.cats.impact.earned} possible={a.cats.impact.possible} />
-        <ScoreBar cat="diligence" earned={a.cats.diligence.earned} possible={a.cats.diligence.possible} />
-        <ScoreBar cat="wellbeing" earned={a.cats.wellbeing.earned} possible={a.cats.wellbeing.possible} />
+        {/* identity badge — strongest realm of the day */}
+        {note.badge && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, background: `${note.badge.color}15`, border: `1px solid ${note.badge.color}40`, marginBottom: 12 }}>
+            <span style={{ fontSize: "1rem" }}>{note.badge.emoji}</span>
+            <span style={{ fontSize: ".78rem", fontWeight: 700, color: note.badge.color }}>{note.badge.title}</span>
+          </div>
+        )}
+        {CAT_ORDER.map(k => (a.cats[k].possible > 0 &&
+          <ScoreBar key={k} cat={k} earned={a.cats[k].earned} possible={a.cats[k].possible} />
+        ))}
       </div>
 
       {/* coach note */}
