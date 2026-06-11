@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   const NOTION_KEY = process.env.NOTION_API_KEY;
   if (!NOTION_KEY) return res.status(500).json({ error: "Missing NOTION_API_KEY" });
 
-  const { id, session, date, name } = req.body;
+  const { id, session, date, name, taskType } = req.body;
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   const properties = {};
@@ -22,6 +22,11 @@ export default async function handler(req, res) {
   // Update Task title
   if (name !== undefined) {
     properties["Task"] = { title: [{ text: { content: name } }] };
+  }
+
+  // Update Task Type (select)
+  if (taskType !== undefined) {
+    properties["Task Type"] = taskType ? { select: { name: taskType } } : { select: null };
   }
 
   if (Object.keys(properties).length === 0) {

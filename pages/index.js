@@ -60,6 +60,41 @@ function tagStyle(type = "") {
   return { background: "#e0f2fe", color: "#0369a1" };
 }
 
+// Solid accent color per task type — used to highlight the left edge of each task row
+function typeColor(type = "") {
+  const t = type.toLowerCase();
+  if (t.includes("work"))          return "#2563eb";
+  if (t.includes("personal"))      return "#7c3aed";
+  if (t.includes("chore"))         return "#b45309";
+  if (t.includes("health"))        return "#db2777";
+  if (t.includes("entertainment")) return "#16a34a";
+  if (t.includes("family"))        return "#ea580c";
+  if (t.includes("vacation"))      return "#dc2626";
+  return "#9aa0a6";
+}
+
+const TASK_TYPES = ["💼 Works","🧍 Personal","🧹 Chore","🏥 Health","👨‍👩‍👧 Family","🎮 Entertainment","🏖️ Vacation"];
+
+// Bible-themed mood levels (1–5)
+const MOOD_LEVELS = [
+  { score: 1, emoji: "🥀", label: "Nặng lòng",  vi: "Thung lũng tối", color: "#7a4a4a" },
+  { score: 2, emoji: "😔", label: "Mỏi mệt",    vi: "Gánh nặng",      color: "#9d6b5a" },
+  { score: 3, emoji: "🕊️", label: "Bình an",    vi: "Tĩnh lặng",      color: "#c9a84c" },
+  { score: 4, emoji: "😊", label: "Vui tươi",   vi: "Hân hoan",       color: "#b8860b" },
+  { score: 5, emoji: "😇", label: "Hân hoan",   vi: "Tràn đầy ơn",    color: "#d4a017" },
+];
+function moodInfo(score) { return MOOD_LEVELS.find(m => m.score === score) || null; }
+
+// Mood persistence (per-device, localStorage)
+function moodKey(date) { return `dat-mood:${date}`; }
+function getMood(date) {
+  if (typeof window === "undefined") return null;
+  try { const v = localStorage.getItem(moodKey(date)); return v ? parseInt(v, 10) : null; } catch { return null; }
+}
+function saveMood(date, score) {
+  try { localStorage.setItem(moodKey(date), String(score)); } catch {}
+}
+
 const wine = "#7a4a4a", gold = "#c9a84c";
 
 function Ring({ pct, label, sub, color, loading }) {
@@ -241,13 +276,19 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
   const celebrating = phase === "celebrating";
   const reversing = phase === "reversing";
 
+  const accent = typeColor(task.taskType || "");
   return (
     <div style={{ position: "relative" }}>
       <div ref={rowRef}
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
-        style={{ opacity: isDoneSettled ? .55 : 1 }}>
+        style={{
+          opacity: isDoneSettled ? .55 : 1,
+          borderLeft: `4px solid ${accent}`,
+          background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}0d` : undefined,
+        }}>
         <div className={`check ${task.done ? "on" : ""}`}
-          onClick={() => onToggle(task.id, !task.done)}>
+          onClick={() => onToggle(task.id, !task.done)}
+          style={!task.done ? { borderColor: accent } : undefined}>
           {task.done ? "✓" : ""}
         </div>
         <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
@@ -273,6 +314,130 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
   );
 }
 
+// ---- Mood slider (Bible-themed) for a given day ----
+function MoodSlider({ date, value, onChange }) {
+  const info = moodInfo(value || 3);
+  const v = value || 3;
+  // gradient track wine -> gold
+  const pct = ((v - 1) / 4) * 100;
+  return (
+    <div className="card" style={{ marginBottom: 14, padding: "16px 18px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÂM TRẠNG HÔM NAY</span>
+        <span style={{ fontSize: ".66rem", color: "#c9a0a0" }}>Tv 118:24</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ fontSize: "2.4rem", lineHeight: 1, filter: value ? "none" : "grayscale(.6) opacity(.6)", transition: "all .25s", minWidth: 44, textAlign: "center" }}>
+          {info?.emoji}
+        </div>
+        <div style={{ flex: 1 }}>
+          <input
+            type="range" min="1" max="5" step="1" value={v}
+            onChange={e => onChange(parseInt(e.target.value, 10))}
+            className="mood-range"
+            style={{
+              width: "100%",
+              background: `linear-gradient(90deg, #7a4a4a 0%, #c9a84c ${pct}%, #efe2d4 ${pct}%, #efe2d4 100%)`,
+            }}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+            {MOOD_LEVELS.map(m => (
+              <button key={m.score} onClick={() => onChange(m.score)} title={m.label} style={{
+                border: "none", background: "transparent", cursor: "pointer", fontSize: ".82rem",
+                opacity: v === m.score ? 1 : .35, transform: v === m.score ? "scale(1.25)" : "scale(1)",
+                transition: "all .2s",
+              }}>{m.emoji}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{ textAlign: "center", marginTop: 10 }}>
+        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 600, color: info?.color }}>
+          {value ? `${info?.label}` : "Kéo để chọn tâm trạng"}
+        </span>
+        {value && <span style={{ fontSize: ".72rem", color: "#a98", fontStyle: "italic", marginLeft: 8 }}>· {info?.vi}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---- Weekly dual-line chart: task count + mood across the 7 days ----
+function WeekChart({ weekDays, byDate, moods }) {
+  const W = 320, H = 170, padL = 16, padR = 16, padT = 24, padB = 26;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+
+  const counts = weekDays.map(d => (byDate[d] || []).length);
+  const maxCount = Math.max(4, ...counts);
+  const xAt = i => padL + (innerW * i) / 6;
+  const yCount = c => padT + innerH - (innerH * c) / maxCount;
+  const yMood = m => padT + innerH - (innerH * (m - 1)) / 4; // mood 1..5
+
+  const countPts = counts.map((c, i) => [xAt(i), yCount(c)]);
+  const moodPts = weekDays.map((d, i) => {
+    const m = moods[d];
+    return m ? [xAt(i), yMood(m)] : null;
+  });
+
+  const linePath = pts => pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  // mood path skips gaps
+  let moodSegments = [];
+  let seg = [];
+  moodPts.forEach(p => { if (p) seg.push(p); else { if (seg.length) moodSegments.push(seg); seg = []; } });
+  if (seg.length) moodSegments.push(seg);
+
+  return (
+    <div className="card" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 4px" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>📈 TUẦN NÀY · CÔNG VIỆC & TÂM TRẠNG</span>
+      </div>
+      {/* legend */}
+      <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 4 }}>
+        <span style={{ fontSize: ".66rem", color: wine, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 14, height: 3, background: wine, display: "inline-block", borderRadius: 2 }} /> Số task
+        </span>
+        <span style={{ fontSize: ".66rem", color: gold, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 14, height: 3, background: gold, display: "inline-block", borderRadius: 2 }} /> Tâm trạng ✝️
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* horizontal grid */}
+        {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
+          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g}
+            stroke="#efe2d4" strokeWidth="1" />
+        ))}
+        {/* task count line */}
+        <path d={linePath(countPts)} fill="none" stroke={wine} strokeWidth="2.5"
+          strokeLinejoin="round" strokeLinecap="round" />
+        {countPts.map((p, i) => (
+          <g key={"c" + i}>
+            <circle cx={p[0]} cy={p[1]} r="3.5" fill={wine} />
+            {counts[i] > 0 && <text x={p[0]} y={p[1] - 7} textAnchor="middle" fontSize="9" fill={wine} fontWeight="700">{counts[i]}</text>}
+          </g>
+        ))}
+        {/* mood line (gold) with cross markers */}
+        {moodSegments.map((s, si) => (
+          <path key={"m" + si} d={linePath(s)} fill="none" stroke={gold} strokeWidth="2.5"
+            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1 0" />
+        ))}
+        {moodPts.map((p, i) => p && (
+          <text key={"mc" + i} x={p[0]} y={p[1] + 4} textAnchor="middle" fontSize="11" fill={gold}>✝</text>
+        ))}
+        {/* x axis labels */}
+        {weekDays.map((d, i) => {
+          const dt = new Date(d + "T00:00:00");
+          const isT = d === TODAY;
+          return (
+            <text key={"x" + i} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9"
+              fill={isT ? gold : "#a98"} fontWeight={isT ? "700" : "400"}>
+              {DAYS_SHORT[dt.getDay()]}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
@@ -284,6 +449,7 @@ export default function Home() {
   const [justUndone, setJustUndone] = useState(null);
   const [verse, setVerse] = useState(VERSES[0]);
   const [verseLoading, setVerseLoading] = useState(false);
+  const [moods, setMoods] = useState({}); // date -> score, from localStorage
 
   // Fetch an unlimited random verse from the Bible API; fall back to local pool
   const loadVerse = useCallback((useFallback = false) => {
@@ -340,7 +506,7 @@ export default function Home() {
     }
   };
 
-  // Generic update (session / date / name) with optimistic UI + revert
+  // Generic update (session / date / name / taskType) with optimistic UI + revert
   const updateTask = async (id, patch) => {
     const prevTask = tasks.find(t => t.id === id);
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
@@ -349,6 +515,7 @@ export default function Home() {
       if (patch.session !== undefined) body.session = patch.session;
       if (patch.date !== undefined) body.date = patch.date;
       if (patch.name !== undefined) body.name = patch.name;
+      if (patch.taskType !== undefined) body.taskType = patch.taskType;
       const r = await fetch("/api/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -359,6 +526,28 @@ export default function Home() {
       // revert
       setTasks(prev => prev.map(t => t.id === id ? prevTask : t));
     }
+  };
+
+  // Delete (archive) a task with optimistic removal + revert on failure
+  const deleteTask = async (id) => {
+    const prevTasks = tasks;
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      const r = await fetch("/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!r.ok) throw new Error("failed");
+    } catch {
+      setTasks(prevTasks); // restore
+    }
+  };
+
+  // Set mood for a date (localStorage + state)
+  const setMoodFor = (date, score) => {
+    saveMood(date, score);
+    setMoods(prev => ({ ...prev, [date]: score }));
   };
 
   // Week days for current weekMonday
@@ -378,6 +567,14 @@ export default function Home() {
     if (!weekSet.has(selectedDate)) {
       setSelectedDate(weekSet.has(TODAY) ? TODAY : weekDays[0]);
     }
+    // eslint-disable-next-line
+  }, [weekMonday]);
+
+  // Load moods for the visible week from localStorage
+  useEffect(() => {
+    const m = {};
+    weekDays.forEach(d => { const v = getMood(d); if (v) m[d] = v; });
+    setMoods(m);
     // eslint-disable-next-line
   }, [weekMonday]);
 
@@ -492,6 +689,12 @@ export default function Home() {
         .gratitude::placeholder{color:#c9a0a0;font-style:italic;}
         .day-tabs::-webkit-scrollbar{height:0;display:none}
         .day-tabs{scrollbar-width:none}
+        .mood-range{-webkit-appearance:none;appearance:none;height:8px;border-radius:6px;outline:none;cursor:pointer;margin:2px 0;}
+        .mood-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;
+          background:#fff;border:3px solid #c9a84c;box-shadow:0 2px 8px rgba(122,74,74,.35);cursor:pointer;transition:transform .15s;}
+        .mood-range::-webkit-slider-thumb:active{transform:scale(1.2);}
+        .mood-range::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid #c9a84c;
+          box-shadow:0 2px 8px rgba(122,74,74,.35);cursor:pointer;}
         @media(max-width:600px){.grid2{grid-template-columns:1fr!important}}
       `}</style>
 
@@ -538,6 +741,16 @@ export default function Home() {
         <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <Ring pct={dayPct} label={selIsToday ? "HÔM NAY" : (DAYS[selDateObj.getDay()] + " " + fmt(selDateObj)).toUpperCase()} sub={`${dayDone}/${dayTasks.length}`} color={wine} loading={status==="loading"} />
           <Ring pct={weekPct} label={isCurrentWeek ? "TUẦN NÀY" : "TUẦN ĐANG XEM"} sub={`${weekDone}/${weekTasks.length}`} color={gold} loading={status==="loading"} />
+        </div>
+
+        {/* MOOD SLIDER — for selected day */}
+        <div className="f2">
+          <MoodSlider date={selectedDate} value={moods[selectedDate] || null} onChange={(s) => setMoodFor(selectedDate, s)} />
+        </div>
+
+        {/* WEEK CHART — task count + mood */}
+        <div className="f3">
+          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
         </div>
 
         {/* TASKS */}
@@ -674,6 +887,7 @@ export default function Home() {
             weekDays={weekDays}
             onClose={() => setEditTask(null)}
             onSave={(patch) => { updateTask(editTask.id, patch); setEditTask(null); }}
+            onDelete={() => { deleteTask(editTask.id); setEditTask(null); }}
           />
         )}
 
@@ -682,11 +896,13 @@ export default function Home() {
   );
 }
 
-function EditModal({ task, weekDays, onClose, onSave }) {
+function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const [name, setName] = useState(task.name);
   const [editingName, setEditingName] = useState(false);
   const [session, setSession] = useState(task.session || "");
   const [date, setDate] = useState(task.date || "");
+  const [taskType, setTaskType] = useState(task.taskType || "");
+  const [confirmDel, setConfirmDel] = useState(false);
   // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
   const [modalMonday, setModalMonday] = useState(mondayOf(task.date ? new Date(task.date + "T00:00:00") : new Date()));
 
@@ -703,6 +919,7 @@ function EditModal({ task, weekDays, onClose, onSave }) {
   if (name !== task.name) patch.name = name;
   if (session !== (task.session || "")) patch.session = session || null;
   if (date !== (task.date || "")) patch.date = date || null;
+  if (taskType !== (task.taskType || "")) patch.taskType = taskType || null;
   const hasChange = Object.keys(patch).length > 0;
 
   return (
@@ -751,6 +968,24 @@ function EditModal({ task, weekDays, onClose, onSave }) {
           </div>
         </div>
 
+        {/* Task Type */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>LOẠI CÔNG VIỆC</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TASK_TYPES.map(tt => {
+              const sel = taskType === tt;
+              const c = typeColor(tt);
+              return (
+                <button key={tt} onClick={() => setTaskType(sel ? "" : tt)} style={{
+                  padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
+                  border: sel ? `2px solid ${c}` : "1px solid #e8c4b8",
+                  background: sel ? `${c}1a` : "#fff", color: sel ? c : "#8a6a6a",
+                }}>{tt}</button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Date */}
         <div style={{ marginBottom: 22 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -793,6 +1028,28 @@ function EditModal({ task, weekDays, onClose, onSave }) {
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
             background: hasChange ? wine : "#c9a0a0", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
           }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
+        </div>
+
+        {/* Delete */}
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          {!confirmDel ? (
+            <button onClick={() => setConfirmDel(true)} style={{
+              border: "none", background: "transparent", color: "#c08", cursor: "pointer",
+              fontSize: ".8rem", fontWeight: 600, opacity: .8,
+            }}>🗑️ Xóa công việc này</button>
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: ".8rem", color: "#b91c1c" }}>Xóa thật nhé?</span>
+              <button onClick={onDelete} style={{
+                padding: "7px 16px", borderRadius: 10, border: "none", background: "#dc2626",
+                color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".8rem",
+              }}>Xóa</button>
+              <button onClick={() => setConfirmDel(false)} style={{
+                padding: "7px 14px", borderRadius: 10, border: "1px solid #e8c4b8", background: "#fff",
+                color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".8rem",
+              }}>Thôi</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
