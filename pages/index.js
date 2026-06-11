@@ -97,6 +97,81 @@ function saveMood(date, score) {
 
 const wine = "#7a4a4a", gold = "#c9a84c";
 
+// ===== Productivity scoring system =====
+// Each task earns points. High-impact work scores most; small chores build "diligence".
+const SCORE_CATS = {
+  impact:    { key: "impact",    label: "Tác động",  emoji: "🔥", color: "#c0392b" },
+  diligence: { key: "diligence", label: "Chăm chỉ",  emoji: "🧹", color: "#b8860b" },
+  wellbeing: { key: "wellbeing", label: "An khang",  emoji: "🕊️", color: "#3aa17e" },
+};
+function taskBaseScore(task) {
+  const t = (task.taskType || "").toLowerCase();
+  let base = 4;
+  if (t.includes("work")) base = 10;
+  else if (t.includes("personal")) base = 7;
+  else if (t.includes("health")) base = 6;
+  else if (t.includes("family")) base = 5;
+  else if (t.includes("chore")) base = 3;
+  else if (t.includes("entertainment")) base = 2;
+  else if (t.includes("vacation")) base = 2;
+  const pr = (task.priority || []).join(" ").toLowerCase();
+  if (pr.includes("urgent")) base += 5;
+  else if (pr.includes("important")) base += 3;
+  return base;
+}
+function taskCategory(task) {
+  const t = (task.taskType || "").toLowerCase();
+  const pr = (task.priority || []).join(" ").toLowerCase();
+  if (t.includes("chore")) return "diligence";
+  if (t.includes("work") || t.includes("personal") || pr.includes("urgent") || pr.includes("important")) return "impact";
+  return "wellbeing"; // health, family, entertainment, vacation, untyped
+}
+// Analyze a set of tasks for one day → totals, completion, score by category, mood
+function analyzeDay(dayTasks, mood) {
+  const cats = { impact: { earned: 0, possible: 0, doneN: 0, n: 0 },
+                 diligence: { earned: 0, possible: 0, doneN: 0, n: 0 },
+                 wellbeing: { earned: 0, possible: 0, doneN: 0, n: 0 } };
+  let done = 0;
+  dayTasks.forEach(t => {
+    const c = taskCategory(t), s = taskBaseScore(t);
+    cats[c].possible += s; cats[c].n += 1;
+    if (t.done) { cats[c].earned += s; cats[c].doneN += 1; done += 1; }
+  });
+  const earned = cats.impact.earned + cats.diligence.earned + cats.wellbeing.earned;
+  const possible = cats.impact.possible + cats.diligence.possible + cats.wellbeing.possible;
+  const total = dayTasks.length;
+  return { total, done, rate: total ? done / total : 0, earned, possible, cats, mood: mood || null };
+}
+// Rule-based motivational coach note (Bible-themed) for a day's analysis
+const COACH_VERSES = [
+  "“Hãy làm việc hết lòng như làm cho Chúa.” — Cl 3:23",
+  "“Tôi làm được mọi sự nhờ Đấng ban sức mạnh.” — Pl 4:13",
+  "“Đây là ngày Chúa đã làm ra, nào ta hãy hân hoan.” — Tv 118:24",
+  "“Hãy phó thác đường đời cho Chúa.” — Tv 37:5",
+  "“Ai trung tín việc nhỏ sẽ trung tín việc lớn.” — Lc 16:10",
+  "“Niềm vui trong Chúa là sức mạnh của anh em.” — Nkm 8:10",
+];
+function coachNote(a, dayLabel) {
+  if (a.total === 0) return { tone: "rest", title: "Ngày nghỉ ngơi", body: `${dayLabel} chưa có việc nào. Một khoảng lặng để nạp lại năng lượng cũng là điều tốt lành.`, verse: COACH_VERSES[3] };
+  const pct = Math.round(a.rate * 100);
+  const big = a.cats.impact.doneN, chores = a.cats.diligence.doneN, well = a.cats.wellbeing.doneN;
+  let title, body, tone;
+  if (pct === 100) { tone = "triumph"; title = "Trọn vẹn! 🏆"; body = `${dayLabel} bạn hoàn thành tất cả ${a.total} việc (${a.earned} điểm).`; }
+  else if (pct >= 70) { tone = "great"; title = "Một ngày mạnh mẽ 💪"; body = `${dayLabel} xong ${a.done}/${a.total} việc, được ${a.earned} điểm.`; }
+  else if (pct >= 40) { tone = "ok"; title = "Tiến đều 🌱"; body = `${dayLabel} xong ${a.done}/${a.total} việc. Mỗi bước nhỏ đều đáng quý.`; }
+  else if (pct > 0) { tone = "low"; title = "Khởi đầu là được 🤍"; body = `${dayLabel} mới xong ${a.done}/${a.total}. Không sao, ngày mai lại tiếp tục.`; }
+  else { tone = "low"; title = "Chưa bắt đầu 🌅"; body = `${dayLabel} còn ${a.total} việc đang chờ. Bắt đầu từ việc nhỏ nhất nhé.`; }
+  const bits = [];
+  if (big > 0) bits.push(`${big} việc tác động lớn`);
+  if (chores > 0) bits.push(`${chores} việc nhà chăm chỉ`);
+  if (well > 0) bits.push(`${well} việc chăm sóc bản thân`);
+  if (bits.length) body += ` Trong đó: ${bits.join(", ")}.`;
+  const verse = COACH_VERSES[Math.abs(hashStr(dayLabel)) % COACH_VERSES.length];
+  return { tone, title, body, verse };
+}
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
+
 function Ring({ pct, label, sub, color, loading }) {
   const R = 26, C = 2 * Math.PI * R;
   const offset = loading ? C : C - (pct / 100) * C;
@@ -191,28 +266,31 @@ function noise(ctx, { dur = 0.03, gain = 0.05, type = "bandpass", freq = 2600, q
 
 // Semantic UI sounds — each call varies slightly so repeats feel organic
 const SFX = {
-  tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
-    noise(c, { dur: 0.018, gain: 0.03, freq: 2800 * v, q: 0.6 });
-    voice(c, { type: "triangle", freq: 900 * v, dur: 0.045, gain: 0.045, cutoff: 2600 });
+  // cozy: warm wooden marimba-ish taps, soft attack, gentle reverb
+  tick() { const c = actx(); if (!c) return; const v = rnd(0.94, 1.06);
+    voice(c, { type: "sine", freq: 660 * v, dur: 0.11, gain: 0.06, attack: 0.006, cutoff: 1600, reverb: 0.12 });
+    voice(c, { type: "triangle", freq: 1320 * v, dur: 0.05, gain: 0.018, attack: 0.004, cutoff: 2000, reverb: 0.08 });
   },
-  pop() { const c = actx(); if (!c) return; const v = rnd(0.9, 1.1);
-    voice(c, { type: "sine", freq: 480 * v, dur: 0.085, gain: 0.075, cutoff: 1800, glideTo: 760 * v, glideAt: 0.07 });
-    noise(c, { dur: 0.012, gain: 0.018, freq: 3200, q: 0.5 });
+  pop() { const c = actx(); if (!c) return; const v = rnd(0.92, 1.08);
+    voice(c, { type: "sine", freq: 523.25 * v, dur: 0.16, gain: 0.07, attack: 0.006, cutoff: 1500, glideTo: 659.25 * v, glideAt: 0.09, reverb: 0.18 });
+    voice(c, { type: "sine", freq: 1046 * v, dur: 0.08, gain: 0.02, attack: 0.005, cutoff: 2200, reverb: 0.12 });
   },
   confirm() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
-    voice(c, { freq: 587.33 * v, dur: 0.12, gain: 0.07, cutoff: 3000, reverb: 0.18 });
-    voice(c, { freq: 880 * v, dur: 0.16, gain: 0.06, cutoff: 3200, reverb: 0.22, when: 0.075 });
-    voice(c, { type: "sine", freq: 1760 * v, dur: 0.1, gain: 0.025, cutoff: 4000, when: 0.075, reverb: 0.3 });
+    // warm major third → fifth, marimba-like with tail
+    voice(c, { type: "sine", freq: 523.25 * v, dur: 0.22, gain: 0.07, attack: 0.006, cutoff: 1800, reverb: 0.3 });
+    voice(c, { type: "sine", freq: 659.25 * v, dur: 0.24, gain: 0.06, attack: 0.006, cutoff: 1900, when: 0.08, reverb: 0.32 });
+    voice(c, { type: "sine", freq: 783.99 * v, dur: 0.28, gain: 0.05, attack: 0.006, cutoff: 2000, when: 0.16, reverb: 0.36 });
   },
   soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
-    voice(c, { type: "sine", freq: 470 * v, dur: 0.12, gain: 0.06, cutoff: 1500, glideTo: 320 * v, glideAt: 0.11, reverb: 0.12 });
+    voice(c, { type: "sine", freq: 440 * v, dur: 0.2, gain: 0.055, attack: 0.008, cutoff: 1300, glideTo: 329.63 * v, glideAt: 0.18, reverb: 0.2 });
   },
   swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
-    noise(c, { dur: 0.16, gain: 0.045, type: "bandpass", freq: up ? 700 : 2400, q: 1.1, sweepTo: up ? 2600 : 650, reverb: 0.12 });
+    // softer airy sweep + a warm tonal body
+    noise(c, { dur: 0.2, gain: 0.03, type: "lowpass", freq: up ? 900 : 2200, q: 0.4, sweepTo: up ? 2200 : 700, reverb: 0.18 });
+    voice(c, { type: "sine", freq: up ? 392 : 587, dur: 0.18, gain: 0.04, attack: 0.01, cutoff: 1500, glideTo: up ? 587 : 392, glideAt: 0.16, reverb: 0.2 });
   },
   danger() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
-    voice(c, { type: "sawtooth", freq: 220 * v, dur: 0.16, gain: 0.05, cutoff: 1100, glideTo: 150 * v, glideAt: 0.14 });
-    noise(c, { dur: 0.02, gain: 0.028, freq: 1800, q: 0.7 });
+    voice(c, { type: "triangle", freq: 311.13 * v, dur: 0.22, gain: 0.06, attack: 0.006, cutoff: 1100, glideTo: 233.08 * v, glideAt: 0.2, reverb: 0.18 });
   },
 };
 function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
@@ -494,12 +572,154 @@ function WeekChart({ weekDays, byDate, moods }) {
   );
 }
 
+// ---- Stacked score bar chart: impact / diligence / wellbeing earned per day ----
+function ScoreChart({ weekDays, byDate, moods }) {
+  const W = 320, H = 180, padL = 16, padR = 16, padT = 22, padB = 30;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const days = weekDays.map(d => analyzeDay(byDate[d] || [], moods[d]));
+  const maxEarned = Math.max(10, ...days.map(a => a.earned));
+  const slot = innerW / 7;
+  const barW = Math.min(26, slot * 0.6);
+  const order = ["impact", "diligence", "wellbeing"];
+  const yTop = v => padT + innerH - (innerH * v) / maxEarned;
+
+  const weekTotal = days.reduce((s, a) => s + a.earned, 0);
+
+  return (
+    <div className="card f3" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, padding: "0 4px" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>🏆 ĐIỂM NĂNG SUẤT · TUẦN NÀY</span>
+        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{weekTotal}</span>
+      </div>
+      <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 2, flexWrap: "wrap" }}>
+        {order.map(k => (
+          <span key={k} style={{ fontSize: ".64rem", color: SCORE_CATS[k].color, display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: SCORE_CATS[k].color, display: "inline-block" }} />
+            {SCORE_CATS[k].emoji} {SCORE_CATS[k].label}
+          </span>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0, 0.5, 1].map((g, i) => (
+          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g} stroke="#efe2d4" strokeWidth="1" />
+        ))}
+        {days.map((a, i) => {
+          const cx = padL + slot * i + slot / 2;
+          let yCursor = padT + innerH;
+          const segs = [];
+          order.forEach(k => {
+            const val = a.cats[k].earned;
+            if (val > 0) {
+              const h = (innerH * val) / maxEarned;
+              yCursor -= h;
+              segs.push(<rect key={k} x={cx - barW / 2} y={yCursor} width={barW} height={h} rx="2.5" fill={SCORE_CATS[k].color} opacity="0.92" />);
+            }
+          });
+          const dt = new Date(weekDays[i] + "T00:00:00");
+          const isT = weekDays[i] === TODAY;
+          return (
+            <g key={i}>
+              {segs}
+              {a.earned > 0 && <text x={cx} y={yTop(a.earned) - 5} textAnchor="middle" fontSize="9" fontWeight="700" fill={wine}>{a.earned}</text>}
+              <text x={cx} y={H - 10} textAnchor="middle" fontSize="9" fill={isT ? gold : "#a98"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ---- Insights panel: today's score breakdown + coach note + recent-day summaries ----
+function ScoreBar({ cat, earned, possible }) {
+  const c = SCORE_CATS[cat];
+  const pct = possible ? Math.round((earned / possible) * 100) : 0;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".72rem", marginBottom: 3 }}>
+        <span style={{ color: c.color, fontWeight: 600 }}>{c.emoji} {c.label}</span>
+        <span style={{ color: "#8a6a6a" }}>{earned}<span style={{ opacity: .5 }}>/{possible}</span></span>
+      </div>
+      <div style={{ height: 7, borderRadius: 5, background: "#efe2d4", overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: c.color, borderRadius: 5, transition: "width .7s cubic-bezier(.34,1.3,.5,1)" }} />
+      </div>
+    </div>
+  );
+}
+
+function InsightsPanel({ selectedDate, byDate, moods }) {
+  const selObj = new Date(selectedDate + "T00:00:00");
+  const selIsToday = selectedDate === TODAY;
+  const dayLabel = selIsToday ? "Hôm nay" : `${DAYS[selObj.getDay()]} ${fmt(selObj)}`;
+  const a = analyzeDay(byDate[selectedDate] || [], moods[selectedDate]);
+  const note = coachNote(a, dayLabel);
+
+  // recent days (previous two days relative to selected)
+  const prevDays = [1, 2].map(off => {
+    const d = new Date(selObj); d.setDate(selObj.getDate() - off);
+    const key = iso(d);
+    return { key, label: off === 1 ? "Hôm qua" : "Hôm kia", dObj: d, a: analyzeDay(byDate[key] || [], moods[key]) };
+  });
+
+  const toneBg = {
+    triumph: "linear-gradient(135deg,#fff7e6,#fdeccb)",
+    great: "linear-gradient(135deg,#f3f9f1,#e6f2e0)",
+    ok: "linear-gradient(135deg,#fbf6ef,#f3e9da)",
+    low: "linear-gradient(135deg,#faf6f4,#f0e6e2)",
+    rest: "linear-gradient(135deg,#f6f3fb,#ece6f5)",
+  };
+
+  return (
+    <div className="card f2" style={{ marginBottom: 14, padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "16px 18px 14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+          <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>📊 PHÂN TÍCH · {dayLabel.toUpperCase()}</span>
+          <div style={{ textAlign: "right" }}>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.7rem", fontWeight: 700, color: wine, lineHeight: 1 }}>{a.earned}</span>
+            <span style={{ fontSize: ".66rem", color: "#c9a0a0", marginLeft: 3 }}>/{a.possible} điểm</span>
+          </div>
+        </div>
+        <ScoreBar cat="impact" earned={a.cats.impact.earned} possible={a.cats.impact.possible} />
+        <ScoreBar cat="diligence" earned={a.cats.diligence.earned} possible={a.cats.diligence.possible} />
+        <ScoreBar cat="wellbeing" earned={a.cats.wellbeing.earned} possible={a.cats.wellbeing.possible} />
+      </div>
+
+      {/* coach note */}
+      <div style={{ background: toneBg[note.tone] || toneBg.ok, padding: "14px 18px", borderTop: "1px solid rgba(201,160,160,.18)" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine, marginBottom: 3 }}>{note.title}</div>
+        <div style={{ fontSize: ".82rem", color: "#5a4040", lineHeight: 1.5 }}>{note.body}</div>
+        <div style={{ fontSize: ".74rem", color: "#8a6a6a", fontStyle: "italic", marginTop: 7 }}>{note.verse}</div>
+      </div>
+
+      {/* recent days */}
+      <div style={{ display: "flex", borderTop: "1px solid rgba(201,160,160,.18)" }}>
+        {prevDays.map((p, i) => (
+          <div key={p.key} style={{ flex: 1, padding: "10px 14px", borderLeft: i === 1 ? "1px solid rgba(201,160,160,.18)" : "none" }}>
+            <div style={{ fontSize: ".64rem", fontWeight: 700, color: "#8a6a6a", letterSpacing: ".05em" }}>{p.label.toUpperCase()} · {DAYS_SHORT[p.dObj.getDay()]}</div>
+            {p.a.total > 0 ? (
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 3 }}>
+                <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 700, color: wine }}>{Math.round(p.a.rate * 100)}%</span>
+                <span style={{ fontSize: ".68rem", color: "#8a6a6a" }}>{p.a.done}/{p.a.total} · {p.a.earned}đ</span>
+                {p.a.mood && <span style={{ fontSize: ".9rem", marginLeft: "auto" }}>{moodInfo(p.a.mood)?.emoji}</span>}
+              </div>
+            ) : (
+              <div style={{ fontSize: ".72rem", color: "#c9a0a0", marginTop: 5 }}>— không có việc —</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
   const [error, setError]   = useState("");
   const [weekMonday, setWeekMonday] = useState(mondayOf(new Date()));
   const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [slideDir, setSlideDir] = useState(1); // +1 = slide from right, -1 = from left
+  const goToDate = (d) => { setSlideDir(d >= selectedDate ? 1 : -1); setSelectedDate(d); };
   const [editTask, setEditTask] = useState(null);
   const [justDone, setJustDone] = useState(null);
   const [justUndone, setJustUndone] = useState(null);
@@ -798,6 +1018,15 @@ export default function Home() {
         .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1);}
         @keyframes btnPressGlowRed{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,.5)}32%{transform:scale(.93)}100%{transform:scale(1);box-shadow:0 0 0 14px rgba(220,38,38,0)}}
         .btn-press[data-sfx="danger"]{animation:btnPressGlowRed .42s cubic-bezier(.34,1.6,.5,1);}
+        /* day/week content slide transitions */
+        @keyframes slideR{0%{opacity:0;transform:translateX(34px)}100%{opacity:1;transform:translateX(0)}}
+        @keyframes slideL{0%{opacity:0;transform:translateX(-34px)}100%{opacity:1;transform:translateX(0)}}
+        .slide-r{animation:slideR .36s cubic-bezier(.22,1,.36,1)}
+        .slide-l{animation:slideL .36s cubic-bezier(.22,1,.36,1)}
+        /* staggered group rise */
+        @keyframes rise{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:translateY(0)}}
+        .rise{animation:rise .42s cubic-bezier(.22,1,.36,1) both}
+        @media(prefers-reduced-motion:reduce){.slide-r,.slide-l,.rise{animation:none}}
       `}</style>
 
       <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
@@ -828,14 +1057,14 @@ export default function Home() {
 
         {/* WEEK NAVIGATION */}
         <div className="f2" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
-          <button data-sfx="swoosh" onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
+          <button data-sfx="swoosh" onClick={() => { setSlideDir(-1); const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
             style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: wine }}>{weekLabel}</div>
             {isCurrentWeek && <div style={{ fontSize: ".6rem", color: gold, fontWeight: 700, letterSpacing: ".1em" }}>TUẦN NÀY</div>}
             {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "#8a6a6a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
           </div>
-          <button data-sfx="swoosh" onClick={() => { const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
+          <button data-sfx="swoosh" onClick={() => { setSlideDir(1); const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
             style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
@@ -850,10 +1079,16 @@ export default function Home() {
           <MoodSlider date={selectedDate} value={moods[selectedDate] || null} onChange={(s) => setMoodFor(selectedDate, s)} />
         </div>
 
+        {/* INSIGHTS — analysis + coach note + recent days */}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
+
         {/* WEEK CHART — task count + mood */}
         <div className="f3">
           <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
         </div>
+
+        {/* SCORE CHART — productivity points by category */}
+        {status === "ok" && <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />}
 
         {/* TASKS */}
         <div className="f3 card" style={{ marginBottom: 14, overflow: "visible" }}>
@@ -885,7 +1120,7 @@ export default function Home() {
                   const allDone = dt.length > 0 && dt.every(t => t.done);
                   const rem = dt.filter(t => !t.done).length;
                   return (
-                    <button key={date} data-sfx="pop" onClick={() => setSelectedDate(date)} style={{
+                    <button key={date} data-sfx="pop" onClick={() => goToDate(date)} style={{
                       flex: "0 0 auto", minWidth: 48, padding: "8px 6px", borderRadius: 12,
                       border: isSel ? `2px solid ${wine}` : "1px solid #e8c4b8",
                       background: isSel ? wine : "rgba(255,255,255,.7)",
@@ -900,6 +1135,8 @@ export default function Home() {
                 })}
               </div>
 
+              {/* SLIDE CONTAINER — day content slides on date/week change */}
+              <div key={selectedDate} className={slideDir >= 0 ? "slide-r" : "slide-l"}>
               {/* SELECTED DAY NAME */}
               <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? wine : "#8a6a6a", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                 {DAYS[selDateObj.getDay()]} {fmt(selDateObj)}
@@ -911,14 +1148,14 @@ export default function Home() {
                 <div style={{ textAlign: "center", padding: "24px 10px", color: "#c9a0a0", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
               ) : (
                 <>
-                  {sessionGroups.map(sg => sg.items.length > 0 && (
-                    <div key={sg.key} style={{ marginBottom: 14 }}>
+                  {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
+                    <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
                       {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                     </div>
                   ))}
                   {noSession.length > 0 && (
-                    <div style={{ marginBottom: 14 }}>
+                    <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "#8a6a6a", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
                       {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                     </div>
@@ -933,6 +1170,7 @@ export default function Home() {
                   {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                 </div>
               )}
+              </div>{/* end slide container */}
             </>
           )}
         </div>
