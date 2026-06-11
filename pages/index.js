@@ -1012,7 +1012,7 @@ export default function Home() {
         /* universal button feel */
         button{transition:filter .12s ease, box-shadow .15s ease;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
         button:hover{filter:brightness(1.03);}
-        @keyframes btnPress{0%{transform:scale(1)}32%{transform:scale(.91)}100%{transform:scale(1)}}
+        @keyframes btnPress{0%{transform:scale(1)}28%{transform:scale(.88)}62%{transform:scale(1.04)}100%{transform:scale(1)}}
         .btn-press{animation:btnPress .22s cubic-bezier(.34,1.7,.5,1);}
         @keyframes btnPressGlow{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(201,168,76,.5)}32%{transform:scale(.93)}100%{transform:scale(1);box-shadow:0 0 0 14px rgba(201,168,76,0)}}
         .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1);}
@@ -1027,6 +1027,19 @@ export default function Home() {
         @keyframes rise{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:translateY(0)}}
         .rise{animation:rise .42s cubic-bezier(.22,1,.36,1) both}
         @media(prefers-reduced-motion:reduce){.slide-r,.slide-l,.rise{animation:none}}
+        /* pronounced chip press (task type / session / date toggles) */
+        @keyframes chipPress{0%{transform:scale(1)}26%{transform:scale(.84)}58%{transform:scale(1.1)}100%{transform:scale(1)}}
+        .btn-press[data-anim="chip"]{animation:chipPress .44s cubic-bezier(.34,1.8,.45,1);}
+        /* bottom-sheet modal slide up / down */
+        @keyframes sheetUp{0%{transform:translateY(100%)}100%{transform:translateY(0)}}
+        @keyframes sheetDown{0%{transform:translateY(0)}100%{transform:translateY(110%)}}
+        @keyframes backdropIn{from{opacity:0}to{opacity:1}}
+        @keyframes backdropOut{from{opacity:1}to{opacity:0}}
+        .sheet{animation:sheetUp .4s cubic-bezier(.16,1,.3,1);}
+        .sheet.closing{animation:sheetDown .28s cubic-bezier(.5,0,.75,0) forwards;}
+        .sheet-backdrop{animation:backdropIn .32s ease;}
+        .sheet-backdrop.closing{animation:backdropOut .28s ease forwards;}
+        @media(prefers-reduced-motion:reduce){.sheet,.sheet.closing{animation:none}}
       `}</style>
 
       <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
@@ -1078,17 +1091,6 @@ export default function Home() {
         <div className="f2">
           <MoodSlider date={selectedDate} value={moods[selectedDate] || null} onChange={(s) => setMoodFor(selectedDate, s)} />
         </div>
-
-        {/* INSIGHTS — analysis + coach note + recent days */}
-        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
-
-        {/* WEEK CHART — task count + mood */}
-        <div className="f3">
-          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
-        </div>
-
-        {/* SCORE CHART — productivity points by category */}
-        {status === "ok" && <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />}
 
         {/* TASKS */}
         <div className="f3 card" style={{ marginBottom: 14, overflow: "visible" }}>
@@ -1175,6 +1177,17 @@ export default function Home() {
           )}
         </div>
 
+        {/* INSIGHTS — analysis + coach note + recent days */}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
+
+        {/* WEEK CHART — task count + mood */}
+        <div className="f3">
+          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
+        </div>
+
+        {/* SCORE CHART — productivity points by category */}
+        {status === "ok" && <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />}
+
         {/* SCRIPTURE CARD with image — English primary */}
         <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
           <img src="/img/jesus-water.jpg" alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
@@ -1243,8 +1256,16 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const [date, setDate] = useState(task.date || "");
   const [taskType, setTaskType] = useState(task.taskType || "");
   const [confirmDel, setConfirmDel] = useState(false);
+  const [closing, setClosing] = useState(false);
   // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
   const [modalMonday, setModalMonday] = useState(mondayOf(task.date ? new Date(task.date + "T00:00:00") : new Date()));
+
+  // Animate the sheet out before running the actual action (close/save/delete)
+  const requestClose = (action) => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => action(), 270);
+  };
 
   const modalWeekDays = [];
   for (let i = 0; i < 7; i++) {
@@ -1263,12 +1284,11 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const hasChange = Object.keys(patch).length > 0;
 
   return (
-    <div onClick={onClose} style={{
+    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
       position: "fixed", inset: 0, background: "rgba(74,48,48,.4)", backdropFilter: "blur(3px)",
       display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
-      animation: "fadeUp .2s ease",
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
         background: "#fdf8f2", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
         width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
         maxHeight: "85vh", overflowY: "auto",
@@ -1299,7 +1319,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
           <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>BUỔI</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["🌅 Sáng","🏢 Office (11–7h)","🌙 Tối"].map(s => (
-              <button key={s} data-sfx="pop" onClick={() => setSession(session === s ? "" : s)} style={{
+              <button key={s} data-sfx="pop" data-anim="chip" onClick={() => setSession(session === s ? "" : s)} style={{
                 padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: ".82rem", fontWeight: 600,
                 border: session === s ? `2px solid ${wine}` : "1px solid #e8c4b8",
                 background: session === s ? wine : "#fff", color: session === s ? "#fff" : "#8a6a6a",
@@ -1316,7 +1336,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               const sel = taskType === tt;
               const c = typeColor(tt);
               return (
-                <button key={tt} data-sfx="pop" onClick={() => setTaskType(sel ? "" : tt)} style={{
+                <button key={tt} data-sfx="pop" data-anim="chip" onClick={() => setTaskType(sel ? "" : tt)} style={{
                   padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
                   border: sel ? `2px solid ${c}` : "1px solid #e8c4b8",
                   background: sel ? `${c}1a` : "#fff", color: sel ? c : "#8a6a6a",
@@ -1342,7 +1362,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               const sel = d === date;
               const isT = d === TODAY;
               return (
-                <button key={d} data-sfx="pop" onClick={() => setDate(d)} style={{
+                <button key={d} data-sfx="pop" data-anim="chip" onClick={() => setDate(d)} style={{
                   flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
                   border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid #e8c4b8",
                   background: sel ? wine : "#fff", color: sel ? "#fff" : isT ? gold : "#8a6a6a", textAlign: "center",
@@ -1360,11 +1380,11 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 10 }}>
-          <button data-sfx="soft" onClick={onClose} style={{
+          <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
             flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e8c4b8",
             background: "#fff", color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
-          <button data-sfx="confirm" onClick={() => hasChange ? onSave(patch) : onClose()} style={{
+          <button data-sfx="confirm" onClick={() => requestClose(() => hasChange ? onSave(patch) : onClose())} style={{
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
             background: hasChange ? wine : "#c9a0a0", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
           }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
@@ -1380,7 +1400,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
           ) : (
             <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
               <span style={{ fontSize: ".8rem", color: "#b91c1c" }}>Xóa thật nhé?</span>
-              <button data-sfx="danger" onClick={onDelete} style={{
+              <button data-sfx="danger" onClick={() => requestClose(onDelete)} style={{
                 padding: "7px 16px", borderRadius: 10, border: "none", background: "#dc2626",
                 color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".8rem",
               }}>Xóa</button>
