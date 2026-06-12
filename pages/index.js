@@ -95,7 +95,7 @@ function saveMood(date, score) {
   try { localStorage.setItem(moodKey(date), String(score)); } catch {}
 }
 
-const wine = "#7a4a4a", gold = "#c9a84c";
+const wine = "var(--c1)", gold = "var(--c2)";
 
 // ===== Productivity scoring system =====
 // Every realm is valued. Base points are close together; real "impact" comes
@@ -205,11 +205,11 @@ function Ring({ pct, label, sub, color, loading }) {
         </div>
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em", color: "#8a6a6a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
+        <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".05em", color: "var(--c-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</div>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 600, color: wine, lineHeight: 1.2 }}>
           {loading ? "—" : sub}
         </div>
-        <div style={{ fontSize: ".58rem", color: "#c9a0a0" }}>hoàn thành</div>
+        <div style={{ fontSize: ".58rem", color: "var(--c-muted2)" }}>hoàn thành</div>
       </div>
     </div>
   );
@@ -244,6 +244,25 @@ function actx() {
   return _audioCtx;
 }
 function rnd(a, b) { return a + Math.random() * (b - a); }
+// current UI theme drives which sound palette plays
+let _uiTheme = "light";
+function setSoundTheme(t) { _uiTheme = t; }
+
+// retro digital blip — square wave with fast decay (dark/arcade palette)
+function blip(ctx, { freq = 880, dur = 0.06, gain = 0.05, type = "square", glideTo = null, cutoff = 3200, when = 0, reverb = 0 }) {
+  const t0 = ctx.currentTime + when;
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff;
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(lp); lp.connect(g); g.connect(_master);
+  if (reverb > 0) { const s = ctx.createGain(); s.gain.value = reverb; g.connect(s); s.connect(_reverb); }
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+}
 
 // one oscillator voice: osc → lowpass → gain(env) → master (+ optional reverb send)
 function voice(ctx, { type = "triangle", freq, dur = 0.12, gain = 0.08, attack = 0.004, detune = 0, glideTo = null, glideAt = null, cutoff = 2400, reverb = 0, when = 0 }) {
@@ -320,30 +339,51 @@ function wood(ctx, { freq = 300, gain = 0.07, dur = 0.1, glide = 0.86, cutoff = 
 const SFX = {
   // generic tap — creamy keycap "thock"
   tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
+    if (_uiTheme === "dark") { blip(c, { freq: 1100 * v, dur: 0.045, gain: 0.04, cutoff: 2800 }); return; }
     wood(c, { freq: 300 * v, gain: 0.07, dur: 0.085, cutoff: 1400, reverb: 0.1, click: 0.04 });
   },
   // selection — light wooden marimba note (slightly brighter, two-tone)
   pop() { const c = actx(); if (!c) return; const v = rnd(0.92, 1.08);
+    if (_uiTheme === "dark") {
+      blip(c, { freq: 660 * v, dur: 0.05, gain: 0.045, glideTo: 990 * v });
+      blip(c, { freq: 1320 * v, dur: 0.04, gain: 0.02, when: 0.045 });
+      return;
+    }
     wood(c, { freq: 392 * v, gain: 0.075, dur: 0.13, cutoff: 1700, reverb: 0.16, glide: 0.92, click: 0.03 });
     wood(c, { freq: 588 * v, gain: 0.03, dur: 0.09, cutoff: 2000, reverb: 0.14, when: 0.04, click: 0 });
   },
   // confirm/save — warm ascending wooden marimba C–E–G (low octave), cozy tail
   confirm() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
+    if (_uiTheme === "dark") { // arcade power-up: fast ascending square arpeggio
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
+        blip(c, { freq: f * v, dur: 0.07, gain: 0.05, when: i * 0.05, cutoff: 3600, reverb: 0.12 }));
+      return;
+    }
     wood(c, { freq: 261.63 * v, gain: 0.08, dur: 0.2, cutoff: 1500, reverb: 0.28, glide: 0.96 });
     wood(c, { freq: 329.63 * v, gain: 0.07, dur: 0.22, cutoff: 1600, reverb: 0.3, glide: 0.96, when: 0.085, click: 0.02 });
     wood(c, { freq: 392.00 * v, gain: 0.065, dur: 0.26, cutoff: 1700, reverb: 0.34, glide: 0.96, when: 0.17, click: 0.02 });
   },
   // cancel/close — low descending wooden thock
   soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
+    if (_uiTheme === "dark") { blip(c, { freq: 720 * v, dur: 0.09, gain: 0.04, glideTo: 360 * v }); return; }
     wood(c, { freq: 294 * v, gain: 0.07, dur: 0.16, cutoff: 1200, reverb: 0.16, glide: 0.78 });
   },
   // nav — airy brush + low wooden body
   swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
+    if (_uiTheme === "dark") {
+      blip(c, { type: "sawtooth", freq: up ? 300 : 1400, dur: 0.14, gain: 0.03, glideTo: up ? 1400 : 300, cutoff: 2400, reverb: 0.1 });
+      return;
+    }
     noise(c, { dur: 0.18, gain: 0.022, type: "lowpass", freq: up ? 800 : 2000, q: 0.3, sweepTo: up ? 2000 : 700, reverb: 0.16 });
     wood(c, { freq: up ? 330 : 392, gain: 0.05, dur: 0.14, cutoff: 1300, reverb: 0.18, glide: up ? 1.18 : 0.82, click: 0 });
   },
   // delete — deep hollow wooden knock
   danger() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
+    if (_uiTheme === "dark") {
+      blip(c, { freq: 180 * v, dur: 0.16, gain: 0.05, glideTo: 90 * v, cutoff: 1200 });
+      blip(c, { freq: 185 * v, dur: 0.16, gain: 0.03, glideTo: 92 * v, cutoff: 1200 }); // beat-frequency buzz
+      return;
+    }
     wood(c, { freq: 174.61 * v, gain: 0.08, dur: 0.2, cutoff: 900, reverb: 0.16, glide: 0.7, click: 0.05 });
   },
 };
@@ -359,6 +399,13 @@ const DING_VARIANTS = [
 ];
 function playDing() {
   const c = actx(); if (!c) return;
+  if (_uiTheme === "dark") { // arcade victory: rapid square fanfare + sparkle, random key
+    const base = [523.25, 587.33, 659.25, 783.99][Math.floor(Math.random() * 4)];
+    [1, 1.25, 1.5, 2].forEach((m, i) =>
+      blip(c, { freq: base * m, dur: 0.09, gain: 0.06, when: i * 0.07, cutoff: 4000, reverb: 0.16 }));
+    blip(c, { freq: base * 3, dur: 0.16, gain: 0.025, when: 0.3, glideTo: base * 4, cutoff: 5200, reverb: 0.3 });
+    return;
+  }
   const notes = DING_VARIANTS[Math.floor(Math.random() * DING_VARIANTS.length)];
   notes.forEach((f, i) => wood(c, { freq: f, gain: 0.11, dur: 0.34, cutoff: 1900, reverb: 0.3, glide: 0.97, when: i * 0.08, click: i === 0 ? 0.04 : 0.02 }));
   // soft warm shimmer to round it off
@@ -367,12 +414,28 @@ function playDing() {
 // Soft descending wooden thock for un-completing a task
 function playUndo() {
   const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
+  if (_uiTheme === "dark") { blip(c, { freq: 880 * v, dur: 0.2, gain: 0.05, glideTo: 220 * v, cutoff: 2400 }); return; }
   wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
+}
+
+// Mode-switch sound: digital boot-up into dark, warm chord back to light
+function playThemeSwitch(next) {
+  const c = actx(); if (!c) return;
+  if (next === "dark") {
+    blip(c, { type: "sawtooth", freq: 200, dur: 0.22, gain: 0.04, glideTo: 1800, cutoff: 3000, reverb: 0.2 });
+    [880, 1108.7, 1318.5].forEach((f, i) => blip(c, { freq: f, dur: 0.08, gain: 0.04, when: 0.2 + i * 0.06, reverb: 0.2 }));
+  } else {
+    wood(c, { freq: 261.63, gain: 0.08, dur: 0.3, cutoff: 1600, reverb: 0.32, glide: 0.97 });
+    wood(c, { freq: 329.63, gain: 0.07, dur: 0.32, cutoff: 1700, reverb: 0.34, glide: 0.97, when: 0.1, click: 0.02 });
+    wood(c, { freq: 392.00, gain: 0.06, dur: 0.36, cutoff: 1800, reverb: 0.38, glide: 0.97, when: 0.2, click: 0.02 });
+  }
 }
 
 // Sparkle burst emanating from the task box outline (done celebration)
 function Particles({ width, height, onDone }) {
-  const COLORS = ["#c9a84c","#f0dea0","#e8c4b8","#d4a5a5","#b8860b","#dcc77a"];
+  const COLORS = _uiTheme === "dark"
+    ? ["#00ff9c","#00d0ff","#7dffc8","#baffe3","#00ffd5","#66ffb8"]
+    : ["#c9a84c","#f0dea0","#e8c4b8","#d4a5a5","#b8860b","#dcc77a"];
   const SHAPES = ["✦"]; // single 4-pointed sparkle star
   const W = Math.max(width || 280, 60);
   const H = Math.max(height || 48, 40);
@@ -485,7 +548,7 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
         </div>
         <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
-          background: "transparent", color: "#c9a0a0", cursor: "pointer", fontSize: "1rem",
+          background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
         }} title="Sửa">⋯</button>
       </div>
@@ -508,8 +571,8 @@ function MoodSlider({ date, value, onChange }) {
   return (
     <div className="card" style={{ marginBottom: 14, padding: "16px 18px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÂM TRẠNG · {dayLabel}</span>
-        <span style={{ fontSize: ".66rem", color: "#c9a0a0" }}>Tv 118:24</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>TÂM TRẠNG · {dayLabel}</span>
+        <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>Tv 118:24</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{ fontSize: "2.4rem", lineHeight: 1, filter: value ? "none" : "grayscale(.6) opacity(.6)", transition: "all .25s", minWidth: 44, textAlign: "center" }}>
@@ -522,7 +585,7 @@ function MoodSlider({ date, value, onChange }) {
             className="mood-range"
             style={{
               width: "100%",
-              background: `linear-gradient(90deg, #7a4a4a 0%, #c9a84c ${pct}%, #efe2d4 ${pct}%, #efe2d4 100%)`,
+              background: `linear-gradient(90deg, #7a4a4a 0%, #c9a84c ${pct}%, var(--c-track) ${pct}%, var(--c-track) 100%)`,
             }}
           />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
@@ -540,7 +603,7 @@ function MoodSlider({ date, value, onChange }) {
         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 600, color: info?.color }}>
           {value ? `${info?.label}` : "Kéo để chọn tâm trạng"}
         </span>
-        {value && <span style={{ fontSize: ".72rem", color: "#a98", fontStyle: "italic", marginLeft: 8 }}>· {info?.vi}</span>}
+        {value && <span style={{ fontSize: ".72rem", color: "var(--c-muted2)", fontStyle: "italic", marginLeft: 8 }}>· {info?.vi}</span>}
       </div>
     </div>
   );
@@ -548,7 +611,7 @@ function MoodSlider({ date, value, onChange }) {
 
 // ---- Weekly dual-line chart: task count + mood across the 7 days ----
 function WeekChart({ weekDays, byDate, moods }) {
-  const moodColor = "#8257b5"; // distinct violet for the mood line
+  const moodColor = "var(--c-mood)"; // distinct violet for the mood line
   const W = 320, H = 170, padL = 16, padR = 16, padT = 24, padB = 26;
   const innerW = W - padL - padR, innerH = H - padT - padB;
 
@@ -574,7 +637,7 @@ function WeekChart({ weekDays, byDate, moods }) {
   return (
     <div className="card" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 4px" }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>📈 TUẦN NÀY · CÔNG VIỆC & TÂM TRẠNG</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>📈 TUẦN NÀY · CÔNG VIỆC & TÂM TRẠNG</span>
       </div>
       {/* legend */}
       <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 4 }}>
@@ -589,7 +652,7 @@ function WeekChart({ weekDays, byDate, moods }) {
         {/* horizontal grid */}
         {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
           <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g}
-            stroke="#efe2d4" strokeWidth="1" />
+            stroke="var(--c-track)" strokeWidth="1" />
         ))}
         {/* task count line */}
         <path d={linePath(countPts)} fill="none" stroke={wine} strokeWidth="2.5"
@@ -607,7 +670,7 @@ function WeekChart({ weekDays, byDate, moods }) {
         ))}
         {moodPts.map((p, i) => p && (
           <g key={"mc" + i}>
-            <circle cx={p[0]} cy={p[1]} r="6" fill="#fff" stroke={moodColor} strokeWidth="1.5" />
+            <circle cx={p[0]} cy={p[1]} r="6" fill="var(--c-surface)" stroke={moodColor} strokeWidth="1.5" />
             <text x={p[0]} y={p[1] + 3.5} textAnchor="middle" fontSize="9" fill={moodColor} fontWeight="700">✝</text>
           </g>
         ))}
@@ -617,7 +680,7 @@ function WeekChart({ weekDays, byDate, moods }) {
           const isT = d === TODAY;
           return (
             <text key={"x" + i} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9"
-              fill={isT ? gold : "#a98"} fontWeight={isT ? "700" : "400"}>
+              fill={isT ? gold : "var(--c-muted2)"} fontWeight={isT ? "700" : "400"}>
               {DAYS_SHORT[dt.getDay()]}
             </text>
           );
@@ -643,7 +706,7 @@ function ScoreChart({ weekDays, byDate, moods }) {
   return (
     <div className="card f3" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, padding: "0 4px" }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>🏆 ĐIỂM NĂNG SUẤT · TUẦN NÀY</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>🏆 ĐIỂM NĂNG SUẤT · TUẦN NÀY</span>
         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{weekTotal}</span>
       </div>
       <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 2, flexWrap: "wrap" }}>
@@ -656,7 +719,7 @@ function ScoreChart({ weekDays, byDate, moods }) {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
         {[0, 0.5, 1].map((g, i) => (
-          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g} stroke="#efe2d4" strokeWidth="1" />
+          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g} stroke="var(--c-track)" strokeWidth="1" />
         ))}
         {days.map((a, i) => {
           const cx = padL + slot * i + slot / 2;
@@ -676,7 +739,7 @@ function ScoreChart({ weekDays, byDate, moods }) {
             <g key={i}>
               {segs}
               {a.earned > 0 && <text x={cx} y={yTop(a.earned) - 5} textAnchor="middle" fontSize="9" fontWeight="700" fill={wine}>{a.earned}</text>}
-              <text x={cx} y={H - 10} textAnchor="middle" fontSize="9" fill={isT ? gold : "#a98"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
+              <text x={cx} y={H - 10} textAnchor="middle" fontSize="9" fill={isT ? gold : "var(--c-muted2)"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
             </g>
           );
         })}
@@ -693,9 +756,9 @@ function ScoreBar({ cat, earned, possible }) {
     <div style={{ marginBottom: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".72rem", marginBottom: 3 }}>
         <span style={{ color: c.color, fontWeight: 600 }}>{c.emoji} {c.label}</span>
-        <span style={{ color: "#8a6a6a" }}>{earned}<span style={{ opacity: .5 }}>/{possible}</span></span>
+        <span style={{ color: "var(--c-muted)" }}>{earned}<span style={{ opacity: .5 }}>/{possible}</span></span>
       </div>
-      <div style={{ height: 7, borderRadius: 5, background: "#efe2d4", overflow: "hidden" }}>
+      <div style={{ height: 7, borderRadius: 5, background: "var(--c-track)", overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: c.color, borderRadius: 5, transition: "width .7s cubic-bezier(.34,1.3,.5,1)" }} />
       </div>
     </div>
@@ -728,10 +791,10 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
     <div className="card f2" style={{ marginBottom: 14, padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "16px 18px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-          <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>📊 PHÂN TÍCH · {dayLabel.toUpperCase()}</span>
+          <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>📊 PHÂN TÍCH · {dayLabel.toUpperCase()}</span>
           <div style={{ textAlign: "right" }}>
             <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.7rem", fontWeight: 700, color: wine, lineHeight: 1 }}>{a.earned}</span>
-            <span style={{ fontSize: ".66rem", color: "#c9a0a0", marginLeft: 3 }}>/{a.possible} điểm</span>
+            <span style={{ fontSize: ".66rem", color: "var(--c-muted2)", marginLeft: 3 }}>/{a.possible} điểm</span>
           </div>
         </div>
         {/* identity badge — strongest realm of the day */}
@@ -749,27 +812,285 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
       {/* coach note */}
       <div style={{ background: toneBg[note.tone] || toneBg.ok, padding: "14px 18px", borderTop: "1px solid rgba(201,160,160,.18)" }}>
         <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine, marginBottom: 3 }}>{note.title}</div>
-        <div style={{ fontSize: ".82rem", color: "#5a4040", lineHeight: 1.5 }}>{note.body}</div>
-        <div style={{ fontSize: ".74rem", color: "#8a6a6a", fontStyle: "italic", marginTop: 7 }}>{note.verse}</div>
+        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.5 }}>{note.body}</div>
+        <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{note.verse}</div>
       </div>
 
       {/* recent days */}
       <div style={{ display: "flex", borderTop: "1px solid rgba(201,160,160,.18)" }}>
         {prevDays.map((p, i) => (
           <div key={p.key} style={{ flex: 1, padding: "10px 14px", borderLeft: i === 1 ? "1px solid rgba(201,160,160,.18)" : "none" }}>
-            <div style={{ fontSize: ".64rem", fontWeight: 700, color: "#8a6a6a", letterSpacing: ".05em" }}>{p.label.toUpperCase()} · {DAYS_SHORT[p.dObj.getDay()]}</div>
+            <div style={{ fontSize: ".64rem", fontWeight: 700, color: "var(--c-muted)", letterSpacing: ".05em" }}>{p.label.toUpperCase()} · {DAYS_SHORT[p.dObj.getDay()]}</div>
             {p.a.total > 0 ? (
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 3 }}>
                 <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.25rem", fontWeight: 700, color: wine }}>{Math.round(p.a.rate * 100)}%</span>
-                <span style={{ fontSize: ".68rem", color: "#8a6a6a" }}>{p.a.done}/{p.a.total} · {p.a.earned}đ</span>
+                <span style={{ fontSize: ".68rem", color: "var(--c-muted)" }}>{p.a.done}/{p.a.total} · {p.a.earned}đ</span>
                 {p.a.mood && <span style={{ fontSize: ".9rem", marginLeft: "auto" }}>{moodInfo(p.a.mood)?.emoji}</span>}
               </div>
             ) : (
-              <div style={{ fontSize: ".72rem", color: "#c9a0a0", marginTop: 5 }}>— không có việc —</div>
+              <div style={{ fontSize: ".72rem", color: "var(--c-muted2)", marginTop: 5 }}>— không có việc —</div>
             )}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---- Create task bottom sheet ----
+const ICON_CHOICES = ["💼","💻","✨","📞","💰","💵","💸","🏦","🏠","🧹","👕","🛒","📦","🍲","🥖","⛽","🏸","🏋️","🦷","💊","📄","📋","⛪","🙏","🎮","✈️","⌨️","🎧","📱","🕐"];
+function CreateModal({ defaultDate, onClose, onCreate }) {
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("");
+  const [taskType, setTaskType] = useState("");
+  const [session, setSession] = useState("");
+  const [priority, setPriority] = useState([]);
+  const [project, setProject] = useState([]);
+  const [date, setDate] = useState(defaultDate || TODAY);
+  const [closing, setClosing] = useState(false);
+  const [modalMonday, setModalMonday] = useState(mondayOf(new Date((defaultDate || TODAY) + "T00:00:00")));
+
+  const requestClose = (action) => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => action(), 270);
+  };
+
+  const modalWeekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(modalMonday);
+    d.setDate(modalMonday.getDate() + i);
+    modalWeekDays.push(iso(d));
+  }
+  const mSun = new Date(modalMonday); mSun.setDate(modalMonday.getDate() + 6);
+  const modalWeekLabel = `${fmt(modalMonday)} – ${fmt(mSun)}`;
+
+  const togglePriority = (p) => setPriority(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  const canCreate = name.trim().length > 0;
+
+  const submit = () => {
+    if (!canCreate) return;
+    requestClose(() => onCreate({ name: name.trim(), icon, taskType, session, priority, project, date }));
+  };
+
+  const chip = (sel, c) => ({
+    padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
+    border: sel ? `2px solid ${c}` : "1px solid var(--c-border)",
+    background: sel ? `${typeof c === "string" && c.startsWith("#") ? c + "1a" : "rgba(0,0,0,.04)"}` : "var(--c-surface)",
+    color: sel ? c : "var(--c-muted)",
+  });
+
+  return (
+    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
+    }}>
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
+        background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
+        width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(0,0,0,.25)",
+        maxHeight: "88vh", overflowY: "auto",
+      }}>
+        <div style={{ width: 40, height: 4, borderRadius: 3, background: "var(--c-border)", margin: "0 auto 16px" }} />
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.3rem", fontWeight: 700, color: wine, marginBottom: 14 }}>➕ Công việc mới</div>
+
+        {/* Name */}
+        <div style={{ marginBottom: 16 }}>
+          <input autoFocus value={name} onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") submit(); }}
+            placeholder="Tên công việc..."
+            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1.5px solid var(--c-border)",
+              background: "var(--c-surface)", color: "var(--c-ink)", fontSize: "1rem", outline: "none" }} />
+        </div>
+
+        {/* Icon */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>ICON {icon && <span style={{ fontSize: "1rem", marginLeft: 6 }}>{icon}</span>}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+            {ICON_CHOICES.map(em => (
+              <button key={em} data-sfx="tick" onClick={() => setIcon(icon === em ? "" : em)} style={{
+                width: 36, height: 36, borderRadius: 9, fontSize: "1.05rem", cursor: "pointer",
+                border: icon === em ? `2px solid ${wine}` : "1px solid var(--c-border)",
+                background: icon === em ? "rgba(122,74,74,.12)" : "var(--c-surface)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>{em}</button>
+            ))}
+          </div>
+          <input value={icon} onChange={e => setIcon(e.target.value.slice(-2))} placeholder="...hoặc gõ emoji bất kỳ"
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--c-border)",
+              background: "var(--c-surface)", color: "var(--c-ink)", fontSize: ".85rem", outline: "none" }} />
+        </div>
+
+        {/* Type */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>LOẠI CÔNG VIỆC</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {TASK_TYPES.map(tt => {
+              const sel = taskType === tt; const c = typeColor(tt);
+              return <button key={tt} data-sfx="pop" data-anim="chip" onClick={() => setTaskType(sel ? "" : tt)} style={chip(sel, c)}>{tt}</button>;
+            })}
+          </div>
+        </div>
+
+        {/* Session */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>BUỔI</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["🌅 Sáng","🏢 Office (11–7h)","🌙 Tối"].map(sn => (
+              <button key={sn} data-sfx="pop" data-anim="chip" onClick={() => setSession(session === sn ? "" : sn)} style={{
+                padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: ".82rem", fontWeight: 600,
+                border: session === sn ? `2px solid ${wine}` : "1px solid var(--c-border)",
+                background: session === sn ? wine : "var(--c-surface)", color: session === sn ? "var(--c-on-accent)" : "var(--c-muted)",
+              }}>{sn}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Priority + Project */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>ƯU TIÊN & DỰ ÁN</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["🔴 Urgent","🟡 Important"].map(pp => (
+              <button key={pp} data-sfx="pop" data-anim="chip" onClick={() => togglePriority(pp)}
+                style={chip(priority.includes(pp), pp.includes("Urgent") ? "#dc2626" : "#ca8a04")}>{pp}</button>
+            ))}
+            {["🔷 Nacon","🟣 VP91","🟠 KUNVANDONG"].map(pj => (
+              <button key={pj} data-sfx="pop" data-anim="chip" onClick={() => toggleProject(pj)}
+                style={chip(project.includes(pj), "#0369a1")}>{pj}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>NGÀY</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate() - 7); setModalMonday(m); }} style={{ border: "1px solid var(--c-border)", background: "var(--c-surface)", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
+              <span style={{ fontSize: ".72rem", color: wine, fontWeight: 600, minWidth: 90, textAlign: "center" }}>{modalWeekLabel}</span>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate() + 7); setModalMonday(m); }} style={{ border: "1px solid var(--c-border)", background: "var(--c-surface)", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
+            </div>
+          </div>
+          <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+            {modalWeekDays.map(d => {
+              const dt = new Date(d + "T00:00:00");
+              const sel = d === date; const isT = d === TODAY;
+              return (
+                <button key={d} data-sfx="pop" data-anim="chip" onClick={() => setDate(d)} style={{
+                  flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
+                  border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid var(--c-border)",
+                  background: sel ? wine : "var(--c-surface)", color: sel ? "var(--c-on-accent)" : isT ? gold : "var(--c-muted)", textAlign: "center",
+                }}>
+                  <div style={{ fontSize: ".6rem", fontWeight: 700 }}>{DAYS_SHORT[dt.getDay()]}</div>
+                  <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600 }}>{dt.getDate()}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
+            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
+            background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
+          }}>Hủy</button>
+          <button data-sfx="confirm" onClick={submit} disabled={!canCreate} style={{
+            flex: 2, padding: "12px", borderRadius: 12, border: "none",
+            background: canCreate ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
+            cursor: canCreate ? "pointer" : "not-allowed", fontWeight: 700, fontSize: ".9rem",
+          }}>✨ Tạo công việc</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Push-up tracker: animated counter, week graph, streak + coach ----
+function useCountUp(target) {
+  const [shown, setShown] = useState(target);
+  const prevRef = useRef(target);
+  useEffect(() => {
+    const from = prevRef.current, to = target;
+    prevRef.current = target;
+    if (from === to) return;
+    const t0 = performance.now(), durMs = 420;
+    let raf;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / durMs);
+      const e = 1 - Math.pow(1 - k, 3); // easeOutCubic
+      setShown(Math.round(from + (to - from) * e));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return shown;
+}
+function pushupCoach(today, best, streak) {
+  if (today === 0) return "Chưa cái nào — bắt đầu với 5 cái thôi! “Hãy mạnh mẽ và can đảm.” (Gs 1:9) 💪";
+  if (best > 0 && today >= best && today > 0) return `KỶ LỤC MỚI ${today} cái! 🎉 “Tôi làm được mọi sự nhờ Đấng ban sức mạnh.” (Pl 4:13)`;
+  if (today >= 50) return `${today} cái — quá khủng! Cơ thể là đền thờ, và bạn đang chăm sóc nó thật tốt 🏛️`;
+  if (today >= 20) return `${today} cái — phong độ ổn định! Giữ nhịp này nhé 🔥`;
+  return `${today} cái — khởi động tốt! Thêm vài cái nữa nào 🌱`;
+}
+function PushupTracker({ pushups, weekDays, onAdd }) {
+  const today = pushups[TODAY] || 0;
+  const shown = useCountUp(today);
+  const all = Object.entries(pushups);
+  const best = all.length ? Math.max(...all.map(([, n]) => n)) : 0;
+  // streak: consecutive days with count > 0 ending today (or yesterday if today=0)
+  let streak = 0;
+  { const d = new Date(TODAY + "T00:00:00");
+    if (!pushups[TODAY]) d.setDate(d.getDate() - 1);
+    while (pushups[iso(d)] > 0) { streak++; d.setDate(d.getDate() - 1); } }
+  const weekMax = Math.max(10, ...weekDays.map(d => pushups[d] || 0));
+
+  return (
+    <div className="card f3" style={{ marginBottom: 14, padding: "16px 18px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>💪 HÍT ĐẤT · HÔM NAY</span>
+        <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>🔥 {streak} ngày liên tiếp · 🏆 kỷ lục {best}</span>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
+        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "3rem", fontWeight: 700, color: wine, lineHeight: 1, minWidth: 86, textAlign: "center" }}>
+          {shown}
+        </div>
+        <div style={{ flex: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[1, 5, 10].map(n => (
+            <button key={n} data-sfx="pop" data-anim="chip" onClick={() => onAdd(n)} style={{
+              flex: "1 0 auto", padding: "12px 8px", borderRadius: 12, border: `1.5px solid ${wine}`,
+              background: "var(--c-surface)", color: wine, fontWeight: 800, fontSize: "1rem", cursor: "pointer",
+            }}>+{n}</button>
+          ))}
+          <button data-sfx="soft" onClick={() => onAdd(-1)} title="Lùi 1" style={{
+            flex: "0 0 auto", padding: "12px 12px", borderRadius: 12, border: "1px solid var(--c-border)",
+            background: "var(--c-surface)", color: "var(--c-muted)", fontWeight: 700, cursor: "pointer",
+          }}>−1</button>
+        </div>
+      </div>
+
+      <div style={{ fontSize: ".8rem", color: "var(--c-muted)", fontStyle: "italic", marginBottom: 12 }}>{pushupCoach(today, best, streak)}</div>
+
+      {/* week mini bar graph */}
+      <svg viewBox="0 0 320 90" style={{ width: "100%", height: "auto", display: "block" }}>
+        {weekDays.map((d, i) => {
+          const n = pushups[d] || 0;
+          const slot = 320 / 7, cx = slot * i + slot / 2;
+          const h = n > 0 ? Math.max(4, (n / weekMax) * 56) : 0;
+          const isT = d === TODAY;
+          const dt = new Date(d + "T00:00:00");
+          return (
+            <g key={d}>
+              {n > 0 && <rect x={cx - 11} y={66 - h} width={22} height={h} rx="3" fill={isT ? wine : gold} opacity={isT ? 1 : 0.75}
+                style={{ transition: "all .5s cubic-bezier(.34,1.3,.5,1)" }} />}
+              {n > 0 && <text x={cx} y={60 - h} textAnchor="middle" fontSize="9" fontWeight="700" fill={wine}>{n}</text>}
+              <text x={cx} y={82} textAnchor="middle" fontSize="9" fill={isT ? gold : "var(--c-muted2)"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -788,6 +1109,81 @@ export default function Home() {
   const [verse, setVerse] = useState(VERSES[0]);
   const [verseLoading, setVerseLoading] = useState(false);
   const [moods, setMoods] = useState({}); // date -> score, from localStorage
+  const [showCreate, setShowCreate] = useState(false);
+  const [theme, setTheme] = useState("light");
+  const [themeFlipping, setThemeFlipping] = useState(false);
+  const [pushups, setPushups] = useState({}); // date -> count
+
+  // Theme: load saved choice, keep sound engine in sync
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem("dat-theme");
+      if (t === "dark" || t === "light") { setTheme(t); setSoundTheme(t); }
+    } catch {}
+  }, []);
+  const switchTheme = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next); setSoundTheme(next);
+    try { localStorage.setItem("dat-theme", next); } catch {}
+    playThemeSwitch(next);
+    setThemeFlipping(true);
+    setTimeout(() => setThemeFlipping(false), 520);
+  };
+
+  // Create a task: optimistic insert, then swap temp id for the real Notion id
+  const createTask = async (draft) => {
+    const tempId = "temp-" + Date.now();
+    const optimistic = {
+      id: tempId, name: draft.name, icon: draft.icon || "", done: false,
+      date: draft.date || null, session: draft.session || "",
+      taskType: draft.taskType || "", priority: draft.priority || [], project: draft.project || [],
+    };
+    setTasks(prev => [...prev, optimistic]);
+    playClick("confirm");
+    try {
+      const r = await fetch("/api/create", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!r.ok) throw new Error("create failed");
+      const d = await r.json();
+      setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: d.id } : t));
+    } catch {
+      setTasks(prev => prev.filter(t => t.id !== tempId)); // roll back
+    }
+  };
+
+  // Push-ups: local cache + Notion sync (same pattern as mood)
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("dat-pushups");
+      if (cached) setPushups(JSON.parse(cached));
+    } catch {}
+    fetch("/api/pushup")
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (!d || !d.counts) return;
+        setPushups(prev => {
+          const merged = { ...prev, ...d.counts };
+          try { localStorage.setItem("dat-pushups", JSON.stringify(merged)); } catch {}
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, []);
+  const addPushups = (delta) => {
+    const cur = pushups[TODAY] || 0;
+    const next = Math.max(0, cur + delta);
+    setPushups(prev => {
+      const merged = { ...prev, [TODAY]: next };
+      try { localStorage.setItem("dat-pushups", JSON.stringify(merged)); } catch {}
+      return merged;
+    });
+    fetch("/api/pushup", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: TODAY, count: next }),
+    }).catch(() => {});
+  };
 
   // Fetch an unlimited random verse from the Bible API; fall back to local pool
   const loadVerse = useCallback((useFallback = false) => {
@@ -990,14 +1386,66 @@ export default function Home() {
         <title>✝️ Dat&apos;s Weekly Planner</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&display=swap" rel="stylesheet" />
       </Head>
 
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Nunito',sans-serif;background:#fdf8f2;color:#4a3030;min-height:100vh;
+        :root, .theme-light{
+          --c1:#7a4a4a; --c2:#c9a84c; --c-mood:#8257b5;
+          --c-bg:#fdf8f2; --c-surface:#ffffff; --c-on-accent:#ffffff;
+          --c-ink:#4a3030; --c-muted:#8a6a6a; --c-muted2:#c9a0a0;
+          --c-border:#e8c4b8; --c-track:#efe2d4;
+        }
+        .theme-dark{
+          --c1:#00ff9c; --c2:#00d0ff; --c-mood:#ff4df0;
+          --c-bg:#04080a; --c-surface:#0b1512; --c-on-accent:#03140d;
+          --c-ink:#d6ffe9; --c-muted:#5fae8c; --c-muted2:#3a7a60;
+          --c-border:#11402f; --c-track:#0d241b;
+        }
+        body{font-family:'Nunito',sans-serif;background:var(--c-bg);color:var(--c-ink);min-height:100vh;
           background-image:radial-gradient(ellipse at 10% 20%,rgba(232,196,184,.3) 0%,transparent 50%),
           radial-gradient(ellipse at 90% 80%,rgba(168,184,154,.2) 0%,transparent 50%);}
+        .app-wrap{min-height:100vh;background:var(--c-bg);transition:background .45s ease;}
+        .theme-dark.app-wrap{
+          background-image:radial-gradient(ellipse at 15% 10%,rgba(0,255,156,.06) 0%,transparent 55%),
+            radial-gradient(ellipse at 85% 90%,rgba(0,208,255,.05) 0%,transparent 55%);
+          font-family:'Chakra Petch',monospace;
+        }
+        .theme-dark *{font-family:'Chakra Petch',monospace!important;}
+        /* CRT scanlines overlay */
+        .theme-dark::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;
+          background:repeating-linear-gradient(0deg,rgba(0,255,156,.028) 0 1px,transparent 1px 3px);}
+        /* squared edges + neon skin */
+        .theme-dark .card,.theme-dark button,.theme-dark .task-row,.theme-dark .tag,
+        .theme-dark .check,.theme-dark input,.theme-dark .sheet{border-radius:0!important;}
+        .theme-dark .card{background:rgba(8,18,14,.88);border:1px solid rgba(0,255,156,.28);
+          box-shadow:0 0 14px rgba(0,255,156,.07), inset 0 0 30px rgba(0,255,156,.03);
+          animation:cardIn .45s cubic-bezier(.22,1,.36,1);}
+        @keyframes cardIn{0%{opacity:0;transform:translateX(-14px);box-shadow:0 0 0 rgba(0,255,156,0)}
+          60%{box-shadow:0 0 22px rgba(0,255,156,.22)}100%{opacity:1;transform:translateX(0)}}
+        .theme-dark .task-row{border-bottom:1px solid rgba(0,255,156,.08);}
+        .theme-dark .task-row:hover{background:rgba(0,255,156,.07)}
+        .theme-dark .task-row .task-name-text{color:var(--c-ink);}
+        .theme-dark .task-done{background:linear-gradient(90deg,rgba(0,255,156,.14),rgba(0,255,156,.04));}
+        .theme-dark .task-done .task-name-text{color:#7dffc8;}
+        .theme-dark .check{border-color:rgba(0,255,156,.5);background:#06100c;color:#03140d;}
+        .theme-dark .check.on{background:var(--c1);border-color:var(--c1);box-shadow:0 0 10px rgba(0,255,156,.6);}
+        .theme-dark .card-title{color:var(--c1);border-bottom-color:rgba(0,255,156,.2);text-shadow:0 0 8px rgba(0,255,156,.4);}
+        .theme-dark .gratitude{color:var(--c-ink);border-bottom-color:rgba(0,255,156,.25);}
+        .theme-dark .gratitude::placeholder{color:var(--c-muted2);}
+        .theme-dark img{filter:saturate(.65) brightness(.7) contrast(1.05);}
+        .theme-dark button{text-shadow:0 0 6px rgba(0,255,156,.25);}
+        .theme-dark .task-rainbow{box-shadow:0 0 24px rgba(0,255,156,.55);}
+        /* neon sweep highlight on selected-day slide */
+        .theme-dark .slide-r,.theme-dark .slide-l{position:relative;}
+        .theme-dark .slide-r::after,.theme-dark .slide-l::after{content:"";position:absolute;inset:0;pointer-events:none;
+          background:linear-gradient(100deg,transparent 30%,rgba(0,255,156,.12) 50%,transparent 70%);
+          background-size:250% 100%;animation:neonSweep .7s ease forwards;}
+        @keyframes neonSweep{0%{background-position:120% 0;opacity:1}100%{background-position:-60% 0;opacity:0}}
+        /* theme flip transition */
+        @keyframes themeFlip{0%{opacity:.25;filter:saturate(.2) brightness(1.6)}100%{opacity:1;filter:none}}
+        .theme-flipping{animation:themeFlip .5s ease;}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -1044,7 +1492,7 @@ export default function Home() {
           border:1px solid rgba(201,160,160,.25);border-radius:16px;padding:18px;}
         .card-title{font-family:'Cormorant Garamond',serif;font-size:1rem;font-weight:600;
           color:${wine};margin-bottom:11px;display:flex;align-items:center;gap:6px;
-          border-bottom:1px solid #e8c4b8;padding-bottom:7px;}
+          border-bottom:1px solid var(--c-border);padding-bottom:7px;}
         .task-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;
           border-radius:10px;margin-bottom:5px;cursor:pointer;
           transition:background .35s ease, transform .25s cubic-bezier(.34,1.56,.64,1);}
@@ -1058,7 +1506,7 @@ export default function Home() {
           background:#fff;transition:all .25s cubic-bezier(.34,1.56,.64,1);font-size:11px;color:#fff;}
         .check.on{background:#a8b89a;border-color:#a8b89a;transform:scale(1.08);}
         .tag{font-size:.62rem;padding:1px 7px;border-radius:10px;font-weight:700;}
-        .gratitude{width:100%;border:none;border-bottom:1px solid #e8c4b8;background:transparent;
+        .gratitude{width:100%;border:none;border-bottom:1px solid var(--c-border);background:transparent;
           font-family:'Nunito',sans-serif;font-size:.83rem;color:#4a3030;
           padding:5px 2px;margin-bottom:8px;outline:none;}
         .gratitude::placeholder{color:#c9a0a0;font-style:italic;}
@@ -1104,7 +1552,19 @@ export default function Home() {
         @media(prefers-reduced-motion:reduce){.sheet,.sheet.closing{animation:none}}
       `}</style>
 
+      <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
       <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
+
+        {/* THEME SWITCH — floating top-right */}
+        <button data-sfx="swoosh" onClick={switchTheme} title="Đổi giao diện" style={{
+          position: "fixed", top: 14, right: 14, zIndex: 90,
+          width: 44, height: 44, borderRadius: theme === "dark" ? 0 : 22,
+          border: `1.5px solid ${theme === "dark" ? "rgba(0,255,156,.5)" : "var(--c-border)"}`,
+          background: theme === "dark" ? "rgba(8,18,14,.9)" : "rgba(255,255,255,.85)",
+          backdropFilter: "blur(6px)", cursor: "pointer", fontSize: "1.25rem",
+          boxShadow: theme === "dark" ? "0 0 14px rgba(0,255,156,.35)" : "0 3px 12px rgba(122,74,74,.18)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{theme === "dark" ? "✝️" : "🕹️"}</button>
 
         {/* HERO with GIF banner */}
         <div className="f1" style={{ textAlign: "center", padding: "26px 0 14px" }}>
@@ -1126,21 +1586,21 @@ export default function Home() {
           <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontStyle: "italic", color: wine, lineHeight: 1.55 }}>
             {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
           </p>
-          {v.vi && <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>}
-          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "#8a6a6a", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
+          {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>}
+          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
         </div>
 
         {/* WEEK NAVIGATION */}
         <div className="f2" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
           <button data-sfx="swoosh" onClick={() => { setSlideDir(-1); const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
+            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: wine }}>{weekLabel}</div>
             {isCurrentWeek && <div style={{ fontSize: ".6rem", color: gold, fontWeight: 700, letterSpacing: ".1em" }}>TUẦN NÀY</div>}
-            {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "#8a6a6a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
+            {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "var(--c-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
           </div>
           <button data-sfx="swoosh" onClick={() => { setSlideDir(1); const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid #e8c4b8", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
+            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
         {/* PROGRESS RINGS — selected day + selected week */}
@@ -1156,14 +1616,14 @@ export default function Home() {
 
         {/* TASKS */}
         <div className="f3 card" style={{ marginBottom: 14, overflow: "visible" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e8c4b8", paddingBottom: 8, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-border)", paddingBottom: 8, marginBottom: 14 }}>
             <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", fontWeight: 600, color: wine }}>📋 Kế hoạch</span>
-            <button onClick={load} style={{ fontSize: ".7rem", padding: "3px 12px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: "pointer" }}>↻ Làm mới</button>
+            <button onClick={load} style={{ fontSize: ".7rem", padding: "3px 12px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: "pointer" }}>↻ Làm mới</button>
           </div>
 
           {status === "loading" && (
-            <div style={{ textAlign: "center", padding: 28, color: "#8a6a6a" }}>
-              <div style={{ width: 26, height: 26, border: "2px solid #e8c4b8", borderTopColor: wine, borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
+            <div style={{ textAlign: "center", padding: 28, color: "var(--c-muted)" }}>
+              <div style={{ width: 26, height: 26, border: "2px solid var(--c-border)", borderTopColor: wine, borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
               Đang tải từ Notion...
             </div>
           )}
@@ -1186,14 +1646,14 @@ export default function Home() {
                   return (
                     <button key={date} data-sfx="pop" onClick={() => goToDate(date)} style={{
                       flex: "0 0 auto", minWidth: 48, padding: "8px 6px", borderRadius: 12,
-                      border: isSel ? `2px solid ${wine}` : "1px solid #e8c4b8",
+                      border: isSel ? `2px solid ${wine}` : "1px solid var(--c-border)",
                       background: isSel ? wine : "rgba(255,255,255,.7)",
-                      color: isSel ? "#fff" : isToday ? wine : "#8a6a6a",
+                      color: isSel ? "var(--c-on-accent)" : isToday ? wine : "var(--c-muted)",
                       cursor: "pointer", textAlign: "center", transition: "all .2s",
                     }}>
                       <div style={{ fontSize: ".62rem", fontWeight: 700 }}>{DAYS_SHORT[d.getDay()]}</div>
                       <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 600, lineHeight: 1.1 }}>{d.getDate()}</div>
-                      {dt.length > 0 && <div style={{ fontSize: ".55rem", marginTop: 2, color: isSel ? "rgba(255,255,255,.85)" : allDone ? "#a8b89a" : "#c9a0a0" }}>{allDone ? "✓" : rem}</div>}
+                      {dt.length > 0 && <div style={{ fontSize: ".55rem", marginTop: 2, color: isSel ? "rgba(255,255,255,.85)" : allDone ? "#a8b89a" : "var(--c-muted2)" }}>{allDone ? "✓" : rem}</div>}
                     </button>
                   );
                 })}
@@ -1202,14 +1662,14 @@ export default function Home() {
               {/* SLIDE CONTAINER — day content slides on date/week change */}
               <div key={selectedDate} className={slideDir >= 0 ? "slide-r" : "slide-l"}>
               {/* SELECTED DAY NAME */}
-              <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? wine : "#8a6a6a", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? wine : "var(--c-muted)", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                 {DAYS[selDateObj.getDay()]} {fmt(selDateObj)}
-                {selIsToday && <span style={{ background: wine, color: "#fff", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
+                {selIsToday && <span style={{ background: wine, color: "var(--c-on-accent)", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
               </div>
 
               {/* TASKS BY SESSION */}
               {dayTasks.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "24px 10px", color: "#c9a0a0", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
+                <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--c-muted2)", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
               ) : (
                 <>
                   {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
@@ -1220,7 +1680,7 @@ export default function Home() {
                   ))}
                   {noSession.length > 0 && (
                     <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
-                      <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "#8a6a6a", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
+                      <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
                       {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                     </div>
                   )}
@@ -1229,8 +1689,8 @@ export default function Home() {
 
               {/* NO-DATE TASKS */}
               {noDateTasks.length > 0 && selIsToday && (
-                <div style={{ marginTop: 18, borderTop: "1px dashed #e8c4b8", paddingTop: 14 }}>
-                  <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "#8a6a6a", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
+                <div style={{ marginTop: 18, borderTop: "1px dashed var(--c-border)", paddingTop: 14 }}>
+                  <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "var(--c-muted)", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
                   {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
                 </div>
               )}
@@ -1250,19 +1710,22 @@ export default function Home() {
         {/* SCORE CHART — productivity points by category */}
         {status === "ok" && <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />}
 
+        {/* PUSH-UP TRACKER */}
+        <PushupTracker pushups={pushups} weekDays={weekDays} onAdd={addPushups} />
+
         {/* SCRIPTURE CARD with image — English primary */}
         <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
           <img src="/img/jesus-water.jpg" alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
           <div style={{ padding: 18 }}>
             <div className="card-title" style={{ justifyContent: "space-between" }}>
               <span>📖 Scripture · Lời Chúa</span>
-              <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid #e8c4b8", borderRadius: 8, background: "transparent", color: "#8a6a6a", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
+              <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
             </div>
             <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
               {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
             </p>
-            {v.vi && <p style={{ fontSize: ".82rem", color: "#a98", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>}
-            <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""}</p>
+            {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>}
+            <p style={{ fontSize: ".7rem", color: "var(--c-muted)", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""}</p>
           </div>
         </div>
 
@@ -1277,7 +1740,7 @@ export default function Home() {
                 Where there is hatred, let me sow love;<br/>
                 where there is injury, pardon."
               </p>
-              <p style={{ fontSize: ".7rem", color: "#8a6a6a", marginTop: 7 }}>— Prayer of St. Francis · Kinh Phanxicô</p>
+              <p style={{ fontSize: ".7rem", color: "var(--c-muted)", marginTop: 7 }}>— Prayer of St. Francis · Kinh Phanxicô</p>
             </div>
           </div>
           <div className="card">
@@ -1289,10 +1752,10 @@ export default function Home() {
         </div>
 
         {/* FOOTER */}
-        <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "#8a6a6a" }}>
+        <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "var(--c-muted)" }}>
           <div style={{ marginBottom: 5 }}>✝️ 🌸 ✝️</div>
           "In everything give thanks."<br/>
-          <span style={{ fontSize: ".78rem", color: "#a98" }}>Trong mọi hoàn cảnh, hãy tạ ơn Chúa.</span><br/>
+          <span style={{ fontSize: ".78rem", color: "var(--c-muted2)" }}>Trong mọi hoàn cảnh, hãy tạ ơn Chúa.</span><br/>
           <span style={{ fontSize: ".72rem" }}>— 1 Thessalonians 5:18</span>
         </div>
 
@@ -1306,6 +1769,27 @@ export default function Home() {
           />
         )}
 
+        {/* FLOATING CREATE BUTTON */}
+        <button data-sfx="pop" onClick={() => setShowCreate(true)} title="Tạo công việc" style={{
+          position: "fixed", bottom: 24, right: 18, zIndex: 90,
+          width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
+          border: theme === "dark" ? "1.5px solid rgba(0,255,156,.6)" : "none",
+          background: theme === "dark" ? "rgba(8,18,14,.92)" : wine,
+          color: theme === "dark" ? "var(--c1)" : "#fff",
+          fontSize: "1.7rem", fontWeight: 300, cursor: "pointer",
+          boxShadow: theme === "dark" ? "0 0 18px rgba(0,255,156,.45)" : "0 6px 18px rgba(122,74,74,.4)",
+          display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+        }}>＋</button>
+
+        {showCreate && (
+          <CreateModal
+            defaultDate={selectedDate}
+            onClose={() => setShowCreate(false)}
+            onCreate={(draft) => { createTask(draft); setShowCreate(false); }}
+          />
+        )}
+
+      </div>
       </div>
     </>
   );
@@ -1351,23 +1835,23 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
       display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
     }}>
       <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
-        background: "#fdf8f2", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
+        background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
         width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
         maxHeight: "85vh", overflowY: "auto",
       }}>
         {/* Handle bar */}
-        <div style={{ width: 40, height: 4, background: "#e8c4b8", borderRadius: 2, margin: "0 auto 18px" }} />
+        <div style={{ width: 40, height: 4, background: "var(--c-border)", borderRadius: 2, margin: "0 auto 18px" }} />
 
         {/* Name */}
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>TÊN CÔNG VIỆC</span>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>TÊN CÔNG VIỆC</span>
             <button onClick={() => setEditingName(v => !v)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: ".95rem", color: wine }}>✏️</button>
           </div>
           {editingName ? (
             <input autoFocus value={name} onChange={e => setName(e.target.value)} style={{
               width: "100%", padding: "10px 12px", border: `1.5px solid ${wine}`, borderRadius: 10,
-              fontFamily: "'Nunito',sans-serif", fontSize: ".95rem", color: "#4a3030", outline: "none",
+              fontFamily: "'Nunito',sans-serif", fontSize: ".95rem", color: "var(--c-ink)", outline: "none",
             }} />
           ) : (
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", color: wine, fontWeight: 600 }}>
@@ -1378,13 +1862,13 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
 
         {/* Session */}
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>BUỔI</div>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>BUỔI</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["🌅 Sáng","🏢 Office (11–7h)","🌙 Tối"].map(s => (
               <button key={s} data-sfx="pop" data-anim="chip" onClick={() => setSession(session === s ? "" : s)} style={{
                 padding: "8px 14px", borderRadius: 10, cursor: "pointer", fontSize: ".82rem", fontWeight: 600,
-                border: session === s ? `2px solid ${wine}` : "1px solid #e8c4b8",
-                background: session === s ? wine : "#fff", color: session === s ? "#fff" : "#8a6a6a",
+                border: session === s ? `2px solid ${wine}` : "1px solid var(--c-border)",
+                background: session === s ? wine : "var(--c-surface)", color: session === s ? "var(--c-on-accent)" : "var(--c-muted)",
               }}>{s}</button>
             ))}
           </div>
@@ -1392,7 +1876,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
 
         {/* Task Type */}
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a", marginBottom: 8 }}>LOẠI CÔNG VIỆC</div>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>LOẠI CÔNG VIỆC</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {TASK_TYPES.map(tt => {
               const sel = taskType === tt;
@@ -1400,8 +1884,8 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               return (
                 <button key={tt} data-sfx="pop" data-anim="chip" onClick={() => setTaskType(sel ? "" : tt)} style={{
                   padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
-                  border: sel ? `2px solid ${c}` : "1px solid #e8c4b8",
-                  background: sel ? `${c}1a` : "#fff", color: sel ? c : "#8a6a6a",
+                  border: sel ? `2px solid ${c}` : "1px solid var(--c-border)",
+                  background: sel ? `${c}1a` : "var(--c-surface)", color: sel ? c : "var(--c-muted)",
                 }}>{tt}</button>
               );
             })}
@@ -1411,11 +1895,11 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
         {/* Date */}
         <div style={{ marginBottom: 22 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "#8a6a6a" }}>NGÀY</span>
+            <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>NGÀY</span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()-7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()-7); setModalMonday(m); }} style={{ border: "1px solid var(--c-border)", background: "var(--c-surface)", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>‹</button>
               <span style={{ fontSize: ".72rem", color: wine, fontWeight: 600, minWidth: 90, textAlign: "center" }}>{modalWeekLabel}</span>
-              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()+7); setModalMonday(m); }} style={{ border: "1px solid #e8c4b8", background: "#fff", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
+              <button data-sfx="swoosh" onClick={() => { const m = new Date(modalMonday); m.setDate(m.getDate()+7); setModalMonday(m); }} style={{ border: "1px solid var(--c-border)", background: "var(--c-surface)", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: wine }}>›</button>
             </div>
           </div>
           <div className="day-tabs" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
@@ -1426,8 +1910,8 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               return (
                 <button key={d} data-sfx="pop" data-anim="chip" onClick={() => setDate(d)} style={{
                   flex: "0 0 auto", minWidth: 46, padding: "8px 6px", borderRadius: 10, cursor: "pointer",
-                  border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid #e8c4b8",
-                  background: sel ? wine : "#fff", color: sel ? "#fff" : isT ? gold : "#8a6a6a", textAlign: "center",
+                  border: sel ? `2px solid ${wine}` : isT ? `1px solid ${gold}` : "1px solid var(--c-border)",
+                  background: sel ? wine : "var(--c-surface)", color: sel ? "var(--c-on-accent)" : isT ? gold : "var(--c-muted)", textAlign: "center",
                 }}>
                   <div style={{ fontSize: ".6rem", fontWeight: 700 }}>{DAYS_SHORT[dt.getDay()]}</div>
                   <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600 }}>{dt.getDate()}</div>
@@ -1435,7 +1919,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               );
             })}
           </div>
-          {date && <div style={{ fontSize: ".72rem", color: "#8a6a6a", marginTop: 8 }}>
+          {date && <div style={{ fontSize: ".72rem", color: "var(--c-muted)", marginTop: 8 }}>
             Đang chọn: <strong style={{ color: wine }}>{DAYS[new Date(date+"T00:00:00").getDay()]} {fmt(new Date(date+"T00:00:00"))}</strong>
           </div>}
         </div>
@@ -1443,12 +1927,12 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
         {/* Actions */}
         <div style={{ display: "flex", gap: 10 }}>
           <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
-            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e8c4b8",
-            background: "#fff", color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
+            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
+            background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
           <button data-sfx="confirm" onClick={() => requestClose(() => hasChange ? onSave(patch) : onClose())} style={{
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
-            background: hasChange ? wine : "#c9a0a0", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
+            background: hasChange ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
           }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
         </div>
 
@@ -1464,11 +1948,11 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               <span style={{ fontSize: ".8rem", color: "#b91c1c" }}>Xóa thật nhé?</span>
               <button data-sfx="danger" onClick={() => requestClose(onDelete)} style={{
                 padding: "7px 16px", borderRadius: 10, border: "none", background: "#dc2626",
-                color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: ".8rem",
+                color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".8rem",
               }}>Xóa</button>
               <button data-sfx="soft" onClick={() => setConfirmDel(false)} style={{
-                padding: "7px 14px", borderRadius: 10, border: "1px solid #e8c4b8", background: "#fff",
-                color: "#8a6a6a", cursor: "pointer", fontWeight: 600, fontSize: ".8rem",
+                padding: "7px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface)",
+                color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".8rem",
               }}>Thôi</button>
             </div>
           )}
