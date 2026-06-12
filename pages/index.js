@@ -850,12 +850,13 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
     return { key, label: off === 1 ? "Hôm qua" : "Hôm kia", dObj: d, a: analyzeDay(byDate[key] || [], moods[key]) };
   });
 
+  // translucent tone tints — they sit over the theme-aware card bg so text stays readable in every theme
   const toneBg = {
-    triumph: "linear-gradient(135deg,#fff7e6,#fdeccb)",
-    great: "linear-gradient(135deg,#f3f9f1,#e6f2e0)",
-    ok: "linear-gradient(135deg,#fbf6ef,#f3e9da)",
-    low: "linear-gradient(135deg,#faf6f4,#f0e6e2)",
-    rest: "linear-gradient(135deg,#f6f3fb,#ece6f5)",
+    triumph: "rgba(201,168,76,.16)",
+    great: "rgba(58,161,126,.15)",
+    ok: "rgba(192,136,59,.13)",
+    low: "rgba(150,120,120,.12)",
+    rest: "rgba(130,87,181,.14)",
   };
 
   return (
