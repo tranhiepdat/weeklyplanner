@@ -96,6 +96,8 @@ function saveMood(date, score) {
 }
 
 const wine = "var(--c1)", gold = "var(--c2)";
+// Cover art pool — cycles every load (sacred + cozy art; add more files to /public/img to expand)
+const COVERS = ["/img/red-sea.gif","/img/moses-staff.gif","/img/jesus-water.jpg","/img/jesus-boat.jpg","/img/jesus-oil.jpg"];
 
 // ===== Productivity scoring system =====
 // Every realm is valued. Base points are close together; real "impact" comes
@@ -340,6 +342,7 @@ const SFX = {
   // generic tap — creamy keycap "thock"
   tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
     if (_uiTheme === "dark") { blip(c, { freq: 1100 * v, dur: 0.045, gain: 0.04, cutoff: 2800 }); return; }
+    if (_uiTheme === "cozy") { wood(c, { freq: 205 * v, gain: 0.085, dur: 0.055, cutoff: 1050, reverb: 0.05, click: 0.07, glide: 0.8 }); return; }
     wood(c, { freq: 300 * v, gain: 0.07, dur: 0.085, cutoff: 1400, reverb: 0.1, click: 0.04 });
   },
   // selection — light wooden marimba note (slightly brighter, two-tone)
@@ -347,6 +350,11 @@ const SFX = {
     if (_uiTheme === "dark") {
       blip(c, { freq: 660 * v, dur: 0.05, gain: 0.045, glideTo: 990 * v });
       blip(c, { freq: 1320 * v, dur: 0.04, gain: 0.02, when: 0.045 });
+      return;
+    }
+    if (_uiTheme === "cozy") {
+      wood(c, { freq: 215 * v, gain: 0.08, dur: 0.05, cutoff: 1050, reverb: 0.05, click: 0.065, glide: 0.8 });
+      wood(c, { freq: 265 * v, gain: 0.06, dur: 0.05, cutoff: 1150, reverb: 0.05, click: 0.04, glide: 0.82, when: 0.045 });
       return;
     }
     wood(c, { freq: 392 * v, gain: 0.075, dur: 0.13, cutoff: 1700, reverb: 0.16, glide: 0.92, click: 0.03 });
@@ -359,6 +367,11 @@ const SFX = {
         blip(c, { freq: f * v, dur: 0.07, gain: 0.05, when: i * 0.05, cutoff: 3600, reverb: 0.12 }));
       return;
     }
+    if (_uiTheme === "cozy") { // satisfying typing burst + warm note
+      [195, 230, 210, 275].forEach((f, i) => wood(c, { freq: f * v, gain: 0.075, dur: 0.05, cutoff: 1100, reverb: 0.05, click: 0.06, glide: 0.8, when: i * 0.055 }));
+      wood(c, { freq: 392 * v, gain: 0.05, dur: 0.22, cutoff: 1500, reverb: 0.25, glide: 0.97, when: 0.24, click: 0 });
+      return;
+    }
     wood(c, { freq: 261.63 * v, gain: 0.08, dur: 0.2, cutoff: 1500, reverb: 0.28, glide: 0.96 });
     wood(c, { freq: 329.63 * v, gain: 0.07, dur: 0.22, cutoff: 1600, reverb: 0.3, glide: 0.96, when: 0.085, click: 0.02 });
     wood(c, { freq: 392.00 * v, gain: 0.065, dur: 0.26, cutoff: 1700, reverb: 0.34, glide: 0.96, when: 0.17, click: 0.02 });
@@ -366,12 +379,17 @@ const SFX = {
   // cancel/close — low descending wooden thock
   soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
     if (_uiTheme === "dark") { blip(c, { freq: 720 * v, dur: 0.09, gain: 0.04, glideTo: 360 * v }); return; }
+    if (_uiTheme === "cozy") { wood(c, { freq: 165 * v, gain: 0.08, dur: 0.07, cutoff: 900, reverb: 0.06, click: 0.06, glide: 0.75 }); return; }
     wood(c, { freq: 294 * v, gain: 0.07, dur: 0.16, cutoff: 1200, reverb: 0.16, glide: 0.78 });
   },
   // nav — airy brush + low wooden body
   swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
     if (_uiTheme === "dark") {
       blip(c, { type: "sawtooth", freq: up ? 300 : 1400, dur: 0.14, gain: 0.03, glideTo: up ? 1400 : 300, cutoff: 2400, reverb: 0.1 });
+      return;
+    }
+    if (_uiTheme === "cozy") { // spacebar thunk
+      wood(c, { freq: 130, gain: 0.09, dur: 0.09, cutoff: 800, reverb: 0.07, click: 0.07, glide: 0.72 });
       return;
     }
     noise(c, { dur: 0.18, gain: 0.022, type: "lowpass", freq: up ? 800 : 2000, q: 0.3, sweepTo: up ? 2000 : 700, reverb: 0.16 });
@@ -382,6 +400,11 @@ const SFX = {
     if (_uiTheme === "dark") {
       blip(c, { freq: 180 * v, dur: 0.16, gain: 0.05, glideTo: 90 * v, cutoff: 1200 });
       blip(c, { freq: 185 * v, dur: 0.16, gain: 0.03, glideTo: 92 * v, cutoff: 1200 }); // beat-frequency buzz
+      return;
+    }
+    if (_uiTheme === "cozy") {
+      wood(c, { freq: 110 * v, gain: 0.09, dur: 0.1, cutoff: 700, reverb: 0.06, click: 0.07, glide: 0.7 });
+      wood(c, { freq: 105 * v, gain: 0.06, dur: 0.1, cutoff: 700, reverb: 0.06, click: 0.05, glide: 0.7, when: 0.09 });
       return;
     }
     wood(c, { freq: 174.61 * v, gain: 0.08, dur: 0.2, cutoff: 900, reverb: 0.16, glide: 0.7, click: 0.05 });
@@ -406,6 +429,12 @@ function playDing() {
     blip(c, { freq: base * 3, dur: 0.16, gain: 0.025, when: 0.3, glideTo: base * 4, cutoff: 5200, reverb: 0.3 });
     return;
   }
+  if (_uiTheme === "cozy") { // happy typing flourish + warm wooden chime
+    [200, 240, 220, 280, 260].forEach((f, i) => wood(c, { freq: f, gain: 0.08, dur: 0.05, cutoff: 1100, reverb: 0.05, click: 0.06, glide: 0.8, when: i * 0.05 }));
+    wood(c, { freq: 329.63, gain: 0.07, dur: 0.3, cutoff: 1600, reverb: 0.3, glide: 0.97, when: 0.28, click: 0 });
+    wood(c, { freq: 392, gain: 0.06, dur: 0.32, cutoff: 1700, reverb: 0.32, glide: 0.97, when: 0.38, click: 0 });
+    return;
+  }
   const notes = DING_VARIANTS[Math.floor(Math.random() * DING_VARIANTS.length)];
   notes.forEach((f, i) => wood(c, { freq: f, gain: 0.11, dur: 0.34, cutoff: 1900, reverb: 0.3, glide: 0.97, when: i * 0.08, click: i === 0 ? 0.04 : 0.02 }));
   // soft warm shimmer to round it off
@@ -415,12 +444,17 @@ function playDing() {
 function playUndo() {
   const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
   if (_uiTheme === "dark") { blip(c, { freq: 880 * v, dur: 0.2, gain: 0.05, glideTo: 220 * v, cutoff: 2400 }); return; }
+  if (_uiTheme === "cozy") { wood(c, { freq: 150 * v, gain: 0.08, dur: 0.12, cutoff: 800, reverb: 0.06, click: 0.06, glide: 0.65 }); return; }
   wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
 }
 
 // Mode-switch sound: digital boot-up into dark, warm chord back to light
 function playThemeSwitch(next) {
   const c = actx(); if (!c) return;
+  if (next === "cozy") { // cozy boot: mech keyboard riff
+    [190, 230, 210, 260, 240].forEach((f, i) => wood(c, { freq: f, gain: 0.08, dur: 0.055, cutoff: 1050, reverb: 0.05, click: 0.065, glide: 0.8, when: i * 0.06 }));
+    return;
+  }
   if (next === "dark") {
     blip(c, { type: "sawtooth", freq: 200, dur: 0.22, gain: 0.04, glideTo: 1800, cutoff: 3000, reverb: 0.2 });
     [880, 1108.7, 1318.5].forEach((f, i) => blip(c, { freq: f, dur: 0.08, gain: 0.04, when: 0.2 + i * 0.06, reverb: 0.2 }));
@@ -495,21 +529,23 @@ function Particles({ width, height, onDone }) {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
+function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUndone }) {
   const [phase, setPhase] = useState("idle"); // idle | celebrating | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
+  const [swipeX, setSwipeX] = useState(0);
   const rowRef = useRef(null);
+  const dragRef = useRef({ startX: 0, startY: 0, active: false, moved: false, baseX: 0 });
 
   useEffect(() => {
     if (justDone && task.done) {
       if (rowRef.current) {
         setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
       }
-      setPhase("celebrating"); // rainbow + shake + sparkles all start NOW
+      setPhase("celebrating");
       const t = setTimeout(() => setPhase("done"), 1000);
       return () => clearTimeout(t);
     } else if (justUndone && !task.done) {
-      setPhase("reversing"); // red highlight pop, no particles
+      setPhase("reversing");
       const t = setTimeout(() => setPhase("idle"), 460);
       return () => clearTimeout(t);
     } else if (!task.done) {
@@ -520,23 +556,58 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
   const isDoneSettled = task.done && phase !== "celebrating";
   const celebrating = phase === "celebrating";
   const reversing = phase === "reversing";
-
   const accent = typeColor(task.taskType || "");
+
+  // swipe gesture (pan-y preserved for page scroll)
+  const onPD = (e) => { dragRef.current = { startX: e.clientX, startY: e.clientY, active: true, moved: false, baseX: swipeX }; };
+  const onPM = (e) => {
+    const d = dragRef.current; if (!d.active) return;
+    const dx = e.clientX - d.startX, dy = e.clientY - d.startY;
+    if (!d.moved && (Math.abs(dx) < 9 || Math.abs(dy) > Math.abs(dx))) return;
+    d.moved = true;
+    setSwipeX(Math.min(0, Math.max(-84, d.baseX + dx)));
+  };
+  const onPU = () => {
+    const d = dragRef.current; if (!d.active) return; d.active = false;
+    if (!d.moved) return;
+    const open = swipeX < -42;
+    if (open) playClick("swoosh");
+    setSwipeX(open ? -72 : 0);
+  };
+  const guardTap = (fn) => () => {
+    if (dragRef.current.moved) { dragRef.current.moved = false; return; }
+    if (swipeX < 0) { setSwipeX(0); return; } // tap closes the swipe first
+    fn();
+  };
+
   return (
-    <div style={{ position: "relative" }}>
+    <div className={removing ? "task-shrink" : ""} style={{ position: "relative", overflow: removing ? "hidden" : "visible" }}>
+      {/* delete action revealed behind on swipe */}
+      <button data-sfx="danger" onClick={() => { setSwipeX(0); onDelete && onDelete(task.id); }} style={{
+        position: "absolute", top: 2, bottom: 7, right: 0, width: 62, border: "none",
+        borderRadius: 10, background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: "1.1rem",
+        cursor: "pointer", opacity: Math.min(1, -swipeX / 60), pointerEvents: swipeX < -40 ? "auto" : "none",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transform: `scale(${0.7 + Math.min(1, -swipeX / 72) * 0.3})`, transition: "transform .18s",
+      }}>✕</button>
+
       <div ref={rowRef}
+        onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
           opacity: isDoneSettled ? .55 : 1,
           borderLeft: `4px solid ${accent}`,
           background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}0d` : undefined,
+          transform: `translateX(${swipeX}px)`,
+          transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1)",
+          touchAction: "pan-y",
         }}>
         <div className={`check ${task.done ? "on" : ""}`}
-          onClick={() => onToggle(task.id, !task.done)}
+          onClick={guardTap(() => onToggle(task.id, !task.done))}
           style={!task.done ? { borderColor: accent } : undefined}>
           {task.done ? "✓" : ""}
         </div>
-        <div style={{ flex: 1 }} onClick={() => onToggle(task.id, !task.done)}>
+        <div style={{ flex: 1 }} onClick={guardTap(() => onToggle(task.id, !task.done))}>
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4 }}>
             {task.icon} {task.name}
           </div>
@@ -546,7 +617,7 @@ function TaskRow({ task, onToggle, onEdit, justDone, justUndone }) {
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{
+        <button onClick={(e) => { e.stopPropagation(); if (dragRef.current.moved) { dragRef.current.moved = false; return; } onEdit(task); }} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -575,13 +646,13 @@ function MoodSlider({ date, value, onChange }) {
         <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>Tv 118:24</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ fontSize: "2.4rem", lineHeight: 1, filter: value ? "none" : "grayscale(.6) opacity(.6)", transition: "all .25s", minWidth: 44, textAlign: "center" }}>
+        <div key={v} className="mood-emoji-pop" style={{ fontSize: "2.4rem", lineHeight: 1, filter: value ? "none" : "grayscale(.6) opacity(.6)", minWidth: 44, textAlign: "center" }}>
           {info?.emoji}
         </div>
         <div style={{ flex: 1 }}>
           <input
             type="range" min="1" max="5" step="1" value={v}
-            onChange={e => onChange(parseInt(e.target.value, 10))}
+            onChange={e => { playClick("tick"); onChange(parseInt(e.target.value, 10)); }}
             className="mood-range"
             style={{
               width: "100%",
@@ -1006,6 +1077,82 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   );
 }
 
+// ---- Ultimate combined chart: toggleable overlapping series ----
+function UltimateChart({ weekDays, byDate, moods, pushups }) {
+  const [show, setShow] = useState({ tasks: true, mood: true, pushup: true, score: false });
+  const SERIES = {
+    tasks:  { label: "Số task",   color: wine,            emoji: "📋" },
+    mood:   { label: "Tâm trạng", color: "var(--c-mood)", emoji: "🙂" },
+    pushup: { label: "Hít đất",   color: "#3aa17e",       emoji: "💪" },
+    score:  { label: "Điểm",      color: "#e08e2f",       emoji: "🏆" },
+  };
+  const W = 320, H = 168, padL = 14, padR = 14, padT = 20, padB = 24;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const xAt = i => padL + (innerW * i) / 6;
+  const days = weekDays.map(d => analyzeDay(byDate[d] || [], moods[d]));
+  const counts = weekDays.map(d => (byDate[d] || []).length);
+  const scores = days.map(a => a.earned);
+  const pups = weekDays.map(d => pushups[d] || 0);
+  const maxC = Math.max(4, ...counts), maxS = Math.max(10, ...scores), maxP = Math.max(10, ...pups);
+  const yN = (v, max) => padT + innerH - (innerH * v) / max;        // normalized per-series
+  const yMood = m => padT + innerH - (innerH * (m - 1)) / 4;
+  const path = pts => pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+
+  const cPts = counts.map((v, i) => [xAt(i), yN(v, maxC)]);
+  const sPts = scores.map((v, i) => [xAt(i), yN(v, maxS)]);
+  const pPts = pups.map((v, i) => [xAt(i), yN(v, maxP)]);
+  const mPts = weekDays.map((d, i) => moods[d] ? [xAt(i), yMood(moods[d]), moods[d]] : null);
+  let mSegs = [], seg = [];
+  mPts.forEach(p => { if (p) seg.push(p); else { if (seg.length) mSegs.push(seg); seg = []; } });
+  if (seg.length) mSegs.push(seg);
+
+  const toggle = k => setShow(prev => ({ ...prev, [k]: !prev[k] }));
+
+  return (
+    <div className="card f3" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
+      <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8, padding: "0 4px" }}>📊 BIỂU ĐỒ TUẦN · BẬT TẮT THÔNG SỐ</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6, padding: "0 2px" }}>
+        {Object.entries(SERIES).map(([k, sr]) => (
+          <button key={k} data-sfx="pop" data-anim="chip" onClick={() => toggle(k)} style={{
+            padding: "5px 11px", borderRadius: 14, fontSize: ".7rem", fontWeight: 700, cursor: "pointer",
+            border: show[k] ? `1.5px solid ${sr.color}` : "1px solid var(--c-border)",
+            background: show[k] ? `color-mix(in srgb, ${sr.color} 14%, transparent)` : "var(--c-surface)",
+            color: show[k] ? sr.color : "var(--c-muted2)", opacity: show[k] ? 1 : .65,
+            transition: "all .25s",
+          }}>{sr.emoji} {sr.label}</button>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0, .25, .5, .75, 1].map((g, i) => (
+          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g} stroke="var(--c-track)" strokeWidth="1" />
+        ))}
+        {show.tasks && <>
+          <path d={path(cPts)} fill="none" stroke={wine} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+          {cPts.map((p, i) => <g key={"c"+i}><circle cx={p[0]} cy={p[1]} r="2.6" fill={wine} />
+            {counts[i] > 0 && <text x={p[0]} y={p[1] - 6} textAnchor="middle" fontSize="8" fill={wine} fontWeight="700">{counts[i]}</text>}</g>)}
+        </>}
+        {show.score && <>
+          <path d={path(sPts)} fill="none" stroke="#e08e2f" strokeWidth="1.6" strokeDasharray="5 3" strokeLinejoin="round" strokeLinecap="round" />
+          {sPts.map((p, i) => scores[i] > 0 && <text key={"s"+i} x={p[0]} y={p[1] + 3} textAnchor="middle" fontSize="8.5" fill="#e08e2f" fontWeight="700">◆</text>)}
+        </>}
+        {show.pushup && <>
+          <path d={path(pPts)} fill="none" stroke="#3aa17e" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+          {pPts.map((p, i) => pups[i] > 0 && <g key={"p"+i}><circle cx={p[0]} cy={p[1]} r="2.6" fill="#3aa17e" />
+            <text x={p[0]} y={p[1] - 6} textAnchor="middle" fontSize="8" fill="#3aa17e" fontWeight="700">{pups[i]}</text></g>)}
+        </>}
+        {show.mood && <>
+          {mSegs.map((sg, si) => <path key={"m"+si} d={path(sg)} fill="none" stroke="var(--c-mood)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />)}
+          {mPts.map((p, i) => p && <text key={"me"+i} x={p[0]} y={p[1] + 4} textAnchor="middle" fontSize="11">{moodInfo(p[2])?.emoji}</text>)}
+        </>}
+        {weekDays.map((d, i) => {
+          const dt = new Date(d + "T00:00:00"); const isT = d === TODAY;
+          return <text key={"x"+i} x={xAt(i)} y={H - 7} textAnchor="middle" fontSize="9" fill={isT ? gold : "var(--c-muted2)"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>;
+        })}
+      </svg>
+    </div>
+  );
+}
+
 // ---- Push-up tracker: animated counter, week graph, streak + coach ----
 function useCountUp(target) {
   const [shown, setShown] = useState(target);
@@ -1073,24 +1220,6 @@ function PushupTracker({ pushups, weekDays, onAdd }) {
 
       <div style={{ fontSize: ".8rem", color: "var(--c-muted)", fontStyle: "italic", marginBottom: 12 }}>{pushupCoach(today, best, streak)}</div>
 
-      {/* week mini bar graph */}
-      <svg viewBox="0 0 320 90" style={{ width: "100%", height: "auto", display: "block" }}>
-        {weekDays.map((d, i) => {
-          const n = pushups[d] || 0;
-          const slot = 320 / 7, cx = slot * i + slot / 2;
-          const h = n > 0 ? Math.max(4, (n / weekMax) * 56) : 0;
-          const isT = d === TODAY;
-          const dt = new Date(d + "T00:00:00");
-          return (
-            <g key={d}>
-              {n > 0 && <rect x={cx - 11} y={66 - h} width={22} height={h} rx="3" fill={isT ? wine : gold} opacity={isT ? 1 : 0.75}
-                style={{ transition: "all .5s cubic-bezier(.34,1.3,.5,1)" }} />}
-              {n > 0 && <text x={cx} y={60 - h} textAnchor="middle" fontSize="9" fontWeight="700" fill={wine}>{n}</text>}
-              <text x={cx} y={82} textAnchor="middle" fontSize="9" fill={isT ? gold : "var(--c-muted2)"} fontWeight={isT ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
-            </g>
-          );
-        })}
-      </svg>
     </div>
   );
 }
@@ -1113,16 +1242,18 @@ export default function Home() {
   const [theme, setTheme] = useState("light");
   const [themeFlipping, setThemeFlipping] = useState(false);
   const [pushups, setPushups] = useState({}); // date -> count
+  const [coverIdx, setCoverIdx] = useState(0);
+  useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
 
   // Theme: load saved choice, keep sound engine in sync
   useEffect(() => {
     try {
       const t = localStorage.getItem("dat-theme");
-      if (t === "dark" || t === "light") { setTheme(t); setSoundTheme(t); }
+      if (t === "dark" || t === "light" || t === "cozy") { setTheme(t); setSoundTheme(t); }
     } catch {}
   }, []);
   const switchTheme = () => {
-    const next = theme === "light" ? "dark" : "light";
+    const next = theme === "light" ? "dark" : theme === "dark" ? "cozy" : "light";
     setTheme(next); setSoundTheme(next);
     try { localStorage.setItem("dat-theme", next); } catch {}
     playThemeSwitch(next);
@@ -1280,6 +1411,13 @@ export default function Home() {
     }
   };
 
+  // Shrink-out animation, then run the action (delete or move-day)
+  const [removingId, setRemovingId] = useState(null);
+  const removeWithShrink = (id, action) => {
+    setRemovingId(id);
+    setTimeout(() => { setRemovingId(null); action(); }, 300);
+  };
+
   // Delete (archive) a task with optimistic removal + revert on failure
   const deleteTask = async (id) => {
     const prevTasks = tasks;
@@ -1386,7 +1524,7 @@ export default function Home() {
         <title>✝️ Dat&apos;s Weekly Planner</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
       </Head>
 
       <style>{`
@@ -1446,6 +1584,48 @@ export default function Home() {
         /* theme flip transition */
         @keyframes themeFlip{0%{opacity:.25;filter:saturate(.2) brightness(1.6)}100%{opacity:1;filter:none}}
         .theme-flipping{animation:themeFlip .5s ease;}
+        /* ===== COZY theme — warm hand-craft ===== */
+        .theme-cozy{
+          --c1:#a05c2c; --c2:#d98e4a; --c-mood:#b06fb8;
+          --c-bg:#f9efe2; --c-surface:#fffaf2; --c-on-accent:#fff8ef;
+          --c-ink:#5b4232; --c-muted:#8d6b52; --c-muted2:#c9aa86;
+          --c-border:#e3c8a8; --c-track:#efe0cc;
+        }
+        .theme-cozy *{font-family:'Patrick Hand',cursive!important;letter-spacing:.01em;}
+        .theme-cozy .card{background:#fffaf2;border:1.5px dashed #d8b48c;
+          box-shadow:4px 4px 0 rgba(160,92,44,.13);}
+        .theme-cozy .card-title{border-bottom:1.5px dashed #e0c39e;}
+        .theme-cozy .check{border-radius:7px;border-style:dashed;}
+        .theme-cozy .task-row:hover{background:rgba(217,142,74,.12)}
+        .theme-cozy button{box-shadow:2px 2px 0 rgba(160,92,44,.18);}
+        /* done celebration per theme: bold solid wipe instead of shake */
+        .theme-dark .task-rainbow{
+          animation:wipeSlide .55s cubic-bezier(.2,.9,.3,1) forwards;
+          background:linear-gradient(90deg,var(--c1) 50%,rgba(0,255,156,.12) 50%);
+          background-size:220% 100%;box-shadow:0 0 22px rgba(0,255,156,.5);
+        }
+        .theme-dark .task-rainbow .task-name-text{color:var(--c-on-accent)!important;font-weight:700;text-shadow:none;}
+        .theme-cozy .task-rainbow{
+          animation:wipeSlide .55s cubic-bezier(.2,.9,.3,1) forwards;
+          background:linear-gradient(90deg,#d98e4a 50%,rgba(217,142,74,.16) 50%);
+          background-size:220% 100%;box-shadow:3px 3px 0 rgba(160,92,44,.25);
+        }
+        .theme-cozy .task-rainbow .task-name-text{color:#fff8ef!important;font-weight:700;text-shadow:none;}
+        @keyframes wipeSlide{0%{background-position:100% 0}100%{background-position:0% 0}}
+        /* task shrink-out (move/delete) */
+        .task-shrink{animation:taskShrink .3s ease forwards;}
+        @keyframes taskShrink{0%{max-height:140px;opacity:1;transform:scale(1)}100%{max-height:0;opacity:0;transform:scale(.82);margin:0;padding:0}}
+        /* mood emoji pop on change */
+        @keyframes emojiPop{0%{transform:scale(.55) rotate(-8deg)}60%{transform:scale(1.32)}100%{transform:scale(1)}}
+        .mood-emoji-pop{animation:emojiPop .34s cubic-bezier(.34,1.6,.5,1);}
+        /* responsive magazine grid (iPad/desktop) */
+        @media(min-width:900px){
+          .main-grid{column-count:2;column-gap:16px;}
+          .main-grid>*{break-inside:avoid;}
+        }
+        @media(min-width:1280px){.main-grid{column-count:3;}}
+        /* sessions side-by-side on wide screens */
+        @media(min-width:900px){.session-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;}}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -1564,12 +1744,12 @@ export default function Home() {
           backdropFilter: "blur(6px)", cursor: "pointer", fontSize: "1.25rem",
           boxShadow: theme === "dark" ? "0 0 14px rgba(0,255,156,.35)" : "0 3px 12px rgba(122,74,74,.18)",
           display: "flex", alignItems: "center", justifyContent: "center",
-        }}>{theme === "dark" ? "✝️" : "🕹️"}</button>
+        }}>{theme === "light" ? "🕹️" : theme === "dark" ? "🧸" : "✝️"}</button>
 
         {/* HERO with GIF banner */}
         <div className="f1" style={{ textAlign: "center", padding: "26px 0 14px" }}>
           <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", marginBottom: 16, border: "1px solid rgba(201,160,160,.3)", boxShadow: "0 6px 24px rgba(122,74,74,.12)" }}>
-            <img src="/img/red-sea.gif" alt="" style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
+            <img src={COVERS[coverIdx]} alt="" style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(253,248,242,0) 40%, rgba(253,248,242,.9) 100%)" }} />
             <div style={{ position: "absolute", bottom: 10, left: 0, right: 0 }}>
               <span style={{ fontSize: "1.6rem", display: "block", animation: "float 4s ease-in-out infinite" }}>✝️</span>
@@ -1603,6 +1783,7 @@ export default function Home() {
             style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
+        <div className="main-grid">
         {/* PROGRESS RINGS — selected day + selected week */}
         <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <Ring pct={dayPct} label={selIsToday ? "HÔM NAY" : (DAYS[selDateObj.getDay()] + " " + fmt(selDateObj)).toUpperCase()} sub={`${dayDone}/${dayTasks.length}`} color={wine} loading={status==="loading"} />
@@ -1672,16 +1853,18 @@ export default function Home() {
                 <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--c-muted2)", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
               ) : (
                 <>
+                  <div className="session-grid">
                   {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
                     <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
+                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
                     </div>
                   ))}
+                  </div>
                   {noSession.length > 0 && (
                     <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
+                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
                     </div>
                   )}
                 </>
@@ -1691,7 +1874,7 @@ export default function Home() {
               {noDateTasks.length > 0 && selIsToday && (
                 <div style={{ marginTop: 18, borderTop: "1px dashed var(--c-border)", paddingTop: 14 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "var(--c-muted)", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
-                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} />)}
+                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
                 </div>
               )}
               </div>{/* end slide container */}
@@ -1702,20 +1885,15 @@ export default function Home() {
         {/* INSIGHTS — analysis + coach note + recent days */}
         {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
 
-        {/* WEEK CHART — task count + mood */}
-        <div className="f3">
-          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
-        </div>
-
-        {/* SCORE CHART — productivity points by category */}
-        {status === "ok" && <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />}
+        {/* ULTIMATE CHART — tasks / mood / push-ups / score, toggleable */}
+        <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
 
         {/* PUSH-UP TRACKER */}
         <PushupTracker pushups={pushups} weekDays={weekDays} onAdd={addPushups} />
 
         {/* SCRIPTURE CARD with image — English primary */}
         <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
-          <img src="/img/jesus-water.jpg" alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
+          <img src={COVERS[(coverIdx + 2) % COVERS.length]} alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
           <div style={{ padding: 18 }}>
             <div className="card-title" style={{ justifyContent: "space-between" }}>
               <span>📖 Scripture · Lời Chúa</span>
@@ -1750,6 +1928,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+        </div>{/* end main-grid */}
 
         {/* FOOTER */}
         <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "var(--c-muted)" }}>
@@ -1764,8 +1943,12 @@ export default function Home() {
             task={editTask}
             weekDays={weekDays}
             onClose={() => setEditTask(null)}
-            onSave={(patch) => { updateTask(editTask.id, patch); setEditTask(null); }}
-            onDelete={() => { deleteTask(editTask.id); setEditTask(null); }}
+            onSave={(patch) => {
+              const id = editTask.id; setEditTask(null);
+              if (patch.date !== undefined) { playClick("swoosh"); removeWithShrink(id, () => updateTask(id, patch)); }
+              else updateTask(id, patch);
+            }}
+            onDelete={() => { const id = editTask.id; setEditTask(null); removeWithShrink(id, () => deleteTask(id)); }}
           />
         )}
 
