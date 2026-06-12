@@ -1598,34 +1598,37 @@ export default function Home() {
         .theme-cozy .check{border-radius:7px;border-style:dashed;}
         .theme-cozy .task-row:hover{background:rgba(217,142,74,.12)}
         .theme-cozy button{box-shadow:2px 2px 0 rgba(160,92,44,.18);}
-        /* done celebration per theme: bold solid wipe instead of shake */
-        .theme-dark .task-rainbow{
-          animation:wipeSlide .55s cubic-bezier(.2,.9,.3,1) forwards;
-          background:linear-gradient(90deg,var(--c1) 50%,rgba(0,255,156,.12) 50%);
-          background-size:220% 100%;box-shadow:0 0 22px rgba(0,255,156,.5);
+        /* done celebration (dark + cozy): BOLD solid color wipe left→right via overlay */
+        .theme-dark .task-rainbow, .theme-cozy .task-rainbow{
+          animation:none!important; position:relative; overflow:hidden;
         }
+        .theme-dark .task-rainbow{box-shadow:0 0 22px rgba(0,255,156,.5);}
+        .theme-cozy .task-rainbow{box-shadow:3px 3px 0 rgba(160,92,44,.25);}
+        .theme-dark .task-rainbow::before, .theme-cozy .task-rainbow::before{
+          content:"";position:absolute;inset:0;z-index:0;transform:translateX(-101%);
+          animation:wipeIn .5s cubic-bezier(.2,.85,.25,1) forwards;
+        }
+        .theme-dark .task-rainbow::before{background:var(--c1);}
+        .theme-cozy .task-rainbow::before{background:#d98e4a;}
+        .theme-dark .task-rainbow>*, .theme-cozy .task-rainbow>*{position:relative;z-index:1;}
         .theme-dark .task-rainbow .task-name-text{color:var(--c-on-accent)!important;font-weight:700;text-shadow:none;}
-        .theme-cozy .task-rainbow{
-          animation:wipeSlide .55s cubic-bezier(.2,.9,.3,1) forwards;
-          background:linear-gradient(90deg,#d98e4a 50%,rgba(217,142,74,.16) 50%);
-          background-size:220% 100%;box-shadow:3px 3px 0 rgba(160,92,44,.25);
-        }
         .theme-cozy .task-rainbow .task-name-text{color:#fff8ef!important;font-weight:700;text-shadow:none;}
-        @keyframes wipeSlide{0%{background-position:100% 0}100%{background-position:0% 0}}
+        @keyframes wipeIn{to{transform:translateX(0)}}
         /* task shrink-out (move/delete) */
         .task-shrink{animation:taskShrink .3s ease forwards;}
         @keyframes taskShrink{0%{max-height:140px;opacity:1;transform:scale(1)}100%{max-height:0;opacity:0;transform:scale(.82);margin:0;padding:0}}
         /* mood emoji pop on change */
         @keyframes emojiPop{0%{transform:scale(.55) rotate(-8deg)}60%{transform:scale(1.32)}100%{transform:scale(1)}}
         .mood-emoji-pop{animation:emojiPop .34s cubic-bezier(.34,1.6,.5,1);}
-        /* responsive magazine grid (iPad/desktop) */
-        @media(min-width:900px){
-          .main-grid{column-count:2;column-gap:16px;}
-          .main-grid>*{break-inside:avoid;}
+        /* ===== robust dashboard layout (no overlap, fills width) ===== */
+        .col-main,.col-side{min-width:0;}
+        @media(min-width:1000px){
+          .main-grid{display:flex;align-items:flex-start;gap:18px;}
+          .col-main{flex:1 1 56%;min-width:0;}
+          .col-side{flex:1 1 44%;min-width:0;}
         }
-        @media(min-width:1280px){.main-grid{column-count:3;}}
-        /* sessions side-by-side on wide screens */
-        @media(min-width:900px){.session-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;}}
+        /* sessions side-by-side only when there's real room */
+        @media(min-width:1180px){.session-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start;}}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -1733,7 +1736,7 @@ export default function Home() {
       `}</style>
 
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
-      <div style={{ maxWidth: 1060, margin: "0 auto", padding: "0 16px 60px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 16px 60px" }}>
 
         {/* THEME SWITCH — floating top-right */}
         <button data-sfx="swoosh" onClick={switchTheme} title="Đổi giao diện" style={{
@@ -1784,6 +1787,7 @@ export default function Home() {
         </div>
 
         <div className="main-grid">
+        <div className="col-main">
         {/* PROGRESS RINGS — selected day + selected week */}
         <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <Ring pct={dayPct} label={selIsToday ? "HÔM NAY" : (DAYS[selDateObj.getDay()] + " " + fmt(selDateObj)).toUpperCase()} sub={`${dayDone}/${dayTasks.length}`} color={wine} loading={status==="loading"} />
@@ -1881,7 +1885,9 @@ export default function Home() {
             </>
           )}
         </div>
+        </div>{/* end col-main */}
 
+        <div className="col-side">
         {/* INSIGHTS — analysis + coach note + recent days */}
         {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
 
@@ -1928,6 +1934,7 @@ export default function Home() {
             ))}
           </div>
         </div>
+        </div>{/* end col-side */}
         </div>{/* end main-grid */}
 
         {/* FOOTER */}
