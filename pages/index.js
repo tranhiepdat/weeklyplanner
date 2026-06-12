@@ -1777,14 +1777,14 @@ export default function Home() {
         {/* WEEK NAVIGATION */}
         <div className="f2" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
           <button data-sfx="swoosh" onClick={() => { setSlideDir(-1); const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
+            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: wine }}>{weekLabel}</div>
             {isCurrentWeek && <div style={{ fontSize: ".6rem", color: gold, fontWeight: 700, letterSpacing: ".1em" }}>TUẦN NÀY</div>}
             {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "var(--c-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
           </div>
           <button data-sfx="swoosh" onClick={() => { setSlideDir(1); const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "rgba(255,255,255,.7)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
+            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
         <div className="main-grid">
@@ -1833,7 +1833,7 @@ export default function Home() {
                     <button key={date} data-sfx="pop" onClick={() => goToDate(date)} style={{
                       flex: "0 0 auto", minWidth: 48, padding: "8px 6px", borderRadius: 12,
                       border: isSel ? `2px solid ${wine}` : "1px solid var(--c-border)",
-                      background: isSel ? wine : "rgba(255,255,255,.7)",
+                      background: isSel ? wine : "var(--c-surface)",
                       color: isSel ? "var(--c-on-accent)" : isToday ? wine : "var(--c-muted)",
                       cursor: "pointer", textAlign: "center", transition: "all .2s",
                     }}>
