@@ -98,8 +98,9 @@ function saveMood(date, score) {
 const wine = "#7a4a4a", gold = "#c9a84c";
 
 // ===== Productivity scoring system =====
-// Each completed task earns points toward one of four clear "realms".
-// Impactful work scores most; small chores still add up. Your strongest realm
+// Every realm is valued. Base points are close together; real "impact" comes
+// from a task's priority (Urgent/Important), which applies to any type — so a
+// family or chore task can be just as high-impact as work. Your strongest realm
 // of the day earns you a fun identity title.
 const SCORE_CATS = {
   work:     { key: "work",     label: "Công Việc", emoji: "⚒️", color: "#2f6df0", title: "Thợ Cày Sự Nghiệp", desc: "việc ở công ty" },
@@ -110,17 +111,19 @@ const SCORE_CATS = {
 const CAT_ORDER = ["work", "personal", "chore", "care"];
 function taskBaseScore(task) {
   const t = (task.taskType || "").toLowerCase();
-  let base = 4;
-  if (t.includes("work")) base = 10;
-  else if (t.includes("personal")) base = 7;
-  else if (t.includes("health")) base = 6;
-  else if (t.includes("family")) base = 5;
-  else if (t.includes("chore")) base = 3;
-  else if (t.includes("entertainment")) base = 2;
-  else if (t.includes("vacation")) base = 2;
+  // base points stay close — every realm is meaningful in its own way
+  let base = 6;
+  if (t.includes("work")) base = 8;
+  else if (t.includes("personal")) base = 8;
+  else if (t.includes("family")) base = 8;
+  else if (t.includes("health")) base = 7;
+  else if (t.includes("chore")) base = 6;
+  else if (t.includes("entertainment")) base = 5;
+  else if (t.includes("vacation")) base = 5;
+  // "impact" comes from priority — applies to ANY type (a family task can be high-impact too)
   const pr = (task.priority || []).join(" ").toLowerCase();
-  if (pr.includes("urgent")) base += 5;
-  else if (pr.includes("important")) base += 3;
+  if (pr.includes("urgent")) base += 6;
+  else if (pr.includes("important")) base += 4;
   return base;
 }
 function taskCategory(task) {
