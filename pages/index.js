@@ -843,6 +843,35 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
   const a = analyzeDay(byDate[selectedDate] || [], moods[selectedDate]);
   const note = coachNote(a, dayLabel);
 
+  // AI evaluation (optional) — cached per day+progress, falls back to rule-based note
+  const sig = `${selectedDate}:${a.done}/${a.total}`;
+  const [aiNote, setAiNote] = useState(() => _coachCache[sig] || null);
+  useEffect(() => {
+    setAiNote(_coachCache[sig] || null);
+    if (a.total === 0 || _coachCache[sig]) return;
+    const t = setTimeout(() => {
+      const dom = dominantCat(a);
+      const summary = {
+        total: a.total, done: a.done, ratePct: Math.round(a.rate * 100),
+        earned: a.earned, possible: a.possible,
+        byRealm: CAT_ORDER.reduce((o, k) => { o[SCORE_CATS[k].label] = `${a.cats[k].earned}/${a.cats[k].possible} (${a.cats[k].doneN}/${a.cats[k].n} việc)`; return o; }, {}),
+        dominant: dom ? SCORE_CATS[dom].label : null,
+        mood: a.mood ? moodInfo(a.mood)?.label : null,
+        doneTasks: (byDate[selectedDate] || []).filter(t => t.done).map(t => t.name).slice(0, 12),
+        pendingTasks: (byDate[selectedDate] || []).filter(t => !t.done).map(t => t.name).slice(0, 12),
+      };
+      fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(d => { if (d && d.body && !d.error) { _coachCache[sig] = d; setAiNote(d); } })
+        .catch(() => {});
+    }, 1100);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line
+  }, [sig]);
+  const noteTitle = aiNote?.title || note.title;
+  const noteBody = aiNote?.body || note.body;
+  const noteVerse = aiNote?.verse || note.verse;
+
   // recent days (previous two days relative to selected)
   const prevDays = [1, 2].map(off => {
     const d = new Date(selObj); d.setDate(selObj.getDate() - off);
@@ -883,9 +912,12 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
 
       {/* coach note */}
       <div style={{ background: toneBg[note.tone] || toneBg.ok, padding: "14px 18px", borderTop: "1px solid rgba(201,160,160,.18)" }}>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine, marginBottom: 3 }}>{note.title}</div>
-        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.5 }}>{note.body}</div>
-        <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{note.verse}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+          <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{noteTitle}</span>
+          {aiNote && <span style={{ fontSize: ".58rem", fontWeight: 700, letterSpacing: ".05em", color: "var(--c-mood)", border: "1px solid var(--c-mood)", borderRadius: 8, padding: "1px 6px" }}>✨ AI</span>}
+        </div>
+        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.5 }}>{noteBody}</div>
+        <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{noteVerse}</div>
       </div>
 
       {/* recent days */}
@@ -1225,6 +1257,65 @@ function PushupTracker({ pushups, weekDays, onAdd }) {
   );
 }
 
+// Module-level cache for AI daily evaluations (keyed by date + progress)
+const _coachCache = {};
+
+// ---- AI chat sheet: talk to the assistant to create tasks by message ----
+function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
+  const [closing, setClosing] = useState(false);
+  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\" — mình sẽ tạo task giúp bạn ✝️" }]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef(null);
+  const requestClose = () => { if (closing) return; setClosing(true); setTimeout(onClose, 270); };
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || busy) return;
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next); setInput(""); setBusy(true);
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, today, weekDays }),
+      });
+      const d = await r.json();
+      const created = Array.isArray(d.tasks) ? d.tasks : [];
+      if (created.length) onCreateTasks(created);
+      const note = created.length ? `\n\n✅ Đã thêm ${created.length} việc: ${created.map(t => t.name).join(", ")}` : "";
+      setMsgs(m => [...m, { role: "assistant", content: (d.reply || "Đã xong!") + note }]);
+    } catch {
+      setMsgs(m => [...m, { role: "assistant", content: "Có lỗi kết nối, thử lại nhé!" }]);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div onClick={requestClose} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", backdropFilter: "blur(3px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 110 }}>
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{ background: "var(--c-bg)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(0,0,0,.25)", height: "76vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--c-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", fontWeight: 700, color: wine }}>💬 Trợ lý lập kế hoạch</div>
+          <button data-sfx="soft" onClick={requestClose} style={{ border: "none", background: "transparent", color: "var(--c-muted)", fontSize: "1.4rem", cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {msgs.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "82%", padding: "9px 13px", borderRadius: 14, whiteSpace: "pre-wrap", lineHeight: 1.45, fontSize: ".88rem", background: m.role === "user" ? wine : "var(--c-surface)", color: m.role === "user" ? "var(--c-on-accent)" : "var(--c-ink)", border: m.role === "user" ? "none" : "1px solid var(--c-border)" }}>
+              {m.content}
+            </div>
+          ))}
+          {busy && <div style={{ alignSelf: "flex-start", color: "var(--c-muted)", fontSize: ".85rem", fontStyle: "italic" }}>đang soạn…</div>}
+        </div>
+        <div style={{ padding: "12px 14px", borderTop: "1px solid var(--c-border)", display: "flex", gap: 8 }}>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") send(); }} placeholder="Nói việc cần thêm…" disabled={busy}
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 12, border: "1.5px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-ink)", fontSize: ".95rem", outline: "none" }} />
+          <button data-sfx="confirm" onClick={send} disabled={busy || !input.trim()} style={{ padding: "0 18px", borderRadius: 12, border: "none", background: input.trim() ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", fontWeight: 700, cursor: input.trim() ? "pointer" : "default" }}>Gửi</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
@@ -1240,6 +1331,7 @@ export default function Home() {
   const [verseLoading, setVerseLoading] = useState(false);
   const [moods, setMoods] = useState({}); // date -> score, from localStorage
   const [showCreate, setShowCreate] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [theme, setTheme] = useState("light");
   const [themeFlipping, setThemeFlipping] = useState(false);
   const [pushups, setPushups] = useState({}); // date -> count
@@ -1886,12 +1978,12 @@ export default function Home() {
             </>
           )}
         </div>
+
+        {/* INSIGHTS — analysis + coach note + recent days */}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
         </div>{/* end col-main */}
 
         <div className="col-side">
-        {/* INSIGHTS — analysis + coach note + recent days */}
-        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
-
         {/* ULTIMATE CHART — tasks / mood / push-ups / score, toggleable */}
         <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
 
@@ -1972,11 +2064,32 @@ export default function Home() {
           display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
         }}>＋</button>
 
+        {/* FLOATING CHAT BUTTON */}
+        <button data-sfx="pop" onClick={() => setShowChat(true)} title="Chat tạo việc với AI" style={{
+          position: "fixed", bottom: 92, right: 18, zIndex: 90,
+          width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
+          border: theme === "dark" ? "1.5px solid rgba(0,208,255,.6)" : "none",
+          background: theme === "dark" ? "rgba(8,18,14,.92)" : "var(--c2)",
+          color: theme === "dark" ? "var(--c2)" : "#fff",
+          fontSize: "1.5rem", cursor: "pointer",
+          boxShadow: theme === "dark" ? "0 0 18px rgba(0,208,255,.4)" : "0 6px 18px rgba(201,168,76,.45)",
+          display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+        }}>💬</button>
+
         {showCreate && (
           <CreateModal
             defaultDate={selectedDate}
             onClose={() => setShowCreate(false)}
             onCreate={(draft) => { createTask(draft); setShowCreate(false); }}
+          />
+        )}
+
+        {showChat && (
+          <ChatSheet
+            onClose={() => setShowChat(false)}
+            onCreateTasks={(tasks) => tasks.forEach(createTask)}
+            today={TODAY}
+            weekDays={weekDays}
           />
         )}
 
