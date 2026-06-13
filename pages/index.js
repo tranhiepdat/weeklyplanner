@@ -952,7 +952,7 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{noteTitle}</span>
           {aiNote && <span style={{ fontSize: ".58rem", fontWeight: 700, letterSpacing: ".05em", color: "var(--c-mood)", border: "1px solid var(--c-mood)", borderRadius: 8, padding: "1px 6px" }}>✨ AI</span>}
         </div>
-        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.5 }}>{noteBody}</div>
+        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{noteBody}</div>
         <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{noteVerse}</div>
       </div>
 
@@ -1654,6 +1654,14 @@ export default function Home() {
       <Head>
         <title>✝️ Dat&apos;s Weekly Planner</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#7a4a4a" />
+        <meta name="apple-mobile-web-app-title" content="Dat Planner" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&family=Patrick+Hand&family=Baloo+2:wght@400;500;700;800&display=swap" rel="stylesheet" />
       </Head>
