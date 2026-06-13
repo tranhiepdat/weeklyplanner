@@ -879,31 +879,60 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
   const a = analyzeDay(byDate[selectedDate] || [], moods[selectedDate]);
   const note = coachNote(a, dayLabel);
 
-  // AI evaluation (optional) — cached per day+progress, falls back to rule-based note
-  const sig = `${selectedDate}:${a.done}/${a.total}`;
-  const [aiNote, setAiNote] = useState(() => _coachCache[sig] || null);
+  // AI evaluation — cached in localStorage by date; only re-calls when the day's
+  // signature changes (tasks done/added or time-of-day phase) or on manual ↻ refresh.
+  const nowD = new Date();
+  const nowHour = nowD.getHours();
+  const phase = selIsToday ? (nowHour < 11 ? "Sáng" : nowHour < 19 ? "Office" : "Tối") : "";
+  const sig = `${a.done}/${a.total}|${phase}`;
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [aiNote, setAiNote] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try { const raw = localStorage.getItem("dat-coach:" + selectedDate); if (raw) return JSON.parse(raw).note; } catch {}
+    return null;
+  });
+  const [aiLoading, setAiLoading] = useState(false);
   useEffect(() => {
-    setAiNote(_coachCache[sig] || null);
-    if (a.total === 0 || _coachCache[sig]) return;
-    const t = setTimeout(() => {
-      const dom = dominantCat(a);
-      const summary = {
-        total: a.total, done: a.done, ratePct: Math.round(a.rate * 100),
-        earned: a.earned, possible: a.possible,
-        byRealm: CAT_ORDER.reduce((o, k) => { o[SCORE_CATS[k].label] = `${a.cats[k].earned}/${a.cats[k].possible} (${a.cats[k].doneN}/${a.cats[k].n} việc)`; return o; }, {}),
-        dominant: dom ? SCORE_CATS[dom].label : null,
-        mood: a.mood ? moodInfo(a.mood)?.label : null,
-        doneTasks: (byDate[selectedDate] || []).filter(t => t.done).map(t => t.name).slice(0, 12),
-        pendingTasks: (byDate[selectedDate] || []).filter(t => !t.done).map(t => t.name).slice(0, 12),
-      };
-      fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
-        .then(r => r.ok ? r.json() : Promise.reject())
-        .then(d => { if (d && d.body && !d.error) { _coachCache[sig] = d; setAiNote(d); } })
-        .catch(() => {});
-    }, 1100);
-    return () => clearTimeout(t);
+    if (typeof window === "undefined") return;
+    let cached = null;
+    try { const raw = localStorage.getItem("dat-coach:" + selectedDate); if (raw) cached = JSON.parse(raw); } catch {}
+    setAiNote(cached?.note || null);
+    if (a.total === 0) return;
+    if (cached && cached.sig === sig) return;        // already summarised, no change → save credit
+    let cancelled = false;
+    setAiLoading(true);
+    const SESS = [["🌅 Sáng", "Sáng"], ["🏢 Office (11–7h)", "Office"], ["🌙 Tối", "Tối"], ["", "Khác"]];
+    const dayTasks = byDate[selectedDate] || [];
+    const bySession = {};
+    SESS.forEach(([k, label]) => {
+      const items = dayTasks.filter(t => (t.session || "") === k);
+      if (items.length) bySession[label] = { done: items.filter(t => t.done).map(t => t.name), pending: items.filter(t => !t.done).map(t => t.name) };
+    });
+    const dom = dominantCat(a);
+    const summary = {
+      isToday: selIsToday,
+      now: selIsToday ? `${String(nowHour).padStart(2, "0")}:${String(nowD.getMinutes()).padStart(2, "0")}` : null,
+      phase: phase || null,
+      ratePct: Math.round(a.rate * 100), done: a.done, total: a.total, earned: a.earned, possible: a.possible,
+      dominant: dom ? SCORE_CATS[dom].label : null,
+      mood: a.mood ? moodInfo(a.mood)?.label : null,
+      byRealm: CAT_ORDER.reduce((o, k) => { if (a.cats[k].n > 0) o[SCORE_CATS[k].label] = `${a.cats[k].doneN}/${a.cats[k].n} việc xong`; return o; }, {}),
+      bySession,
+    };
+    fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (cancelled || !d || !d.body || d.error) return;
+        const note = { title: d.title, body: d.body, verse: d.verse };
+        try { localStorage.setItem("dat-coach:" + selectedDate, JSON.stringify({ sig, note })); } catch {}
+        setAiNote(note);
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setAiLoading(false); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line
-  }, [sig]);
+  }, [selectedDate, refreshTick]);
+  const refreshAi = () => { try { localStorage.removeItem("dat-coach:" + selectedDate); } catch {} setRefreshTick(t => t + 1); };
   const noteTitle = aiNote?.title || note.title;
   const noteBody = aiNote?.body || note.body;
   const noteVerse = aiNote?.verse || note.verse;
@@ -951,6 +980,10 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{noteTitle}</span>
           {aiNote && <span style={{ fontSize: ".58rem", fontWeight: 700, letterSpacing: ".05em", color: "var(--c-mood)", border: "1px solid var(--c-mood)", borderRadius: 8, padding: "1px 6px" }}>✨ AI</span>}
+          {aiLoading && <span style={{ fontSize: ".64rem", color: "var(--c-muted)", fontStyle: "italic" }}>đang phân tích…</span>}
+          {a.total > 0 && !aiLoading && (
+            <button data-sfx="pop" onClick={refreshAi} title="Làm mới đánh giá AI" style={{ marginLeft: "auto", border: "none", background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: ".9rem", padding: 2 }}>↻</button>
+          )}
         </div>
         <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{noteBody}</div>
         <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{noteVerse}</div>
@@ -1292,9 +1325,6 @@ function PushupTracker({ pushups, weekDays, onAdd }) {
     </div>
   );
 }
-
-// Module-level cache for AI daily evaluations (keyed by date + progress)
-const _coachCache = {};
 
 // ---- AI chat sheet: talk to the assistant to create tasks by message ----
 function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
