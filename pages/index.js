@@ -98,6 +98,14 @@ function saveMood(date, score) {
 const wine = "var(--c1)", gold = "var(--c2)";
 // Cover art pool — cycles every load (sacred + cozy art; add more files to /public/img to expand)
 const COVERS = ["/img/red-sea.gif","/img/moses-staff.gif","/img/jesus-water.jpg","/img/jesus-boat.jpg","/img/jesus-oil.jpg"];
+// Style options for the picker (key + label + icon + 3-color swatch)
+const THEMES = [
+  { key: "light",  name: "Sacred",  icon: "✝️", sw: ["#7a4a4a", "#c9a84c", "#fdf8f2"] },
+  { key: "dark",   name: "Cyber",   icon: "🕹️", sw: ["#00ff9c", "#00d0ff", "#04080a"] },
+  { key: "cozy",   name: "Cozy",    icon: "🧸", sw: ["#a05c2c", "#d98e4a", "#f9efe2"] },
+  { key: "cutie",  name: "Cutie",   icon: "🎨", sw: ["#5b8fd1", "#e89bb8", "#fdf6ee"] },
+  { key: "nature", name: "Nature",  icon: "🌿", sw: ["#6f9e57", "#a7c47f", "#f2f5e6"] },
+];
 
 // ===== Productivity scoring system =====
 // Every realm is valued. Base points are close together; real "impact" comes
@@ -343,6 +351,8 @@ const SFX = {
   tick() { const c = actx(); if (!c) return; const v = rnd(0.93, 1.07);
     if (_uiTheme === "dark") { blip(c, { freq: 1100 * v, dur: 0.045, gain: 0.04, cutoff: 2800 }); return; }
     if (_uiTheme === "cozy") { wood(c, { freq: 205 * v, gain: 0.085, dur: 0.055, cutoff: 1050, reverb: 0.05, click: 0.07, glide: 0.8 }); return; }
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1318 * v, dur: 0.1, gain: 0.05, attack: 0.004, cutoff: 4000, reverb: 0.18 }); voice(c, { type: "sine", freq: 2637 * v, dur: 0.05, gain: 0.012, cutoff: 6000, reverb: 0.1 }); return; }
+    if (_uiTheme === "nature") { wood(c, { freq: 392 * v, gain: 0.06, dur: 0.1, cutoff: 1500, reverb: 0.18, click: 0.02, glide: 0.95 }); return; }
     wood(c, { freq: 300 * v, gain: 0.07, dur: 0.085, cutoff: 1400, reverb: 0.1, click: 0.04 });
   },
   // selection — light wooden marimba note (slightly brighter, two-tone)
@@ -357,6 +367,8 @@ const SFX = {
       wood(c, { freq: 265 * v, gain: 0.06, dur: 0.05, cutoff: 1150, reverb: 0.05, click: 0.04, glide: 0.82, when: 0.045 });
       return;
     }
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1046 * v, dur: 0.11, gain: 0.06, cutoff: 4000, glideTo: 1568 * v, glideAt: 0.09, reverb: 0.2 }); voice(c, { type: "triangle", freq: 2092 * v, dur: 0.06, gain: 0.015, cutoff: 6000, when: 0.05, reverb: 0.12 }); return; }
+    if (_uiTheme === "nature") { wood(c, { freq: 523 * v, gain: 0.06, dur: 0.13, cutoff: 1700, glide: 1.12, reverb: 0.2, click: 0.015 }); return; }
     wood(c, { freq: 392 * v, gain: 0.075, dur: 0.13, cutoff: 1700, reverb: 0.16, glide: 0.92, click: 0.03 });
     wood(c, { freq: 588 * v, gain: 0.03, dur: 0.09, cutoff: 2000, reverb: 0.14, when: 0.04, click: 0 });
   },
@@ -372,6 +384,8 @@ const SFX = {
       wood(c, { freq: 392 * v, gain: 0.05, dur: 0.22, cutoff: 1500, reverb: 0.25, glide: 0.97, when: 0.24, click: 0 });
       return;
     }
+    if (_uiTheme === "cutie") { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => voice(c, { type: "sine", freq: f * v, dur: 0.22, gain: 0.05, cutoff: 5000, reverb: 0.22, when: i * 0.06 })); return; }
+    if (_uiTheme === "nature") { [392, 493.88, 587.33, 783.99].forEach((f, i) => voice(c, { type: "sine", freq: f * v, dur: 0.26, gain: 0.055, cutoff: 2200, reverb: 0.28, when: i * 0.08 })); return; }
     wood(c, { freq: 261.63 * v, gain: 0.08, dur: 0.2, cutoff: 1500, reverb: 0.28, glide: 0.96 });
     wood(c, { freq: 329.63 * v, gain: 0.07, dur: 0.22, cutoff: 1600, reverb: 0.3, glide: 0.96, when: 0.085, click: 0.02 });
     wood(c, { freq: 392.00 * v, gain: 0.065, dur: 0.26, cutoff: 1700, reverb: 0.34, glide: 0.96, when: 0.17, click: 0.02 });
@@ -380,6 +394,8 @@ const SFX = {
   soft() { const c = actx(); if (!c) return; const v = rnd(0.97, 1.03);
     if (_uiTheme === "dark") { blip(c, { freq: 720 * v, dur: 0.09, gain: 0.04, glideTo: 360 * v }); return; }
     if (_uiTheme === "cozy") { wood(c, { freq: 165 * v, gain: 0.08, dur: 0.07, cutoff: 900, reverb: 0.06, click: 0.06, glide: 0.75 }); return; }
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 880 * v, dur: 0.16, gain: 0.05, cutoff: 3500, glideTo: 587 * v, glideAt: 0.14, reverb: 0.18 }); return; }
+    if (_uiTheme === "nature") { wood(c, { freq: 330 * v, gain: 0.06, dur: 0.16, cutoff: 1200, glide: 0.78, reverb: 0.2, click: 0.02 }); return; }
     wood(c, { freq: 294 * v, gain: 0.07, dur: 0.16, cutoff: 1200, reverb: 0.16, glide: 0.78 });
   },
   // nav — airy brush + low wooden body
@@ -392,6 +408,8 @@ const SFX = {
       wood(c, { freq: 130, gain: 0.09, dur: 0.09, cutoff: 800, reverb: 0.07, click: 0.07, glide: 0.72 });
       return;
     }
+    if (_uiTheme === "cutie") { noise(c, { dur: 0.22, gain: 0.02, type: "highpass", freq: 2000, q: 0.4, reverb: 0.2 }); voice(c, { type: "sine", freq: up ? 700 : 1100, dur: 0.18, gain: 0.035, cutoff: 4000, glideTo: up ? 1100 : 700, glideAt: 0.16, reverb: 0.2 }); return; }
+    if (_uiTheme === "nature") { noise(c, { dur: 0.24, gain: 0.018, type: "bandpass", freq: 3800, q: 0.8, sweepTo: up ? 5200 : 2600, reverb: 0.22 }); wood(c, { freq: up ? 360 : 460, gain: 0.035, dur: 0.16, cutoff: 1400, glide: up ? 1.15 : 0.85, reverb: 0.2, click: 0 }); return; }
     noise(c, { dur: 0.18, gain: 0.022, type: "lowpass", freq: up ? 800 : 2000, q: 0.3, sweepTo: up ? 2000 : 700, reverb: 0.16 });
     wood(c, { freq: up ? 330 : 392, gain: 0.05, dur: 0.14, cutoff: 1300, reverb: 0.18, glide: up ? 1.18 : 0.82, click: 0 });
   },
@@ -407,6 +425,8 @@ const SFX = {
       wood(c, { freq: 105 * v, gain: 0.06, dur: 0.1, cutoff: 700, reverb: 0.06, click: 0.05, glide: 0.7, when: 0.09 });
       return;
     }
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 660 * v, dur: 0.14, gain: 0.05, cutoff: 3000, glideTo: 440 * v, glideAt: 0.12, reverb: 0.15 }); voice(c, { type: "sine", freq: 550 * v, dur: 0.16, gain: 0.035, cutoff: 3000, glideTo: 370 * v, glideAt: 0.14, when: 0.06, reverb: 0.15 }); return; }
+    if (_uiTheme === "nature") { wood(c, { freq: 196 * v, gain: 0.07, dur: 0.16, cutoff: 900, glide: 0.72, reverb: 0.16, click: 0.03 }); return; }
     wood(c, { freq: 174.61 * v, gain: 0.08, dur: 0.2, cutoff: 900, reverb: 0.16, glide: 0.7, click: 0.05 });
   },
 };
@@ -435,6 +455,15 @@ function playDing() {
     wood(c, { freq: 392, gain: 0.06, dur: 0.32, cutoff: 1700, reverb: 0.32, glide: 0.97, when: 0.38, click: 0 });
     return;
   }
+  if (_uiTheme === "cutie") { // sparkly glockenspiel run
+    [523.25, 659.25, 783.99, 1046.5, 1318.5, 1568].forEach((f, i) => voice(c, { type: "sine", freq: f, dur: 0.4, gain: 0.07, cutoff: 6000, reverb: 0.3, when: i * 0.07 }));
+    voice(c, { type: "triangle", freq: 2637, dur: 0.3, gain: 0.02, cutoff: 7000, reverb: 0.4, when: 0.42 });
+    return;
+  }
+  if (_uiTheme === "nature") { // mellow ocarina arpeggio
+    [392, 493.88, 587.33, 783.99, 880].forEach((f, i) => voice(c, { type: "sine", freq: f, dur: 0.42, gain: 0.07, cutoff: 2600, reverb: 0.34, when: i * 0.08 }));
+    return;
+  }
   const notes = DING_VARIANTS[Math.floor(Math.random() * DING_VARIANTS.length)];
   notes.forEach((f, i) => wood(c, { freq: f, gain: 0.11, dur: 0.34, cutoff: 1900, reverb: 0.3, glide: 0.97, when: i * 0.08, click: i === 0 ? 0.04 : 0.02 }));
   // soft warm shimmer to round it off
@@ -445,12 +474,16 @@ function playUndo() {
   const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
   if (_uiTheme === "dark") { blip(c, { freq: 880 * v, dur: 0.2, gain: 0.05, glideTo: 220 * v, cutoff: 2400 }); return; }
   if (_uiTheme === "cozy") { wood(c, { freq: 150 * v, gain: 0.08, dur: 0.12, cutoff: 800, reverb: 0.06, click: 0.06, glide: 0.65 }); return; }
+  if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1046 * v, dur: 0.2, gain: 0.05, cutoff: 3500, glideTo: 523 * v, glideAt: 0.18, reverb: 0.16 }); return; }
+  if (_uiTheme === "nature") { wood(c, { freq: 440 * v, gain: 0.06, dur: 0.18, cutoff: 1300, glide: 0.6, reverb: 0.18, click: 0.02 }); return; }
   wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
 }
 
 // Mode-switch sound: digital boot-up into dark, warm chord back to light
 function playThemeSwitch(next) {
   const c = actx(); if (!c) return;
+  if (next === "cutie") { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => voice(c, { type: "sine", freq: f, dur: 0.3, gain: 0.06, cutoff: 6000, reverb: 0.3, when: i * 0.05 })); return; }
+  if (next === "nature") { noise(c, { dur: 0.4, gain: 0.015, type: "bandpass", freq: 3500, q: 0.6, sweepTo: 5000, reverb: 0.3 }); [392, 523.25, 659.25].forEach((f, i) => voice(c, { type: "sine", freq: f, dur: 0.35, gain: 0.05, cutoff: 2400, reverb: 0.32, when: 0.1 + i * 0.09 })); return; }
   if (next === "cozy") { // cozy boot: mech keyboard riff
     [190, 230, 210, 260, 240].forEach((f, i) => wood(c, { freq: f, gain: 0.08, dur: 0.055, cutoff: 1050, reverb: 0.05, click: 0.065, glide: 0.8, when: i * 0.06 }));
     return;
@@ -467,9 +500,12 @@ function playThemeSwitch(next) {
 
 // Sparkle burst emanating from the task box outline (done celebration)
 function Particles({ width, height, onDone }) {
-  const COLORS = _uiTheme === "dark"
-    ? ["#00ff9c","#00d0ff","#7dffc8","#baffe3","#00ffd5","#66ffb8"]
-    : ["#c9a84c","#f0dea0","#e8c4b8","#d4a5a5","#b8860b","#dcc77a"];
+  const COLORS = (
+    _uiTheme === "dark" ? ["#00ff9c","#00d0ff","#7dffc8","#baffe3","#00ffd5","#66ffb8"] :
+    _uiTheme === "cutie" ? ["#5b8fd1","#e89bb8","#f0a93f","#86c5e8","#f7c5d9","#ffe0a3"] :
+    _uiTheme === "nature" ? ["#6f9e57","#a7c47f","#e2885c","#c3d99a","#88b06a","#eccf8f"] :
+    ["#c9a84c","#f0dea0","#e8c4b8","#d4a5a5","#b8860b","#dcc77a"]
+  );
   const SHAPES = ["✦"]; // single 4-pointed sparkle star
   const W = Math.max(width || 280, 60);
   const H = Math.max(height || 48, 40);
@@ -1334,6 +1370,7 @@ export default function Home() {
   const [showChat, setShowChat] = useState(false);
   const [theme, setTheme] = useState("light");
   const [themeFlipping, setThemeFlipping] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const [pushups, setPushups] = useState({}); // date -> count
   const [coverIdx, setCoverIdx] = useState(0);
   useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
@@ -1342,16 +1379,17 @@ export default function Home() {
   useEffect(() => {
     try {
       const t = localStorage.getItem("dat-theme");
-      if (t === "dark" || t === "light" || t === "cozy") { setTheme(t); setSoundTheme(t); }
+      if (["light","dark","cozy","cutie","nature"].includes(t)) { setTheme(t); setSoundTheme(t); }
     } catch {}
   }, []);
-  const switchTheme = () => {
-    const next = theme === "light" ? "dark" : theme === "dark" ? "cozy" : "light";
+  const switchTheme = (next) => {
+    if (!next || next === theme) { setShowThemePicker(false); return; }
     setTheme(next); setSoundTheme(next);
     try { localStorage.setItem("dat-theme", next); } catch {}
     playThemeSwitch(next);
     setThemeFlipping(true);
     setTimeout(() => setThemeFlipping(false), 520);
+    setShowThemePicker(false);
   };
 
   // Create a task: optimistic insert, then swap temp id for the real Notion id
@@ -1617,7 +1655,7 @@ export default function Home() {
         <title>✝️ Dat&apos;s Weekly Planner</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&family=Patrick+Hand&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Nunito:wght@300;400;600;700&family=Chakra+Petch:wght@400;500;700&family=Patrick+Hand&family=Baloo+2:wght@400;500;700;800&display=swap" rel="stylesheet" />
       </Head>
 
       <style>{`
@@ -1677,6 +1715,7 @@ export default function Home() {
         /* theme flip transition */
         @keyframes themeFlip{0%{opacity:.25;filter:saturate(.2) brightness(1.6)}100%{opacity:1;filter:none}}
         .theme-flipping{animation:themeFlip .5s ease;}
+        @keyframes pickIn{0%{opacity:0;transform:translateY(-8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}
         /* ===== COZY theme — warm hand-craft ===== */
         .theme-cozy{
           --c1:#a05c2c; --c2:#d98e4a; --c-mood:#b06fb8;
@@ -1691,6 +1730,53 @@ export default function Home() {
         .theme-cozy .check{border-radius:7px;border-style:dashed;}
         .theme-cozy .task-row:hover{background:rgba(217,142,74,.12)}
         .theme-cozy button{box-shadow:2px 2px 0 rgba(160,92,44,.18);}
+        /* ===== CUTIE theme — colorful pastel, bouncy ===== */
+        .theme-cutie{
+          --c1:#5b8fd1; --c2:#e89bb8; --c-mood:#f0a93f;
+          --c-bg:#fdf6ee; --c-surface:#ffffff; --c-on-accent:#ffffff;
+          --c-ink:#5a5048; --c-muted:#9a8fa8; --c-muted2:#c9b8d0;
+          --c-border:#f0d9e4; --c-track:#f1e8f0;
+        }
+        .theme-cutie *{font-family:'Baloo 2','Nunito',cursive!important;}
+        .theme-cutie .card{background:#ffffff;border:2px solid #fce4ec;border-radius:22px!important;
+          box-shadow:0 6px 0 rgba(232,155,184,.16), 0 8px 20px rgba(120,150,210,.1);}
+        .theme-cutie .card-title{border-bottom:2px dotted #f3d3e0;color:#5b8fd1;}
+        .theme-cutie button{border-radius:16px!important;}
+        .theme-cutie .check{border-radius:9px;border-width:2px;}
+        .theme-cutie .check.on{background:var(--c2);border-color:var(--c2);box-shadow:0 0 0 4px rgba(232,155,184,.2);}
+        .theme-cutie .task-row{border-radius:16px;}
+        .theme-cutie .task-row:hover{background:rgba(91,143,209,.07)}
+        .theme-cutie .task-rainbow{animation:none!important;position:relative;overflow:hidden;box-shadow:0 0 0 3px rgba(232,155,184,.35);}
+        .theme-cutie .task-rainbow::before{content:"";position:absolute;inset:0;z-index:0;transform:translateX(-101%);
+          background:linear-gradient(90deg,#5b8fd1,#e89bb8);animation:wipeIn .5s cubic-bezier(.34,1.6,.4,1) forwards;}
+        .theme-cutie .task-rainbow>*{position:relative;z-index:1;}
+        .theme-cutie .task-rainbow .task-name-text{color:#fff!important;font-weight:700;}
+        .theme-cutie::after{content:"🧸";position:fixed;left:10px;bottom:10px;font-size:26px;opacity:.5;pointer-events:none;z-index:5;animation:floaty 4s ease-in-out infinite;}
+        .theme-cutie::before{content:"🍪 ✨";position:fixed;left:8px;top:8px;font-size:18px;opacity:.45;pointer-events:none;z-index:5;}
+        /* ===== NATURE theme — sage matcha, calm ===== */
+        .theme-nature{
+          --c1:#6f9e57; --c2:#a7c47f; --c-mood:#e2885c;
+          --c-bg:#f2f5e6; --c-surface:#fbfdf3; --c-on-accent:#fbfdf3;
+          --c-ink:#4a5836; --c-muted:#7e9166; --c-muted2:#b3c596;
+          --c-border:#d6e3bc; --c-track:#e6eed5;
+        }
+        .theme-nature *{font-family:'Baloo 2','Nunito',cursive!important;}
+        .theme-nature .card{background:#fbfdf3;border:2px solid #dce8c4;border-radius:20px!important;
+          box-shadow:0 5px 0 rgba(111,158,87,.12), 0 8px 18px rgba(111,158,87,.08);}
+        .theme-nature .card-title{border-bottom:2px solid #dce8c4;color:#5f8a48;}
+        .theme-nature button{border-radius:14px!important;}
+        .theme-nature .check{border-radius:8px;border-width:2px;}
+        .theme-nature .check.on{background:var(--c1);border-color:var(--c1);box-shadow:0 0 0 4px rgba(111,158,87,.18);}
+        .theme-nature .task-row{border-radius:14px;}
+        .theme-nature .task-row:hover{background:rgba(111,158,87,.08)}
+        .theme-nature .task-rainbow{animation:none!important;position:relative;overflow:hidden;box-shadow:0 0 0 3px rgba(111,158,87,.3);}
+        .theme-nature .task-rainbow::before{content:"";position:absolute;inset:0;z-index:0;transform:translateX(-101%);
+          background:linear-gradient(90deg,#6f9e57,#a7c47f);animation:wipeIn .55s cubic-bezier(.3,.9,.3,1) forwards;}
+        .theme-nature .task-rainbow>*{position:relative;z-index:1;}
+        .theme-nature .task-rainbow .task-name-text{color:#fff!important;font-weight:700;}
+        .theme-nature::before{content:"🌿 ☁️";position:fixed;left:8px;top:8px;font-size:18px;opacity:.5;pointer-events:none;z-index:5;}
+        .theme-nature::after{content:"🐰";position:fixed;left:10px;bottom:10px;font-size:24px;opacity:.55;pointer-events:none;z-index:5;animation:floaty 5s ease-in-out infinite;}
+        @keyframes floaty{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-8px) rotate(4deg)}}
         /* done celebration (dark + cozy): BOLD solid color wipe left→right via overlay */
         .theme-dark .task-rainbow, .theme-cozy .task-rainbow{
           animation:none!important; position:relative; overflow:hidden;
@@ -1831,16 +1917,49 @@ export default function Home() {
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
       <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 16px 60px" }}>
 
-        {/* THEME SWITCH — floating top-right */}
-        <button data-sfx="swoosh" onClick={switchTheme} title="Đổi giao diện" style={{
-          position: "fixed", top: 14, right: 14, zIndex: 90,
+        {/* THEME SWITCH — floating top-right, opens style picker */}
+        <button data-sfx="swoosh" onClick={() => setShowThemePicker(v => !v)} title="Đổi giao diện" style={{
+          position: "fixed", top: 14, right: 14, zIndex: 95,
           width: 44, height: 44, borderRadius: theme === "dark" ? 0 : 22,
           border: `1.5px solid ${theme === "dark" ? "rgba(0,255,156,.5)" : "var(--c-border)"}`,
           background: theme === "dark" ? "rgba(8,18,14,.9)" : "rgba(255,255,255,.85)",
           backdropFilter: "blur(6px)", cursor: "pointer", fontSize: "1.25rem",
           boxShadow: theme === "dark" ? "0 0 14px rgba(0,255,156,.35)" : "0 3px 12px rgba(122,74,74,.18)",
           display: "flex", alignItems: "center", justifyContent: "center",
-        }}>{theme === "light" ? "🕹️" : theme === "dark" ? "🧸" : "✝️"}</button>
+        }}>{THEMES.find(t => t.key === theme)?.icon || "🎨"}</button>
+
+        {showThemePicker && (
+          <>
+            <div onClick={() => setShowThemePicker(false)} style={{ position: "fixed", inset: 0, zIndex: 96 }} />
+            <div style={{
+              position: "fixed", top: 64, right: 14, zIndex: 97, width: 208,
+              background: "var(--c-surface)", border: "1px solid var(--c-border)",
+              borderRadius: theme === "dark" ? 0 : 16, padding: 8,
+              boxShadow: "0 10px 30px rgba(0,0,0,.22)", animation: "pickIn .26s cubic-bezier(.22,1,.36,1)",
+            }}>
+              <div style={{ fontSize: ".64rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", padding: "4px 8px 8px" }}>CHỌN GIAO DIỆN</div>
+              {THEMES.map(t => {
+                const active = t.key === theme;
+                return (
+                  <button key={t.key} data-sfx="pop" onClick={() => switchTheme(t.key)} style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px",
+                    borderRadius: theme === "dark" ? 0 : 11, cursor: "pointer", marginBottom: 2,
+                    border: active ? `1.5px solid var(--c1)` : "1px solid transparent",
+                    background: active ? "color-mix(in srgb, var(--c1) 12%, transparent)" : "transparent",
+                    color: "var(--c-ink)", textAlign: "left",
+                  }}>
+                    <span style={{ fontSize: "1.1rem" }}>{t.icon}</span>
+                    <span style={{ flex: 1, fontWeight: 700, fontSize: ".85rem" }}>{t.name}</span>
+                    <span style={{ display: "flex", gap: 2 }}>
+                      {t.sw.map((c, i) => <span key={i} style={{ width: 11, height: 11, borderRadius: 3, background: c, border: "1px solid rgba(0,0,0,.12)" }} />)}
+                    </span>
+                    {active && <span style={{ color: "var(--c1)", fontWeight: 800, marginLeft: 2 }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* HERO with GIF banner */}
         <div className="f1" style={{ textAlign: "center", padding: "26px 0 14px" }}>
