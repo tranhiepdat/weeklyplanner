@@ -132,8 +132,8 @@ function taskBaseScore(task) {
   else if (t.includes("vacation")) base = 5;
   // "impact" comes from priority — applies to ANY type (a family task can be high-impact too)
   const pr = (task.priority || []).join(" ").toLowerCase();
-  if (pr.includes("urgent")) base += 6;
-  else if (pr.includes("important")) base += 4;
+  if (pr.includes("urgent")) base += 8;
+  else if (pr.includes("important")) base += 5;
   return base;
 }
 function taskCategory(task) {
@@ -1560,6 +1560,8 @@ export default function Home() {
       if (patch.date !== undefined) body.date = patch.date;
       if (patch.name !== undefined) body.name = patch.name;
       if (patch.taskType !== undefined) body.taskType = patch.taskType;
+      if (patch.priority !== undefined) body.priority = patch.priority;
+      if (patch.project !== undefined) body.project = patch.project;
       const r = await fetch("/api/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -2262,6 +2264,8 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const [session, setSession] = useState(task.session || "");
   const [date, setDate] = useState(task.date || "");
   const [taskType, setTaskType] = useState(task.taskType || "");
+  const [priority, setPriority] = useState(Array.isArray(task.priority) ? task.priority : []);
+  const [project, setProject] = useState(Array.isArray(task.project) ? task.project : []);
   const [confirmDel, setConfirmDel] = useState(false);
   const [closing, setClosing] = useState(false);
   // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
@@ -2283,12 +2287,17 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const mSun = new Date(modalMonday); mSun.setDate(modalMonday.getDate() + 6);
   const modalWeekLabel = `${fmt(modalMonday)} – ${fmt(mSun)}`;
 
+  const sameArr = (a, b) => { const x = [...(a || [])].sort().join("|"); const y = [...(b || [])].sort().join("|"); return x === y; };
   const patch = {};
   if (name !== task.name) patch.name = name;
   if (session !== (task.session || "")) patch.session = session || null;
   if (date !== (task.date || "")) patch.date = date || null;
   if (taskType !== (task.taskType || "")) patch.taskType = taskType || null;
+  if (!sameArr(priority, task.priority)) patch.priority = priority;
+  if (!sameArr(project, task.project)) patch.project = project;
   const hasChange = Object.keys(patch).length > 0;
+  const togglePriority = (p) => setPriority(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+  const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
 
   return (
     <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
@@ -2351,6 +2360,38 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
               );
             })}
           </div>
+        </div>
+
+        {/* Priority & Project */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>ƯU TIÊN &amp; DỰ ÁN</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[["🔴 Urgent", "#dc2626"], ["🟡 Important", "#ca8a04"]].map(([pp, c]) => {
+              const sel = priority.includes(pp);
+              return (
+                <button key={pp} data-sfx="pop" data-anim="chip" onClick={() => togglePriority(pp)} style={{
+                  padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
+                  border: sel ? `2px solid ${c}` : "1px solid var(--c-border)",
+                  background: sel ? `${c}1a` : "var(--c-surface)", color: sel ? c : "var(--c-muted)",
+                }}>{pp}</button>
+              );
+            })}
+            {["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG"].map(pj => {
+              const sel = project.includes(pj);
+              return (
+                <button key={pj} data-sfx="pop" data-anim="chip" onClick={() => toggleProject(pj)} style={{
+                  padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
+                  border: sel ? "2px solid #0369a1" : "1px solid var(--c-border)",
+                  background: sel ? "#0369a11a" : "var(--c-surface)", color: sel ? "#0369a1" : "var(--c-muted)",
+                }}>{pj}</button>
+              );
+            })}
+          </div>
+          {(priority.includes("🔴 Urgent") || priority.includes("🟡 Important")) && (
+            <div style={{ fontSize: ".68rem", color: "var(--c-muted)", marginTop: 7 }}>
+              ✨ Việc {priority.includes("🔴 Urgent") ? "khẩn cấp" : "quan trọng"} được cộng thêm điểm ({priority.includes("🔴 Urgent") ? "+8" : "+5"}) vì tác động lớn.
+            </div>
+          )}
         </div>
 
         {/* Date */}
