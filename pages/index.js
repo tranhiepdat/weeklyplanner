@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 
 const DAYS = ["Chủ Nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
@@ -142,6 +142,41 @@ function taskCategory(task) {
   if (t.includes("personal")) return "personal";
   if (t.includes("chore")) return "chore";
   return "care"; // health, family, entertainment, vacation, untyped
+}
+
+// ===== Sorting =====
+// Priority weight for sorting (higher = surfaces first)
+function priorityRank(task) {
+  const p = (task.priority || []).join(" ").toLowerCase();
+  if (p.includes("urgent")) return 2;
+  if (p.includes("important")) return 1;
+  return 0;
+}
+function priorityEmoji(task) {
+  const p = (task.priority || []).join(" ").toLowerCase();
+  return p.includes("urgent") ? "🔴" : p.includes("important") ? "🟡" : "";
+}
+// Stable display order for "sort by type"
+const TYPE_SORT_ORDER = ["work", "personal", "health", "chore", "family", "entertainment", "vacation"];
+function typeRank(task) {
+  const t = (task.taskType || "").toLowerCase();
+  const i = TYPE_SORT_ORDER.findIndex(k => t.includes(k));
+  return i < 0 ? TYPE_SORT_ORDER.length : i;
+}
+// Sort a task list by the chosen mode. `order` is a {id:number} manual-order map.
+// Returns a NEW array; ties fall back to the list's original order (stable).
+function sortTasks(list, mode, order = {}) {
+  const idx = new Map(list.map((t, i) => [t.id, i]));
+  const manual = (t) => (order[t.id] != null ? order[t.id] : 100000 + idx.get(t.id));
+  const arr = [...list];
+  if (mode === "manual") {
+    arr.sort((a, b) => manual(a) - manual(b));
+  } else if (mode === "priority") {
+    arr.sort((a, b) => (priorityRank(b) - priorityRank(a)) || (manual(a) - manual(b)));
+  } else if (mode === "type") {
+    arr.sort((a, b) => (typeRank(a) - typeRank(b)) || (priorityRank(b) - priorityRank(a)) || (idx.get(a.id) - idx.get(b.id)));
+  }
+  return arr;
 }
 // Analyze a set of tasks for one day → totals, completion, score by category, mood
 function analyzeDay(dayTasks, mood) {
@@ -479,6 +514,27 @@ function playUndo() {
   wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
 }
 
+// Soft pickup "lift" when grabbing a task to drag
+function playLift() {
+  const c = actx(); if (!c) return;
+  if (_uiTheme === "dark") { blip(c, { freq: 660, dur: 0.08, gain: 0.03, glideTo: 1320, cutoff: 4000, reverb: 0.2 }); return; }
+  voice(c, { type: "sine", freq: 784, dur: 0.16, gain: 0.04, cutoff: 4500, glideTo: 1175, glideAt: 0.14, reverb: 0.3 });
+  noise(c, { dur: 0.08, gain: 0.008, type: "highpass", freq: 5000, q: 0.4, reverb: 0.2 });
+}
+// Ethereal "drop into place" — dreamy shimmer chord with long reverb (drag-reorder settle)
+function playDrop() {
+  const c = actx(); if (!c) return;
+  if (_uiTheme === "dark") {
+    [880, 1320, 1760].forEach((f, i) => blip(c, { freq: f, dur: 0.2, gain: 0.035, when: i * 0.02, cutoff: 5200, reverb: 0.4 }));
+    blip(c, { freq: 2640, dur: 0.34, gain: 0.014, when: 0.06, glideTo: 3520, cutoff: 6000, reverb: 0.55 });
+    return;
+  }
+  // warm/light themes: airy major add9 + high sparkle tail, generous reverb (satisfying + dreamy)
+  [523.25, 659.25, 783.99, 987.77].forEach((f, i) => voice(c, { type: "sine", freq: f, dur: 0.55, gain: 0.05, attack: 0.006, cutoff: 5200, reverb: 0.5, when: i * 0.02 }));
+  voice(c, { type: "sine", freq: 1567.98, dur: 0.45, gain: 0.018, cutoff: 6800, reverb: 0.6, when: 0.05 });
+  noise(c, { dur: 0.32, gain: 0.01, type: "highpass", freq: 4200, q: 0.4, reverb: 0.45 });
+}
+
 // Mode-switch sound: digital boot-up into dark, warm chord back to light
 function playThemeSwitch(next) {
   const c = actx(); if (!c) return;
@@ -662,6 +718,121 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
       {celebrating && (
         <Particles width={dims.w} height={dims.h} onDone={() => setPhase("done")} />
       )}
+    </div>
+  );
+}
+
+// ---- Sortable / draggable task list ----
+// FLIP-animates row position changes (sort switches & drag-reorder). When
+// `draggable`, each row gets a ⠿ handle; dragging reorders with a gap-shift
+// preview, an ethereal drop sound + pop on release.
+function SortableTaskList({ items, draggable, onReorder, renderRow }) {
+  const wrapRef = useRef(null);
+  const flipTops = useRef(new Map());
+  const dragRef = useRef(null);
+  const [drag, setDrag] = useState(null); // { from, dy, tgt, h }
+  const orderKey = items.map(t => t.id).join(",");
+
+  // FLIP: animate rows from their previous position to the new one (skipped mid-drag)
+  useLayoutEffect(() => {
+    const el = wrapRef.current; if (!el) return;
+    const nodes = [...el.querySelectorAll("[data-fid]")];
+    if (!dragRef.current) {
+      nodes.forEach(n => {
+        const id = n.dataset.fid, nt = n.getBoundingClientRect().top, ot = flipTops.current.get(id);
+        if (ot != null && Math.abs(ot - nt) > 1) {
+          n.style.transition = "none";
+          n.style.transform = `translateY(${ot - nt}px)`;
+          requestAnimationFrame(() => {
+            n.style.transition = "transform .32s cubic-bezier(.2,1,.3,1)";
+            n.style.transform = "";
+          });
+        }
+      });
+    }
+    const m = new Map();
+    nodes.forEach(n => m.set(n.dataset.fid, n.getBoundingClientRect().top));
+    flipTops.current = m;
+  }, [orderKey]);
+
+  const measure = () => {
+    const el = wrapRef.current; if (!el) return [];
+    return [...el.querySelectorAll("[data-fid]")].map(n => ({ top: n.getBoundingClientRect().top, h: n.offsetHeight }));
+  };
+  const onDown = (e, from) => {
+    if (!draggable) return;
+    e.preventDefault(); e.stopPropagation();
+    const rects = measure();
+    dragRef.current = { from, startY: e.clientY, tgt: from, rects, h: rects[from]?.h || 48 };
+    setDrag({ from, dy: 0, tgt: from, h: dragRef.current.h });
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    playLift();
+  };
+  const onMove = (e) => {
+    const d = dragRef.current; if (!d) return;
+    const dy = e.clientY - d.startY;
+    const pointerY = d.rects[d.from].top + d.h / 2 + dy;
+    let tgt = d.from;
+    if (dy > 0) { for (let i = d.from + 1; i < d.rects.length; i++) { if (pointerY > d.rects[i].top + d.rects[i].h / 2) tgt = i; } }
+    else { for (let i = d.from - 1; i >= 0; i--) { if (pointerY < d.rects[i].top + d.rects[i].h / 2) tgt = i; } }
+    d.tgt = tgt;
+    setDrag({ from: d.from, dy, tgt, h: d.h });
+  };
+  const onUp = () => {
+    const d = dragRef.current; if (!d) return;
+    const { from, tgt } = d;
+    // capture current visual positions (incl. drag transforms) so FLIP animates from here
+    const el = wrapRef.current;
+    if (el) { const m = new Map(); [...el.querySelectorAll("[data-fid]")].forEach(n => m.set(n.dataset.fid, n.getBoundingClientRect().top)); flipTops.current = m; }
+    dragRef.current = null;
+    setDrag(null);
+    if (tgt !== from) {
+      const ids = items.map(t => t.id);
+      const [moved] = ids.splice(from, 1);
+      ids.splice(tgt, 0, moved);
+      playDrop();
+      onReorder(ids);
+      requestAnimationFrame(() => {
+        const node = wrapRef.current && wrapRef.current.querySelector(`[data-fid="${CSS && CSS.escape ? CSS.escape(moved) : moved}"]`);
+        if (node) { node.classList.remove("task-drop-pop"); void node.offsetWidth; node.classList.add("task-drop-pop"); node.addEventListener("animationend", () => node.classList.remove("task-drop-pop"), { once: true }); }
+      });
+    } else {
+      playClick("soft");
+    }
+  };
+
+  const rowTransform = (i) => {
+    if (!drag) return "";
+    if (i === drag.from) return `translateY(${drag.dy}px) scale(1.03)`;
+    if (drag.tgt > drag.from && i > drag.from && i <= drag.tgt) return `translateY(${-drag.h}px)`;
+    if (drag.tgt < drag.from && i < drag.from && i >= drag.tgt) return `translateY(${drag.h}px)`;
+    return "";
+  };
+
+  return (
+    <div ref={wrapRef}>
+      {items.map((t, i) => {
+        const lifted = drag && drag.from === i;
+        return (
+          <div key={t.id} data-fid={t.id} style={{
+            position: "relative",
+            transform: rowTransform(i),
+            zIndex: lifted ? 30 : 1,
+            transition: drag ? (lifted ? "none" : "transform .18s ease") : "transform .2s ease",
+            filter: lifted ? "drop-shadow(0 10px 18px rgba(0,0,0,.22))" : undefined,
+            opacity: lifted ? 0.96 : 1,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {draggable && (
+                <div onPointerDown={(e) => onDown(e, i)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+                  title="Kéo để sắp xếp thứ tự"
+                  style={{ flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", width: 24, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.05rem", touchAction: "none", userSelect: "none" }}>⠿</div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>{renderRow(t)}</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -856,14 +1027,17 @@ function ScoreChart({ weekDays, byDate, moods }) {
 }
 
 // ---- Insights panel: today's score breakdown + coach note + recent-day summaries ----
-function ScoreBar({ cat, earned, possible }) {
+function ScoreBar({ cat, data }) {
   const c = SCORE_CATS[cat];
-  const pct = possible ? Math.round((earned / possible) * 100) : 0;
+  const pct = data.n ? Math.round((data.doneN / data.n) * 100) : 0;
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".72rem", marginBottom: 3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".72rem", marginBottom: 3, alignItems: "baseline" }}>
         <span style={{ color: c.color, fontWeight: 600 }}>{c.emoji} {c.label}</span>
-        <span style={{ color: "var(--c-muted)" }}>{earned}<span style={{ opacity: .5 }}>/{possible}</span></span>
+        <span style={{ color: "var(--c-muted)" }}>
+          <strong style={{ color: c.color }}>{data.doneN}</strong><span style={{ opacity: .55 }}>/{data.n} việc</span>
+          <span style={{ opacity: .45, marginLeft: 6, fontSize: ".64rem" }}>· {data.earned}đ</span>
+        </span>
       </div>
       <div style={{ height: 7, borderRadius: 5, background: "var(--c-track)", overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: c.color, borderRadius: 5, transition: "width .7s cubic-bezier(.34,1.3,.5,1)" }} />
@@ -872,7 +1046,7 @@ function ScoreBar({ cat, earned, possible }) {
   );
 }
 
-function InsightsPanel({ selectedDate, byDate, moods }) {
+function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder }) {
   const selObj = new Date(selectedDate + "T00:00:00");
   const selIsToday = selectedDate === TODAY;
   const dayLabel = selIsToday ? "Hôm nay" : `${DAYS[selObj.getDay()]} ${fmt(selObj)}`;
@@ -909,6 +1083,8 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
       if (items.length) bySession[label] = { done: items.filter(t => t.done).map(t => t.name), pending: items.filter(t => !t.done).map(t => t.name) };
     });
     const dom = dominantCat(a);
+    const pending = dayTasks.filter(t => !t.done);
+    const pendingOrdered = sortTasks(pending, sortMode === "manual" ? "manual" : "priority", taskOrder || {});
     const summary = {
       isToday: selIsToday,
       now: selIsToday ? `${String(nowHour).padStart(2, "0")}:${String(nowD.getMinutes()).padStart(2, "0")}` : null,
@@ -918,6 +1094,9 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
       mood: a.mood ? moodInfo(a.mood)?.label : null,
       byRealm: CAT_ORDER.reduce((o, k) => { if (a.cats[k].n > 0) o[SCORE_CATS[k].label] = `${a.cats[k].doneN}/${a.cats[k].n} việc xong`; return o; }, {}),
       bySession,
+      // help the coach prioritise reminders by the user's own ordering & priority flags
+      pendingInOrder: pendingOrdered.map(t => t.name),
+      priorityPending: pending.filter(t => priorityRank(t) > 0).map(t => `${priorityEmoji(t)} ${t.name}`),
     };
     fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -959,8 +1138,8 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
           <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>📊 PHÂN TÍCH · {dayLabel.toUpperCase()}</span>
           <div style={{ textAlign: "right" }}>
-            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.7rem", fontWeight: 700, color: wine, lineHeight: 1 }}>{a.earned}</span>
-            <span style={{ fontSize: ".66rem", color: "var(--c-muted2)", marginLeft: 3 }}>/{a.possible} điểm</span>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.7rem", fontWeight: 700, color: wine, lineHeight: 1 }}>{a.done}<span style={{ color: "var(--c-muted2)" }}>/{a.total}</span></span>
+            <div style={{ fontSize: ".64rem", color: "var(--c-muted2)", marginTop: 2 }}>việc xong{a.total > 0 ? ` · ${Math.round(a.rate * 100)}%` : ""} · {a.earned}đ</div>
           </div>
         </div>
         {/* identity badge — strongest realm of the day */}
@@ -970,8 +1149,8 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
             <span style={{ fontSize: ".78rem", fontWeight: 700, color: note.badge.color }}>{note.badge.title}</span>
           </div>
         )}
-        {CAT_ORDER.map(k => (a.cats[k].possible > 0 &&
-          <ScoreBar key={k} cat={k} earned={a.cats[k].earned} possible={a.cats[k].possible} />
+        {CAT_ORDER.map(k => (a.cats[k].n > 0 &&
+          <ScoreBar key={k} cat={k} data={a.cats[k]} />
         ))}
       </div>
 
@@ -1283,9 +1462,12 @@ function pushupCoach(today, best, streak) {
   if (today >= 20) return `${today} cái — phong độ ổn định! Giữ nhịp này nhé 🔥`;
   return `${today} cái — khởi động tốt! Thêm vài cái nữa nào 🌱`;
 }
-function PushupTracker({ pushups, weekDays, onAdd }) {
-  const today = pushups[TODAY] || 0;
-  const shown = useCountUp(today);
+function PushupTracker({ pushups, weekDays, selectedDate, onAdd, onSet }) {
+  const isToday = selectedDate === TODAY;
+  const dObj = new Date(selectedDate + "T00:00:00");
+  const dayLabel = isToday ? "HÔM NAY" : `${DAYS[dObj.getDay()].toUpperCase()} · ${fmt(dObj)}`;
+  const dayCount = pushups[selectedDate] || 0;
+  const shown = useCountUp(dayCount);
   const all = Object.entries(pushups);
   const best = all.length ? Math.max(...all.map(([, n]) => n)) : 0;
   // streak: consecutive days with count > 0 ending today (or yesterday if today=0)
@@ -1293,35 +1475,51 @@ function PushupTracker({ pushups, weekDays, onAdd }) {
   { const d = new Date(TODAY + "T00:00:00");
     if (!pushups[TODAY]) d.setDate(d.getDate() - 1);
     while (pushups[iso(d)] > 0) { streak++; d.setDate(d.getDate() - 1); } }
-  const weekMax = Math.max(10, ...weekDays.map(d => pushups[d] || 0));
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  useEffect(() => { setEditing(false); }, [selectedDate]);
+  const saveDraft = () => { const v = parseInt(draft, 10); if (!isNaN(v)) onSet(selectedDate, v); setEditing(false); };
+
+  const coach = isToday
+    ? pushupCoach(dayCount, best, streak)
+    : (dayCount > 0 ? `${dayCount} cái — ghi nhận cho ngày này 💪` : "Ngày này chưa ghi cái nào — có thể chỉnh lại nếu bạn nhớ ra 🙂");
 
   return (
     <div className="card f3" style={{ marginBottom: 14, padding: "16px 18px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>💪 HÍT ĐẤT · HÔM NAY</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>💪 HÍT ĐẤT · {dayLabel}</span>
         <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>🔥 {streak} ngày liên tiếp · 🏆 kỷ lục {best}</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
-        <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "3rem", fontWeight: 700, color: wine, lineHeight: 1, minWidth: 86, textAlign: "center" }}>
-          {shown}
-        </div>
+        {editing ? (
+          <input autoFocus type="number" inputMode="numeric" value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") saveDraft(); if (e.key === "Escape") setEditing(false); }}
+            onBlur={saveDraft}
+            style={{ width: 90, fontFamily: "'Cormorant Garamond',serif", fontSize: "2.2rem", fontWeight: 700, color: wine, textAlign: "center", border: `2px solid ${wine}`, borderRadius: 12, background: "var(--c-surface)", outline: "none" }} />
+        ) : (
+          <button onClick={() => { setDraft(String(dayCount)); setEditing(true); }} title="Chạm để nhập số chính xác"
+            style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "3rem", fontWeight: 700, color: wine, lineHeight: 1, minWidth: 86, textAlign: "center", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}>
+            {shown}
+          </button>
+        )}
         <div style={{ flex: 1, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[1, 5, 10].map(n => (
-            <button key={n} data-sfx="pop" data-anim="chip" onClick={() => onAdd(n)} style={{
+            <button key={n} data-sfx="pop" data-anim="chip" onClick={() => onAdd(selectedDate, n)} style={{
               flex: "1 0 auto", padding: "12px 8px", borderRadius: 12, border: `1.5px solid ${wine}`,
               background: "var(--c-surface)", color: wine, fontWeight: 800, fontSize: "1rem", cursor: "pointer",
             }}>+{n}</button>
           ))}
-          <button data-sfx="soft" onClick={() => onAdd(-1)} title="Lùi 1" style={{
+          <button data-sfx="soft" onClick={() => onAdd(selectedDate, -1)} title="Lùi 1" style={{
             flex: "0 0 auto", padding: "12px 12px", borderRadius: 12, border: "1px solid var(--c-border)",
             background: "var(--c-surface)", color: "var(--c-muted)", fontWeight: 700, cursor: "pointer",
           }}>−1</button>
         </div>
       </div>
 
-      <div style={{ fontSize: ".8rem", color: "var(--c-muted)", fontStyle: "italic", marginBottom: 12 }}>{pushupCoach(today, best, streak)}</div>
-
+      <div style={{ fontSize: ".8rem", color: "var(--c-muted)", fontStyle: "italic" }}>{coach}</div>
     </div>
   );
 }
@@ -1405,6 +1603,27 @@ export default function Home() {
   const [coverIdx, setCoverIdx] = useState(0);
   useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
 
+  // Task sorting: mode + manual drag order (both persisted per-device)
+  const [sortMode, setSortMode] = useState("session"); // session | priority | type | manual
+  const [taskOrder, setTaskOrder] = useState({});       // { taskId: orderIndex }
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem("dat-sortmode");
+      if (["session", "priority", "type", "manual"].includes(m)) setSortMode(m);
+      const o = localStorage.getItem("dat-task-order");
+      if (o) setTaskOrder(JSON.parse(o));
+    } catch {}
+  }, []);
+  const changeSortMode = (m) => { setSortMode(m); try { localStorage.setItem("dat-sortmode", m); } catch {} };
+  const reorderTasks = (ids) => {
+    setTaskOrder(prev => {
+      const next = { ...prev };
+      ids.forEach((id, i) => { next[id] = i; });
+      try { localStorage.setItem("dat-task-order", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   // Theme: load saved choice, keep sound engine in sync
   useEffect(() => {
     try {
@@ -1445,12 +1664,11 @@ export default function Home() {
     }
   };
 
-  // Push-ups: local cache + Notion sync (same pattern as mood)
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem("dat-pushups");
-      if (cached) setPushups(JSON.parse(cached));
-    } catch {}
+  // Push-ups: local cache + Notion sync (synced across devices). Ref keeps the
+  // latest counts for arithmetic without stale closures.
+  const pushupsRef = useRef({});
+  useEffect(() => { pushupsRef.current = pushups; }, [pushups]);
+  const refetchPushups = useCallback(() => {
     fetch("/api/pushup")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
@@ -1463,19 +1681,34 @@ export default function Home() {
       })
       .catch(() => {});
   }, []);
-  const addPushups = (delta) => {
-    const cur = pushups[TODAY] || 0;
-    const next = Math.max(0, cur + delta);
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("dat-pushups");
+      if (cached) setPushups(JSON.parse(cached));
+    } catch {}
+    refetchPushups();
+  }, [refetchPushups]);
+  // Re-sync when returning to the tab (other devices may have updated counts)
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible") refetchPushups(); };
+    window.addEventListener("focus", onVis);
+    document.addEventListener("visibilitychange", onVis);
+    return () => { window.removeEventListener("focus", onVis); document.removeEventListener("visibilitychange", onVis); };
+  }, [refetchPushups]);
+  const writePushup = (date, value) => {
+    const next = Math.max(0, Math.round(value) || 0);
     setPushups(prev => {
-      const merged = { ...prev, [TODAY]: next };
+      const merged = { ...prev, [date]: next };
       try { localStorage.setItem("dat-pushups", JSON.stringify(merged)); } catch {}
       return merged;
     });
     fetch("/api/pushup", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: TODAY, count: next }),
+      body: JSON.stringify({ date, count: next }),
     }).catch(() => {});
   };
+  const addPushupsFor = (date, delta) => writePushup(date, (pushupsRef.current[date] || 0) + delta);
+  const setPushupsFor = (date, value) => writePushup(date, value);
 
   // Fetch an unlimited random verse from the Bible API; fall back to local pool
   const loadVerse = useCallback((useFallback = false) => {
@@ -1619,6 +1852,28 @@ export default function Home() {
   const sundayDate = new Date(weekMonday); sundayDate.setDate(weekMonday.getDate() + 6);
   const weekLabel = `${fmt(weekMonday)} – ${fmt(sundayDate)}`;
   const isCurrentWeek = weekSet.has(TODAY);
+
+  // Day navigation — move ±1 day, rolling the week when crossing its edge
+  const shiftDay = (delta) => {
+    const d = new Date(selectedDate + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    const nd = iso(d);
+    setSlideDir(delta);
+    if (!weekSet.has(nd)) setWeekMonday(mondayOf(d));
+    setSelectedDate(nd);
+  };
+  const shiftWeek = (delta) => {
+    setSlideDir(delta);
+    const m = new Date(weekMonday); m.setDate(m.getDate() + delta * 7); setWeekMonday(m);
+  };
+  const resetToToday = () => { setSlideDir(1); setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); };
+  const navBtn = { width: 30, height: 30, borderRadius: 9, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: "1rem", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" };
+  const navBtnSm = { width: 26, height: 26, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 700, fontSize: ".85rem", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" };
+  const renderTaskRow = (t) => (
+    <TaskRow task={t} onToggle={toggle} onEdit={setEditTask}
+      justDone={justDone === t.id} justUndone={justUndone === t.id}
+      removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />
+  );
 
   // Make sure selectedDate stays within visible week
   useEffect(() => {
@@ -1888,6 +2143,14 @@ export default function Home() {
           100%{ background:rgba(220,38,38,0); transform:scale(1); }
         }
         .task-unpop{ animation: unpop 450ms cubic-bezier(.34,1.56,.64,1); border-radius:10px; }
+        /* satisfying "pop" when a dragged task settles into its new spot */
+        @keyframes dropPop{
+          0%{ transform:scale(1.07); filter:drop-shadow(0 10px 20px rgba(0,0,0,.22)); }
+          55%{ transform:scale(.985); }
+          100%{ transform:scale(1); filter:drop-shadow(0 0 0 rgba(0,0,0,0)); }
+        }
+        .task-drop-pop{ animation:dropPop .42s cubic-bezier(.34,1.56,.64,1); }
+        @media(prefers-reduced-motion:reduce){.task-drop-pop{animation:none}}
         .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
         .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
@@ -2025,17 +2288,38 @@ export default function Home() {
           <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
         </div>
 
-        {/* WEEK NAVIGATION */}
-        <div className="f2" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10 }}>
-          <button data-sfx="swoosh" onClick={() => { setSlideDir(-1); const m = new Date(weekMonday); m.setDate(m.getDate()-7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>‹ Tuần trước</button>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.1rem", fontWeight: 600, color: wine }}>{weekLabel}</div>
-            {isCurrentWeek && <div style={{ fontSize: ".6rem", color: gold, fontWeight: 700, letterSpacing: ".1em" }}>TUẦN NÀY</div>}
-            {!isCurrentWeek && <button data-sfx="swoosh" onClick={() => { setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); }} style={{ fontSize: ".6rem", color: "var(--c-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>↩ về tuần này</button>}
+        {/* STICKY NAV — day ‹›, reset-to-today, week «» — always reachable while scrolling */}
+        <div className="f2" style={{
+          position: "sticky", top: 0, zIndex: 80,
+          margin: "0 -16px 12px", padding: "8px 16px",
+          background: "color-mix(in srgb, var(--c-bg) 86%, transparent)",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          borderBottom: "1px solid var(--c-border)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", paddingRight: 44 }}>
+            {/* DAY navigation */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={navBtn}>‹</button>
+              <div style={{ textAlign: "center", minWidth: 108, lineHeight: 1.12 }}>
+                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600, color: wine }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
+                <div style={{ fontSize: ".54rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? gold : "var(--c-muted2)" }}>{selIsToday ? "HÔM NAY" : DAYS[selDateObj.getDay()].toUpperCase()}</div>
+              </div>
+              <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={navBtn}>›</button>
+            </div>
+            {/* RESET to today */}
+            <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{
+              padding: "6px 13px", borderRadius: 20,
+              border: `1.5px solid ${selIsToday && isCurrentWeek ? "var(--c-border)" : gold}`,
+              background: selIsToday && isCurrentWeek ? "var(--c-surface)" : `color-mix(in srgb, ${gold} 18%, transparent)`,
+              color: selIsToday && isCurrentWeek ? "var(--c-muted)" : wine, cursor: "pointer", fontWeight: 700, fontSize: ".74rem", whiteSpace: "nowrap",
+            }}>↺ Hôm nay</button>
+            {/* WEEK navigation */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={navBtnSm}>«</button>
+              <span style={{ fontSize: ".66rem", color: isCurrentWeek ? gold : "var(--c-muted)", minWidth: 80, textAlign: "center", fontWeight: 600 }}>{weekLabel}</span>
+              <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={navBtnSm}>»</button>
+            </div>
           </div>
-          <button data-sfx="swoosh" onClick={() => { setSlideDir(1); const m = new Date(weekMonday); m.setDate(m.getDate()+7); setWeekMonday(m); }}
-            style={{ padding: "8px 14px", border: "1px solid var(--c-border)", borderRadius: 10, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".85rem" }}>Tuần sau ›</button>
         </div>
 
         <div className="main-grid">
@@ -2104,26 +2388,59 @@ export default function Home() {
                 {selIsToday && <span style={{ background: wine, color: "var(--c-on-accent)", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
               </div>
 
-              {/* TASKS BY SESSION */}
+              {/* SORT MODE SELECTOR */}
+              {dayTasks.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
+                  <span style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted2)", marginRight: 2 }}>SẮP XẾP</span>
+                  {[["session", "🕐 Buổi"], ["priority", "🔥 Ưu tiên"], ["type", "🏷️ Loại"], ["manual", "✋ Tự sắp"]].map(([k, label]) => {
+                    const on = sortMode === k;
+                    return (
+                      <button key={k} data-sfx="pop" data-anim="chip" onClick={() => changeSortMode(k)} style={{
+                        padding: "5px 11px", borderRadius: 14, fontSize: ".72rem", fontWeight: 700, cursor: "pointer",
+                        border: on ? `1.5px solid ${wine}` : "1px solid var(--c-border)",
+                        background: on ? `color-mix(in srgb, ${wine} 12%, transparent)` : "var(--c-surface)",
+                        color: on ? wine : "var(--c-muted2)", transition: "all .2s",
+                      }}>{label}</button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* TASKS */}
               {dayTasks.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--c-muted2)", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
-              ) : (
+              ) : sortMode === "session" ? (
                 <>
                   <div className="session-grid">
                   {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
                     <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sg.items.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
+                      {sortTasks(sg.items, "priority", taskOrder).map(t => <div key={t.id}>{renderTaskRow(t)}</div>)}
                     </div>
                   ))}
                   </div>
                   {noSession.length > 0 && (
                     <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {noSession.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
+                      {sortTasks(noSession, "priority", taskOrder).map(t => <div key={t.id}>{renderTaskRow(t)}</div>)}
                     </div>
                   )}
                 </>
+              ) : (
+                <div className="rise">
+                  {sortMode === "manual" && (
+                    <div style={{ fontSize: ".68rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để sắp xếp — thả ra nghe “pop” ✨</div>
+                  )}
+                  {sortMode === "priority" && (
+                    <div style={{ fontSize: ".68rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>🔥 Việc 🔴 khẩn cấp &amp; 🟡 quan trọng được đưa lên trên</div>
+                  )}
+                  <SortableTaskList
+                    items={sortTasks(dayTasks, sortMode, taskOrder)}
+                    draggable={sortMode === "manual"}
+                    onReorder={reorderTasks}
+                    renderRow={renderTaskRow}
+                  />
+                </div>
               )}
 
               {/* NO-DATE TASKS */}
@@ -2139,7 +2456,7 @@ export default function Home() {
         </div>
 
         {/* INSIGHTS — analysis + coach note + recent days */}
-        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} />}
         </div>{/* end col-main */}
 
         <div className="col-side">
@@ -2147,7 +2464,7 @@ export default function Home() {
         <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
 
         {/* PUSH-UP TRACKER */}
-        <PushupTracker pushups={pushups} weekDays={weekDays} onAdd={addPushups} />
+        <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} />
 
         {/* SCRIPTURE CARD with image — English primary */}
         <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
