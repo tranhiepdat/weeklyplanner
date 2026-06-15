@@ -1,8 +1,9 @@
 // Chat-to-create-task assistant.
-// Model is overridable via AI_MODEL env (defaults to Claude Opus 4.8 for the best
-// date/session/project reasoning + clarification behavior). Set AI_MODEL=claude-haiku-4-5
-// on Vercel to trade some accuracy for lower credit usage.
-const MODEL = process.env.AI_MODEL || "claude-opus-4-8";
+// Model is overridable via AI_MODEL env. Default Claude Sonnet 4.6 — one tier
+// below Opus: noticeably cheaper/fewer tokens while staying very accurate at
+// date/session/project reasoning. Set AI_MODEL to change (e.g. claude-opus-4-8
+// for max accuracy, or claude-haiku-4-5 for the cheapest option).
+const MODEL = process.env.AI_MODEL || "claude-sonnet-4-6";
 const TASK_TYPES = ["💼 Works", "🧍 Personal", "🏥 Health", "🧹 Chore", "👨‍👩‍👧 Family", "🎮 Entertainment", "🏖️ Vacation"];
 const SESSIONS = ["🌅 Sáng", "🏢 Office (11–7h)", "🌙 Tối"];
 const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG"];

@@ -433,36 +433,24 @@ const SFX = {
     if (_uiTheme === "nature") { wood(c, { freq: 330 * v, gain: 0.06, dur: 0.16, cutoff: 1200, glide: 0.78, reverb: 0.2, click: 0.02 }); return; }
     wood(c, { freq: 294 * v, gain: 0.07, dur: 0.16, cutoff: 1200, reverb: 0.16, glide: 0.78 });
   },
-  // nav — airy brush + low wooden body
+  // nav (day/week) — smooth airy whoosh, soft and rounded (no woody knock)
   swoosh() { const c = actx(); if (!c) return; const up = Math.random() > 0.5;
-    if (_uiTheme === "dark") {
-      blip(c, { type: "sawtooth", freq: up ? 300 : 1400, dur: 0.14, gain: 0.03, glideTo: up ? 1400 : 300, cutoff: 2400, reverb: 0.1 });
-      return;
-    }
-    if (_uiTheme === "cozy") { // spacebar thunk
-      wood(c, { freq: 130, gain: 0.09, dur: 0.09, cutoff: 800, reverb: 0.07, click: 0.07, glide: 0.72 });
-      return;
-    }
-    if (_uiTheme === "cutie") { noise(c, { dur: 0.22, gain: 0.02, type: "highpass", freq: 2000, q: 0.4, reverb: 0.2 }); voice(c, { type: "sine", freq: up ? 700 : 1100, dur: 0.18, gain: 0.035, cutoff: 4000, glideTo: up ? 1100 : 700, glideAt: 0.16, reverb: 0.2 }); return; }
-    if (_uiTheme === "nature") { noise(c, { dur: 0.24, gain: 0.018, type: "bandpass", freq: 3800, q: 0.8, sweepTo: up ? 5200 : 2600, reverb: 0.22 }); wood(c, { freq: up ? 360 : 460, gain: 0.035, dur: 0.16, cutoff: 1400, glide: up ? 1.15 : 0.85, reverb: 0.2, click: 0 }); return; }
-    noise(c, { dur: 0.18, gain: 0.022, type: "lowpass", freq: up ? 800 : 2000, q: 0.3, sweepTo: up ? 2000 : 700, reverb: 0.16 });
-    wood(c, { freq: up ? 330 : 392, gain: 0.05, dur: 0.14, cutoff: 1300, reverb: 0.18, glide: up ? 1.18 : 0.82, click: 0 });
+    if (_uiTheme === "dark") { voice(c, { type: "sine", freq: up ? 440 : 1040, dur: 0.17, gain: 0.03, cutoff: 3400, glideTo: up ? 1040 : 440, glideAt: 0.15, reverb: 0.18 }); return; }
+    noise(c, { dur: 0.2, gain: 0.014, type: "lowpass", freq: up ? 760 : 1700, q: 0.4, sweepTo: up ? 1700 : 760, reverb: 0.24 });
+    voice(c, { type: "sine", freq: up ? 523.25 : 783.99, dur: 0.18, gain: 0.032, cutoff: 3600, glideTo: up ? 783.99 : 523.25, glideAt: 0.16, reverb: 0.28 });
   },
-  // delete — deep hollow wooden knock
-  danger() { const c = actx(); if (!c) return; const v = rnd(0.99, 1.01);
-    if (_uiTheme === "dark") {
-      blip(c, { freq: 180 * v, dur: 0.16, gain: 0.05, glideTo: 90 * v, cutoff: 1200 });
-      blip(c, { freq: 185 * v, dur: 0.16, gain: 0.03, glideTo: 92 * v, cutoff: 1200 }); // beat-frequency buzz
-      return;
-    }
-    if (_uiTheme === "cozy") {
-      wood(c, { freq: 110 * v, gain: 0.09, dur: 0.1, cutoff: 700, reverb: 0.06, click: 0.07, glide: 0.7 });
-      wood(c, { freq: 105 * v, gain: 0.06, dur: 0.1, cutoff: 700, reverb: 0.06, click: 0.05, glide: 0.7, when: 0.09 });
-      return;
-    }
-    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 660 * v, dur: 0.14, gain: 0.05, cutoff: 3000, glideTo: 440 * v, glideAt: 0.12, reverb: 0.15 }); voice(c, { type: "sine", freq: 550 * v, dur: 0.16, gain: 0.035, cutoff: 3000, glideTo: 370 * v, glideAt: 0.14, when: 0.06, reverb: 0.15 }); return; }
-    if (_uiTheme === "nature") { wood(c, { freq: 196 * v, gain: 0.07, dur: 0.16, cutoff: 900, glide: 0.72, reverb: 0.16, click: 0.03 }); return; }
-    wood(c, { freq: 174.61 * v, gain: 0.08, dur: 0.2, cutoff: 900, reverb: 0.16, glide: 0.7, click: 0.05 });
+  // swipe reveal (drag a task left) — soft short "snick"
+  swipe() { const c = actx(); if (!c) return;
+    if (_uiTheme === "dark") { blip(c, { freq: 1200, dur: 0.05, gain: 0.025, glideTo: 760, cutoff: 3200 }); return; }
+    noise(c, { dur: 0.08, gain: 0.011, type: "bandpass", freq: 2600, q: 0.7, sweepTo: 1500, reverb: 0.12 });
+    voice(c, { type: "sine", freq: 932, dur: 0.08, gain: 0.018, cutoff: 3600, glideTo: 660, glideAt: 0.07, reverb: 0.12 });
+  },
+  // delete — soft descending whoosh-away (gentle, not a hollow knock)
+  danger() { const c = actx(); if (!c) return;
+    if (_uiTheme === "dark") { blip(c, { freq: 520, dur: 0.16, gain: 0.04, glideTo: 130, cutoff: 2200, reverb: 0.2 }); return; }
+    voice(c, { type: "sine", freq: 560, dur: 0.24, gain: 0.045, cutoff: 2600, glideTo: 175, glideAt: 0.22, reverb: 0.26 });
+    voice(c, { type: "triangle", freq: 300, dur: 0.18, gain: 0.016, cutoff: 1800, glideTo: 120, glideAt: 0.16, reverb: 0.2, when: 0.02 });
+    noise(c, { dur: 0.16, gain: 0.009, type: "lowpass", freq: 1200, q: 0.3, sweepTo: 320, reverb: 0.2 });
   },
 };
 function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
@@ -504,14 +492,12 @@ function playDing() {
   // soft warm shimmer to round it off
   wood(c, { freq: notes[3] * 1.5, gain: 0.035, dur: 0.3, cutoff: 2400, reverb: 0.42, glide: 1.0, when: 0.24, click: 0 });
 }
-// Soft descending wooden thock for un-completing a task
+// Soft descending two-note chime for un-completing a task (gentle, not a thock)
 function playUndo() {
-  const c = actx(); if (!c) return; const v = rnd(0.98, 1.02);
-  if (_uiTheme === "dark") { blip(c, { freq: 880 * v, dur: 0.2, gain: 0.05, glideTo: 220 * v, cutoff: 2400 }); return; }
-  if (_uiTheme === "cozy") { wood(c, { freq: 150 * v, gain: 0.08, dur: 0.12, cutoff: 800, reverb: 0.06, click: 0.06, glide: 0.65 }); return; }
-  if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1046 * v, dur: 0.2, gain: 0.05, cutoff: 3500, glideTo: 523 * v, glideAt: 0.18, reverb: 0.16 }); return; }
-  if (_uiTheme === "nature") { wood(c, { freq: 440 * v, gain: 0.06, dur: 0.18, cutoff: 1300, glide: 0.6, reverb: 0.18, click: 0.02 }); return; }
-  wood(c, { freq: 392 * v, gain: 0.09, dur: 0.2, cutoff: 1100, reverb: 0.14, glide: 0.66, click: 0.03 });
+  const c = actx(); if (!c) return;
+  if (_uiTheme === "dark") { blip(c, { freq: 880, dur: 0.14, gain: 0.04, glideTo: 440, cutoff: 3000, reverb: 0.18 }); return; }
+  voice(c, { type: "sine", freq: 783.99, dur: 0.16, gain: 0.045, cutoff: 3500, reverb: 0.26 });
+  voice(c, { type: "sine", freq: 587.33, dur: 0.22, gain: 0.038, cutoff: 3200, reverb: 0.32, when: 0.085 });
 }
 
 // Soft pickup "lift" when grabbing a task to drag
@@ -663,7 +649,7 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
     const d = dragRef.current; if (!d.active) return; d.active = false;
     if (!d.moved) return;
     const open = swipeX < -42;
-    if (open) playClick("swoosh");
+    if (open) playClick("swipe");
     setSwipeX(open ? -72 : 0);
   };
   const guardTap = (fn) => () => {
@@ -688,8 +674,9 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
           opacity: isDoneSettled ? .55 : 1,
-          borderLeft: `4px solid ${accent}`,
-          background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}0d` : undefined,
+          borderLeft: `5px solid ${accent}`,
+          boxShadow: (!isDoneSettled && !celebrating && !reversing) ? `inset 3px 0 0 ${accent}` : undefined,
+          background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}26` : undefined,
           transform: `translateX(${swipeX}px)`,
           transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1)",
           touchAction: "pan-y",
@@ -2415,14 +2402,14 @@ export default function Home() {
                   {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
                     <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      {sortTasks(sg.items, "priority", taskOrder).map(t => <div key={t.id}>{renderTaskRow(t)}</div>)}
+                      <SortableTaskList items={sortTasks(sg.items, "manual", taskOrder)} draggable onReorder={reorderTasks} renderRow={renderTaskRow} />
                     </div>
                   ))}
                   </div>
                   {noSession.length > 0 && (
                     <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      {sortTasks(noSession, "priority", taskOrder).map(t => <div key={t.id}>{renderTaskRow(t)}</div>)}
+                      <SortableTaskList items={sortTasks(noSession, "manual", taskOrder)} draggable onReorder={reorderTasks} renderRow={renderTaskRow} />
                     </div>
                   )}
                 </>
@@ -2482,27 +2469,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* PRAYER + GRATITUDE */}
-        <div className="f4 grid2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <div className="card" style={{ overflow: "hidden", padding: 0 }}>
-            <img src="/img/jesus-boat.jpg" alt="" style={{ width: "100%", height: 120, objectFit: "cover", display: "block" }} />
-            <div style={{ padding: 18 }}>
-              <div className="card-title">🕊️ Daily Prayer</div>
-              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".92rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
-                "Lord, make me an instrument of your peace.<br/>
-                Where there is hatred, let me sow love;<br/>
-                where there is injury, pardon."
-              </p>
-              <p style={{ fontSize: ".7rem", color: "var(--c-muted)", marginTop: 7 }}>— Prayer of St. Francis · Kinh Phanxicô</p>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-title">🙌 Gratitude · Tạ ơn hôm nay</div>
-            {["Today I thank God for... · Hôm nay con tạ ơn vì...","...","..."].map((ph, i) => (
-              <input key={i} className="gratitude" placeholder={ph} />
-            ))}
-          </div>
-        </div>
         </div>{/* end col-side */}
         </div>{/* end main-grid */}
 

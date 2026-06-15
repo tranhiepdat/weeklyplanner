@@ -1,6 +1,7 @@
-// Daily AI coach report. Model overridable via AI_MODEL (defaults to Claude Opus 4.8).
-// Calls are cached client-side per day-signature, so credit usage stays low.
-const MODEL = process.env.AI_MODEL || "claude-opus-4-8";
+// Daily AI coach report. Model overridable via AI_MODEL (default Claude Sonnet 4.6 —
+// one tier below Opus: cheaper/fewer tokens, still accurate). Calls are cached
+// client-side per day-signature, so credit usage stays low.
+const MODEL = process.env.AI_MODEL || "claude-sonnet-4-6";
 
 function extractJson(text) {
   const cleaned = text.replace(/```json|```/g, "").trim();
