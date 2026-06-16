@@ -2215,7 +2215,7 @@ export default function Home() {
       `}</style>
 
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 16px 60px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 16px calc(88px + env(safe-area-inset-bottom))" }}>
 
         {/* THEME SWITCH — floating top-right, opens style picker */}
         <button data-sfx="swoosh" onClick={() => setShowThemePicker(v => !v)} title="Đổi giao diện" style={{
@@ -2285,35 +2285,7 @@ export default function Home() {
           <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
         </div>
 
-        {/* STICKY NAV — two labeled rows (Ngày / Tuần); prev on the LEFT, next on the RIGHT */}
-        <div className="f2" style={{
-          position: "sticky", top: 0, zIndex: 80,
-          margin: "0 -16px 12px", padding: "7px 14px",
-          background: "color-mix(in srgb, var(--c-bg) 90%, transparent)",
-          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-          borderBottom: "1px solid var(--c-border)",
-        }}>
-          {/* Row 1 — NGÀY */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingRight: 44, marginBottom: 5 }}>
-            <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={dayNavBtn}>‹ Ngày trước</button>
-            <div style={{ textAlign: "center", lineHeight: 1.1, minWidth: 0 }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
-              {selIsToday
-                ? <div style={{ fontSize: ".52rem", fontWeight: 700, letterSpacing: ".12em", color: gold }}>HÔM NAY</div>
-                : <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{ fontSize: ".58rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 20%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "1px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>↺ Hôm nay</button>}
-            </div>
-            <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={dayNavBtn}>Ngày sau ›</button>
-          </div>
-          {/* Row 2 — TUẦN */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingRight: 44 }}>
-            <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={weekNavBtn}>« Tuần trước</button>
-            <div style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-              <span style={{ fontSize: ".68rem", fontWeight: 600, color: isCurrentWeek ? gold : "var(--c-muted)" }}>{weekLabel}</span>
-              {isCurrentWeek && <span style={{ fontSize: ".5rem", fontWeight: 700, letterSpacing: ".1em", color: gold, marginLeft: 5 }}>● TUẦN NÀY</span>}
-            </div>
-            <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={weekNavBtn}>Tuần sau »</button>
-          </div>
-        </div>
+        {/* (day/week navigation moved to the fixed BOTTOM NAV BAR for easy thumb access) */}
 
         <div className="main-grid">
         <div className="col-main">
@@ -2500,9 +2472,36 @@ export default function Home() {
           />
         )}
 
+        {/* BOTTOM NAV BAR — day/week prev·next + reset today, centered in the thumb zone */}
+        <div style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 85,
+          background: "color-mix(in srgb, var(--c-bg) 92%, transparent)",
+          backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+          borderTop: "1px solid var(--c-border)",
+          padding: "7px 12px calc(7px + env(safe-area-inset-bottom))",
+          boxShadow: "0 -4px 18px rgba(0,0,0,.10)",
+        }}>
+          <div style={{ maxWidth: 460, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={weekNavBtn}>« Tuần</button>
+              <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={dayNavBtn}>‹ Ngày</button>
+            </div>
+            <div style={{ textAlign: "center", lineHeight: 1.08, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".95rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
+              {selIsToday
+                ? <div style={{ fontSize: ".52rem", fontWeight: 700, letterSpacing: ".12em", color: gold }}>● HÔM NAY</div>
+                : <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{ fontSize: ".58rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 22%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "2px 10px", cursor: "pointer", whiteSpace: "nowrap", marginTop: 1 }}>↺ Hôm nay</button>}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={dayNavBtn}>Ngày ›</button>
+              <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={weekNavBtn}>Tuần »</button>
+            </div>
+          </div>
+        </div>
+
         {/* FLOATING CREATE BUTTON */}
         <button data-sfx="pop" onClick={() => setShowCreate(true)} title="Tạo công việc" style={{
-          position: "fixed", bottom: 24, right: 18, zIndex: 90,
+          position: "fixed", bottom: "calc(76px + env(safe-area-inset-bottom))", right: 18, zIndex: 90,
           width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
           border: theme === "dark" ? "1.5px solid rgba(0,255,156,.6)" : "none",
           background: theme === "dark" ? "rgba(8,18,14,.92)" : wine,
@@ -2514,7 +2513,7 @@ export default function Home() {
 
         {/* FLOATING CHAT BUTTON */}
         <button data-sfx="pop" onClick={() => setShowChat(true)} title="Chat tạo việc với AI" style={{
-          position: "fixed", bottom: 92, right: 18, zIndex: 90,
+          position: "fixed", bottom: "calc(142px + env(safe-area-inset-bottom))", right: 18, zIndex: 90,
           width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
           border: theme === "dark" ? "1.5px solid rgba(0,208,255,.6)" : "none",
           background: theme === "dark" ? "rgba(8,18,14,.92)" : "var(--c2)",
