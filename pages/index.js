@@ -454,6 +454,8 @@ const SFX = {
   },
 };
 function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
+// Subtle haptic feedback on supported mobile devices (native-app feel)
+function haptic(ms = 12) { try { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(ms); } catch {} }
 
 // Celebration ding — warm wooden marimba arpeggio (cozy), random key each time
 const DING_VARIANTS = [
@@ -753,7 +755,7 @@ function SortableTaskList({ items, draggable, onReorder, renderRow }) {
     dragRef.current = { from, startY: e.clientY, tgt: from, rects, h: rects[from]?.h || 48 };
     setDrag({ from, dy: 0, tgt: from, h: dragRef.current.h });
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    playLift();
+    playLift(); haptic(8);
   };
   const onMove = (e) => {
     const d = dragRef.current; if (!d) return;
@@ -777,7 +779,7 @@ function SortableTaskList({ items, draggable, onReorder, renderRow }) {
       const ids = items.map(t => t.id);
       const [moved] = ids.splice(from, 1);
       ids.splice(tgt, 0, moved);
-      playDrop();
+      playDrop(); haptic(15);
       onReorder(ids);
       requestAnimationFrame(() => {
         const node = wrapRef.current && wrapRef.current.querySelector(`[data-fid="${CSS && CSS.escape ? CSS.escape(moved) : moved}"]`);
@@ -1750,11 +1752,11 @@ export default function Home() {
   const toggle = async (id, newDone) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
     if (newDone) {
-      playDing();
+      playDing(); haptic(18);
       setJustDone(id);
       setTimeout(() => setJustDone(j => j === id ? null : j), 1100);
     } else {
-      playUndo();
+      playUndo(); haptic(8);
       setJustUndone(id);
       setTimeout(() => setJustUndone(j => j === id ? null : j), 650);
     }
@@ -1842,6 +1844,7 @@ export default function Home() {
 
   // Day navigation — move ±1 day, rolling the week when crossing its edge
   const shiftDay = (delta) => {
+    haptic(9);
     const d = new Date(selectedDate + "T00:00:00");
     d.setDate(d.getDate() + delta);
     const nd = iso(d);
@@ -1850,12 +1853,14 @@ export default function Home() {
     setSelectedDate(nd);
   };
   const shiftWeek = (delta) => {
+    haptic(9);
     setSlideDir(delta);
     const m = new Date(weekMonday); m.setDate(m.getDate() + delta * 7); setWeekMonday(m);
   };
-  const resetToToday = () => { setSlideDir(1); setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); };
-  const navBtn = { width: 30, height: 30, borderRadius: 9, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: "1rem", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" };
-  const navBtnSm = { width: 26, height: 26, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 700, fontSize: ".85rem", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" };
+  const resetToToday = () => { haptic(12); setSlideDir(1); setWeekMonday(mondayOf(new Date())); setSelectedDate(TODAY); };
+  // Day buttons = primary (wine, bold); week buttons = secondary (muted, double-chevron)
+  const dayNavBtn = { padding: "8px 11px", borderRadius: 11, border: `1.5px solid ${wine}`, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 800, fontSize: ".76rem", whiteSpace: "nowrap", lineHeight: 1, display: "inline-flex", alignItems: "center", gap: 3 };
+  const weekNavBtn = { padding: "8px 10px", borderRadius: 11, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 700, fontSize: ".68rem", whiteSpace: "nowrap", lineHeight: 1, display: "inline-flex", alignItems: "center", gap: 2 };
   const renderTaskRow = (t) => (
     <TaskRow task={t} onToggle={toggle} onEdit={setEditTask}
       justDone={justDone === t.id} justUndone={justUndone === t.id}
@@ -1927,7 +1932,7 @@ export default function Home() {
     <>
       <Head>
         <title>✝️ Dat&apos;s Weekly Planner</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -1954,9 +1959,14 @@ export default function Home() {
           --c-ink:#d6ffe9; --c-muted:#5fae8c; --c-muted2:#3a7a60;
           --c-border:#11402f; --c-track:#0d241b;
         }
+        /* native-app feel: no pinch-zoom, no horizontal scroll, no overscroll bounce/pull-refresh */
+        html{overflow-x:clip;overscroll-behavior:none;-webkit-text-size-adjust:100%;}
         body{font-family:'Nunito',sans-serif;background:var(--c-bg);color:var(--c-ink);min-height:100vh;
+          overflow-x:clip;overscroll-behavior:none;touch-action:manipulation;width:100%;position:relative;
+          -webkit-tap-highlight-color:transparent;
           background-image:radial-gradient(ellipse at 10% 20%,rgba(232,196,184,.3) 0%,transparent 50%),
           radial-gradient(ellipse at 90% 80%,rgba(168,184,154,.2) 0%,transparent 50%);}
+        .app-wrap{max-width:100vw;overflow-x:clip;}
         .app-wrap{min-height:100vh;background:var(--c-bg);transition:background .45s ease;}
         .theme-dark.app-wrap{
           background-image:radial-gradient(ellipse at 15% 10%,rgba(0,255,156,.06) 0%,transparent 55%),
@@ -2147,7 +2157,7 @@ export default function Home() {
           border-bottom:1px solid var(--c-border);padding-bottom:7px;}
         .task-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;
           border-radius:10px;margin-bottom:5px;cursor:pointer;
-          transition:background .35s ease, transform .25s cubic-bezier(.34,1.56,.64,1);}
+          transition:background .45s cubic-bezier(.22,1,.36,1), opacity .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1), transform .25s cubic-bezier(.34,1.56,.64,1);}
         .task-row:hover{background:rgba(232,196,184,.22)}
         .task-row .task-name-text{color:#4a3030;transition:color .35s ease;}
         .task-done{background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12));}
@@ -2275,37 +2285,33 @@ export default function Home() {
           <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
         </div>
 
-        {/* STICKY NAV — day ‹›, reset-to-today, week «» — always reachable while scrolling */}
+        {/* STICKY NAV — two labeled rows (Ngày / Tuần); prev on the LEFT, next on the RIGHT */}
         <div className="f2" style={{
           position: "sticky", top: 0, zIndex: 80,
-          margin: "0 -16px 12px", padding: "8px 16px",
-          background: "color-mix(in srgb, var(--c-bg) 86%, transparent)",
-          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          margin: "0 -16px 12px", padding: "7px 14px",
+          background: "color-mix(in srgb, var(--c-bg) 90%, transparent)",
+          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
           borderBottom: "1px solid var(--c-border)",
         }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", paddingRight: 44 }}>
-            {/* DAY navigation */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={navBtn}>‹</button>
-              <div style={{ textAlign: "center", minWidth: 108, lineHeight: 1.12 }}>
-                <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.05rem", fontWeight: 600, color: wine }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
-                <div style={{ fontSize: ".54rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? gold : "var(--c-muted2)" }}>{selIsToday ? "HÔM NAY" : DAYS[selDateObj.getDay()].toUpperCase()}</div>
-              </div>
-              <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={navBtn}>›</button>
+          {/* Row 1 — NGÀY */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingRight: 44, marginBottom: 5 }}>
+            <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={dayNavBtn}>‹ Ngày trước</button>
+            <div style={{ textAlign: "center", lineHeight: 1.1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
+              {selIsToday
+                ? <div style={{ fontSize: ".52rem", fontWeight: 700, letterSpacing: ".12em", color: gold }}>HÔM NAY</div>
+                : <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{ fontSize: ".58rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 20%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "1px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>↺ Hôm nay</button>}
             </div>
-            {/* RESET to today */}
-            <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{
-              padding: "6px 13px", borderRadius: 20,
-              border: `1.5px solid ${selIsToday && isCurrentWeek ? "var(--c-border)" : gold}`,
-              background: selIsToday && isCurrentWeek ? "var(--c-surface)" : `color-mix(in srgb, ${gold} 18%, transparent)`,
-              color: selIsToday && isCurrentWeek ? "var(--c-muted)" : wine, cursor: "pointer", fontWeight: 700, fontSize: ".74rem", whiteSpace: "nowrap",
-            }}>↺ Hôm nay</button>
-            {/* WEEK navigation */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={navBtnSm}>«</button>
-              <span style={{ fontSize: ".66rem", color: isCurrentWeek ? gold : "var(--c-muted)", minWidth: 80, textAlign: "center", fontWeight: 600 }}>{weekLabel}</span>
-              <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={navBtnSm}>»</button>
+            <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={dayNavBtn}>Ngày sau ›</button>
+          </div>
+          {/* Row 2 — TUẦN */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingRight: 44 }}>
+            <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={weekNavBtn}>« Tuần trước</button>
+            <div style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: ".68rem", fontWeight: 600, color: isCurrentWeek ? gold : "var(--c-muted)" }}>{weekLabel}</span>
+              {isCurrentWeek && <span style={{ fontSize: ".5rem", fontWeight: 700, letterSpacing: ".1em", color: gold, marginLeft: 5 }}>● TUẦN NÀY</span>}
             </div>
+            <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={weekNavBtn}>Tuần sau »</button>
           </div>
         </div>
 
