@@ -2215,11 +2215,11 @@ export default function Home() {
       `}</style>
 
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 16px calc(88px + env(safe-area-inset-bottom))" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "env(safe-area-inset-top) 16px calc(88px + env(safe-area-inset-bottom))" }}>
 
         {/* THEME SWITCH — floating top-right, opens style picker */}
         <button data-sfx="swoosh" onClick={() => setShowThemePicker(v => !v)} title="Đổi giao diện" style={{
-          position: "fixed", top: 14, right: 14, zIndex: 95,
+          position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 14, zIndex: 95,
           width: 44, height: 44, borderRadius: theme === "dark" ? 0 : 22,
           border: `1.5px solid ${theme === "dark" ? "rgba(0,255,156,.5)" : "var(--c-border)"}`,
           background: theme === "dark" ? "rgba(8,18,14,.9)" : "rgba(255,255,255,.85)",
@@ -2232,7 +2232,7 @@ export default function Home() {
           <>
             <div onClick={() => setShowThemePicker(false)} style={{ position: "fixed", inset: 0, zIndex: 96 }} />
             <div style={{
-              position: "fixed", top: 64, right: 14, zIndex: 97, width: 208,
+              position: "fixed", top: "calc(64px + env(safe-area-inset-top))", right: 14, zIndex: 97, width: 208,
               background: "var(--c-surface)", border: "1px solid var(--c-border)",
               borderRadius: theme === "dark" ? 0 : 16, padding: 8,
               boxShadow: "0 10px 30px rgba(0,0,0,.22)", animation: "pickIn .26s cubic-bezier(.22,1,.36,1)",
