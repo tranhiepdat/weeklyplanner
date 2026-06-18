@@ -163,16 +163,26 @@ function typeRank(task) {
   const i = TYPE_SORT_ORDER.findIndex(k => t.includes(k));
   return i < 0 ? TYPE_SORT_ORDER.length : i;
 }
+// Combined priority for the "Ưu tiên" sort: Plan 🔥 must → 🔴 Urgent → 🟡 Important → normal → 💤 optional
+function planPriorityRank(task, tierMap = {}) {
+  const tier = tierMap[task.id];
+  if (tier === "must") return 4;
+  const pr = priorityRank(task);
+  if (pr === 2) return 3;   // urgent
+  if (pr === 1) return 2;   // important
+  if (tier === "optional") return 0;
+  return 1;                 // normal
+}
 // Sort a task list by the chosen mode. `order` is a {id:number} manual-order map.
 // Returns a NEW array; ties fall back to the list's original order (stable).
-function sortTasks(list, mode, order = {}) {
+function sortTasks(list, mode, order = {}, tierMap = {}) {
   const idx = new Map(list.map((t, i) => [t.id, i]));
   const manual = (t) => (order[t.id] != null ? order[t.id] : 100000 + idx.get(t.id));
   const arr = [...list];
   if (mode === "manual") {
     arr.sort((a, b) => manual(a) - manual(b));
   } else if (mode === "priority") {
-    arr.sort((a, b) => (priorityRank(b) - priorityRank(a)) || (manual(a) - manual(b)));
+    arr.sort((a, b) => (planPriorityRank(b, tierMap) - planPriorityRank(a, tierMap)) || (manual(a) - manual(b)));
   } else if (mode === "type") {
     arr.sort((a, b) => (typeRank(a) - typeRank(b)) || (priorityRank(b) - priorityRank(a)) || (idx.get(a.id) - idx.get(b.id)));
   }
@@ -677,12 +687,15 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
         onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
-          opacity: isDoneSettled ? .55 : (isOptional ? .58 : 1),
+          opacity: (isOptional && !task.done) ? .55 : 1,
           borderLeft: `5px solid ${accent}`,
-          boxShadow: (!isDoneSettled && !celebrating && !reversing) ? `inset 3px 0 0 ${accent}${isMust ? ", 0 0 0 2px var(--c2)" : ""}` : undefined,
+          boxShadow: (celebrating || reversing) ? undefined : ([
+            !isDoneSettled ? `inset 3px 0 0 ${accent}` : "",
+            isMust ? "0 0 0 2px var(--c2)" : "",
+          ].filter(Boolean).join(", ") || undefined),
           background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}26` : undefined,
           transform: `translateX(${swipeX}px)`,
-          transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1)",
+          transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1), opacity .5s cubic-bezier(.22,1,.36,1), background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)",
           touchAction: "pan-y",
         }}>
         <div className={`check ${task.done ? "on" : ""}`}
@@ -695,8 +708,6 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
-            {isMust && <span className="tag" style={{ background: "color-mix(in srgb, var(--c2) 22%, transparent)", color: "var(--c1)", border: "1px solid var(--c2)" }}>🔥 Bắt buộc</span>}
-            {isOptional && <span className="tag" style={{ background: "transparent", color: "var(--c-muted2)", border: "1px dashed var(--c-border)" }}>💤 Để dành</span>}
             {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
@@ -1077,7 +1088,7 @@ function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder, taskT
     });
     const dom = dominantCat(a);
     const pending = dayTasks.filter(t => !t.done);
-    const pendingOrdered = sortTasks(pending, sortMode === "manual" ? "manual" : "priority", taskOrder || {});
+    const pendingOrdered = sortTasks(pending, sortMode === "session" ? "manual" : "priority", taskOrder || {}, taskTier || {});
     const summary = {
       isToday: selIsToday,
       now: selIsToday ? `${String(nowHour).padStart(2, "0")}:${String(nowD.getMinutes()).padStart(2, "0")}` : null,
@@ -1665,7 +1676,7 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
                           <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.25rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3 }}>{t.icon} {t.name}</div>
-                            <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · để dành"}</div>
+                            <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · ưu tiên thấp"}</div>
                           </div>
                         </div>
                       </div>
@@ -1713,7 +1724,7 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit
             <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{ border: "none", background: "transparent", color: "var(--c-muted)", fontSize: "1.4rem", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
           <div style={{ fontSize: ".74rem", color: "var(--c-muted)", marginTop: 4 }}>
-            Kéo <strong>⠿</strong> việc vào nhóm <strong>buổi</strong> (xếp luôn thứ tự); chạm việc để chọn <strong style={{ color: "var(--c1)" }}>🔥 ưu tiên</strong> — việc không chọn sẽ 💤 để dành.
+            Kéo <strong>⠿</strong> việc vào nhóm <strong>buổi</strong> (xếp luôn thứ tự); chạm việc để chọn <strong style={{ color: "var(--c1)" }}>🔥 ưu tiên</strong> — việc không chọn sẽ 💤 ưu tiên thấp.
           </div>
         </div>
 
@@ -1726,7 +1737,7 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit
         </div>
 
         <div style={{ padding: "10px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid var(--c-border)" }}>
-          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {tasks.length - mustN} để dành · {tasks.length} việc</div>
+          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {tasks.length - mustN} ưu tiên thấp · {tasks.length} việc</div>
           <button data-sfx="confirm" onClick={() => requestClose(() => onCommit([...mustIds]))} disabled={tasks.length === 0} style={{
             width: "100%", padding: "13px", borderRadius: 14, border: "none",
             background: tasks.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
@@ -1762,7 +1773,7 @@ export default function Home() {
   useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
 
   // Task sorting: mode + manual drag order (both persisted per-device)
-  const [sortMode, setSortMode] = useState("session"); // session | priority | type | manual
+  const [sortMode, setSortMode] = useState("session"); // session | priority | type (all grouped by buổi)
   const [taskOrder, setTaskOrder] = useState({});       // { taskId: orderIndex }
   const [taskTier, setTaskTier] = useState({});         // { taskId: "must" | "optional" }  (Plan Day)
   const [plannedDays, setPlannedDays] = useState({});   // { "YYYY-MM-DD": true }
@@ -1770,7 +1781,7 @@ export default function Home() {
   useEffect(() => {
     try {
       const m = localStorage.getItem("dat-sortmode");
-      if (["session", "priority", "type", "manual"].includes(m)) setSortMode(m);
+      if (["session", "priority", "type"].includes(m)) setSortMode(m);
       const o = localStorage.getItem("dat-task-order");
       if (o) setTaskOrder(JSON.parse(o));
       const tr = localStorage.getItem("dat-task-tier");
@@ -1802,6 +1813,16 @@ export default function Home() {
       return next;
     });
     fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tiers: pairs }) }).catch(() => {});
+  };
+  // Set one task's tier (from Edit sheet) — "must" | "optional" | "normal"/null
+  const setTierFor = (id, tier) => {
+    setTaskTier(prev => {
+      const next = { ...prev };
+      if (!tier || tier === "normal") delete next[id]; else next[id] = tier;
+      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => {});
   };
   // Plan Day drag: move a task into a buổi group at an index → set session + order
   const planMove = (id, toSession, toIndex) => {
@@ -2575,7 +2596,7 @@ export default function Home() {
               {dayTasks.length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
                   <span style={{ fontSize: ".6rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted2)", marginRight: 2 }}>SẮP XẾP</span>
-                  {[["session", "🕐 Buổi"], ["priority", "🔥 Ưu tiên"], ["type", "🏷️ Loại"], ["manual", "✋ Tự sắp"]].map(([k, label]) => {
+                  {[["session", "🕐 Buổi"], ["priority", "🔥 Ưu tiên"], ["type", "🏷️ Loại"]].map(([k, label]) => {
                     const on = sortMode === k;
                     return (
                       <button key={k} data-sfx="pop" data-anim="chip" onClick={() => changeSortMode(k)} style={{
@@ -2589,41 +2610,31 @@ export default function Home() {
                 </div>
               )}
 
-              {/* TASKS */}
+              {/* TASKS — always grouped by buổi; within-group order follows the sort mode */}
               {dayTasks.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--c-muted2)", fontSize: ".85rem", fontStyle: "italic" }}>🕊️ Không có việc nào ngày này</div>
-              ) : sortMode === "session" ? (
+              ) : (
                 <>
+                  <div style={{ fontSize: ".66rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>
+                    {sortMode === "session" ? <>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để sắp xếp trong mỗi buổi</>
+                      : sortMode === "priority" ? "🔥 Ưu tiên (bắt buộc → khẩn → quan trọng) lên đầu mỗi buổi"
+                      : "🏷️ Sắp theo loại việc trong mỗi buổi"}
+                  </div>
                   <div className="session-grid">
                   {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
                     <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      <SortableTaskList items={sortTasks(sg.items, "manual", taskOrder)} draggable onReorder={reorderTasks} renderRow={renderTaskRow} />
+                      <SortableTaskList items={sortTasks(sg.items, sortMode === "session" ? "manual" : sortMode, taskOrder, taskTier)} draggable={sortMode === "session"} onReorder={reorderTasks} renderRow={renderTaskRow} />
                     </div>
                   ))}
                   </div>
                   {noSession.length > 0 && (
                     <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      <SortableTaskList items={sortTasks(noSession, "manual", taskOrder)} draggable onReorder={reorderTasks} renderRow={renderTaskRow} />
+                      <SortableTaskList items={sortTasks(noSession, sortMode === "session" ? "manual" : sortMode, taskOrder, taskTier)} draggable={sortMode === "session"} onReorder={reorderTasks} renderRow={renderTaskRow} />
                     </div>
                   )}
                 </>
-              ) : (
-                <div className="rise">
-                  {sortMode === "manual" && (
-                    <div style={{ fontSize: ".68rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để sắp xếp — thả ra nghe “pop” ✨</div>
-                  )}
-                  {sortMode === "priority" && (
-                    <div style={{ fontSize: ".68rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>🔥 Việc 🔴 khẩn cấp &amp; 🟡 quan trọng được đưa lên trên</div>
-                  )}
-                  <SortableTaskList
-                    items={sortTasks(dayTasks, sortMode, taskOrder)}
-                    draggable={sortMode === "manual"}
-                    onReorder={reorderTasks}
-                    renderRow={renderTaskRow}
-                  />
-                </div>
               )}
 
               {/* NO-DATE TASKS */}
@@ -2679,6 +2690,8 @@ export default function Home() {
         {editTask && (
           <EditModal
             task={editTask}
+            currentTier={taskTier[editTask.id]}
+            onSetTier={setTierFor}
             weekDays={weekDays}
             onClose={() => setEditTask(null)}
             onSave={(patch) => {
@@ -2770,7 +2783,7 @@ export default function Home() {
               const mustSet = new Set(mustIds);
               applyTiers(dayTasks.map(t => ({ id: t.id, tier: mustSet.has(t.id) ? "must" : "optional" })));
               markPlanned(selectedDate);
-              changeSortMode("manual");
+              changeSortMode("session");
               setPlanning(false);
               haptic(20);
             }}
@@ -2783,7 +2796,7 @@ export default function Home() {
   );
 }
 
-function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
+function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onSetTier }) {
   const [name, setName] = useState(task.name);
   const [editingName, setEditingName] = useState(false);
   const [session, setSession] = useState(task.session || "");
@@ -2791,6 +2804,7 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   const [taskType, setTaskType] = useState(task.taskType || "");
   const [priority, setPriority] = useState(Array.isArray(task.priority) ? task.priority : []);
   const [project, setProject] = useState(Array.isArray(task.project) ? task.project : []);
+  const [tier, setTier] = useState(currentTier || "normal");
   const [confirmDel, setConfirmDel] = useState(false);
   const [closing, setClosing] = useState(false);
   // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
@@ -2821,6 +2835,8 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
   if (!sameArr(priority, task.priority)) patch.priority = priority;
   if (!sameArr(project, task.project)) patch.project = project;
   const hasChange = Object.keys(patch).length > 0;
+  const tierChanged = tier !== (currentTier || "normal");
+  const dirty = hasChange || tierChanged;
   const togglePriority = (p) => setPriority(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
 
@@ -2919,6 +2935,24 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
           )}
         </div>
 
+        {/* Plan tier — priority within the day (🔥 outline / 💤 faded in the main view) */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>ƯU TIÊN TRONG NGÀY</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["must", "🔥 Ưu tiên", "var(--c2)"], ["normal", "• Bình thường", "var(--c-muted)"], ["optional", "💤 Ưu tiên thấp", "#64748b"]].map(([key, lbl, col]) => {
+              const sel = tier === key;
+              return (
+                <button key={key} data-sfx="pop" data-anim="chip" onClick={() => setTier(key)} style={{
+                  flex: 1, padding: "8px 6px", borderRadius: 10, cursor: "pointer", fontSize: ".76rem", fontWeight: 700,
+                  border: sel ? `2px solid ${col}` : "1px solid var(--c-border)",
+                  background: sel ? `color-mix(in srgb, ${col} 16%, transparent)` : "var(--c-surface)",
+                  color: sel ? (key === "must" ? "var(--c1)" : col) : "var(--c-muted2)",
+                }}>{lbl}</button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Date */}
         <div style={{ marginBottom: 22 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -2957,10 +2991,13 @@ function EditModal({ task, weekDays, onClose, onSave, onDelete }) {
             flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
             background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
-          <button data-sfx="confirm" onClick={() => requestClose(() => hasChange ? onSave(patch) : onClose())} style={{
+          <button data-sfx="confirm" onClick={() => requestClose(() => {
+            if (tierChanged) onSetTier(task.id, tier);
+            if (hasChange) onSave(patch); else onClose();
+          })} style={{
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
-            background: hasChange ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
-          }}>{hasChange ? "Lưu thay đổi" : "Đóng"}</button>
+            background: dirty ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
+          }}>{dirty ? "Lưu thay đổi" : "Đóng"}</button>
         </div>
 
         {/* Delete */}
