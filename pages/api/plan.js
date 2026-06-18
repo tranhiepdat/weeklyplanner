@@ -47,16 +47,18 @@ export default async function handler(req, res) {
   if (!NOTION_KEY) return res.status(500).json({ error: "Missing NOTION_API_KEY" });
   const headers = { Authorization: `Bearer ${NOTION_KEY}`, "Content-Type": "application/json", "Notion-Version": "2022-06-28" };
 
-  const { id, tier, orders } = req.body || {};
+  const { id, tier, orders, tiers } = req.body || {};
   try {
     // Ensure the schema once per warm instance (cheap, avoids per-write retries)
     if (!_ensured) await ensureProps(headers);
 
     const jobs = [];
-    if (id) {
-      const label = TIER_TO_LABEL[tier];
-      jobs.push(patchPage(id, { "Plan": label ? { select: { name: label } } : { select: null } }, headers));
-    }
+    const tierJob = (pid, tv) => {
+      const label = TIER_TO_LABEL[tv];
+      jobs.push(patchPage(pid, { "Plan": label ? { select: { name: label } } : { select: null } }, headers));
+    };
+    if (id) tierJob(id, tier);
+    if (Array.isArray(tiers)) tiers.forEach(x => { if (x && x.id) tierJob(x.id, x.tier); });
     if (Array.isArray(orders)) {
       orders.forEach(o => {
         if (o && o.id && typeof o.order === "number") jobs.push(patchPage(o.id, { "Plan Order": { number: o.order } }, headers));

@@ -1575,35 +1575,40 @@ function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
   );
 }
 
-// ---- Plan Day sheet: triage the day's tasks into must-do / optional + order ----
-const PLAN_TIERS = [
-  ["must", "🔥", "Bắt buộc", "#dc2626"],
-  ["normal", "•", "Bình thường", "#8a6a6a"],
-  ["optional", "💤", "Để dành", "#64748b"],
-];
-function PlanSheet({ date, tasks, taskTier, taskOrder, onSetTier, onReorder, onClose, onCommit }) {
+// ---- Plan Day sheet: pick today's priority tasks (rest = low priority) + buổi + order ----
+const PLAN_SESS = [["🌅", "Sáng", "🌅 Sáng"], ["🏢", "Office", "🏢 Office (11–7h)"], ["🌙", "Tối", "🌙 Tối"]];
+function PlanSheet({ date, tasks, taskTier, taskOrder, onSetSession, onReorder, onClose, onCommit }) {
   const [closing, setClosing] = useState(false);
+  const [mustIds, setMustIds] = useState(() => new Set(tasks.filter(t => taskTier[t.id] === "must").map(t => t.id)));
   const requestClose = (fn) => { if (closing) return; setClosing(true); setTimeout(fn, 270); };
   const dObj = new Date(date + "T00:00:00");
   const label = date === TODAY ? "Hôm nay" : `${DAYS[dObj.getDay()]} ${fmt(dObj)}`;
   const ordered = sortTasks(tasks, "manual", taskOrder);
-  const mustN = tasks.filter(t => taskTier[t.id] === "must").length;
-  const optN = tasks.filter(t => taskTier[t.id] === "optional").length;
+  const mustN = ordered.filter(t => mustIds.has(t.id)).length;
+  const toggleMust = (id) => { haptic(8); setMustIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
 
   const renderPlanRow = (t) => {
-    const cur = taskTier[t.id] || "normal";
+    const must = mustIds.has(t.id);
     return (
-      <div style={{ padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", border: "1px solid var(--c-border)", marginBottom: 7 }}>
-        <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", marginBottom: 7, lineHeight: 1.35 }}>{t.icon} {t.name}</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {PLAN_TIERS.map(([key, em, lbl, col]) => {
-            const on = cur === key;
+      <div style={{ padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", marginBottom: 7, opacity: must ? 1 : .66,
+        border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)",
+        boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 40%, transparent)" : "none",
+        transition: "opacity .2s, box-shadow .2s, border-color .2s" }}>
+        <div data-sfx="pop" onClick={() => toggleMust(t.id)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
+          <span style={{ fontSize: "1.25rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3 }}>{t.icon} {t.name}</div>
+            <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · đang để dành"}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 5 }}>
+          {PLAN_SESS.map(([em, lbl, val]) => {
+            const on = (t.session || "") === val;
             return (
-              <button key={key} data-sfx="pop" data-anim="chip" onClick={() => onSetTier(t.id, key)} style={{
-                flex: 1, padding: "7px 4px", borderRadius: 9, fontSize: ".7rem", fontWeight: 700, cursor: "pointer",
-                border: on ? `1.5px solid ${col}` : "1px solid var(--c-border)",
-                background: on ? `color-mix(in srgb, ${col} 16%, transparent)` : "transparent",
-                color: on ? col : "var(--c-muted2)",
+              <button key={val} data-sfx="pop" onClick={() => onSetSession(t.id, on ? "" : val)} style={{
+                flex: 1, padding: "6px 4px", borderRadius: 8, fontSize: ".66rem", fontWeight: 700, cursor: "pointer",
+                border: on ? `1.5px solid ${wine}` : "1px solid var(--c-border)",
+                background: on ? wine : "transparent", color: on ? "var(--c-on-accent)" : "var(--c-muted2)",
               }}>{em} {lbl}</button>
             );
           })}
@@ -1622,24 +1627,24 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onSetTier, onReorder, onC
             <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{ border: "none", background: "transparent", color: "var(--c-muted)", fontSize: "1.4rem", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
           <div style={{ fontSize: ".74rem", color: "var(--c-muted)", marginTop: 4 }}>
-            Chọn việc <strong style={{ color: "#dc2626" }}>🔥 bắt buộc</strong> / <span style={{ color: "var(--c-muted2)" }}>💤 để dành</span>, kéo <strong>⠿</strong> để xếp thứ tự ưu tiên.
+            Chạm chọn việc <strong style={{ color: "var(--c1)" }}>🔥 ưu tiên hôm nay</strong>; việc không chọn sẽ <span style={{ color: "var(--c-muted2)" }}>💤 để dành (mờ đi)</span>. Chọn buổi & kéo <strong>⠿</strong> để xếp thứ tự.
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 14px" }}>
           {ordered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--c-muted2)", fontSize: ".88rem", fontStyle: "italic" }}>🕊️ Ngày này chưa có việc nào để lên kế hoạch.<br />Thêm việc rồi quay lại nhé.</div>
+            <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--c-muted2)", fontSize: ".88rem", fontStyle: "italic" }}>🕊️ Ngày này chưa có việc nào.<br />Thêm việc rồi quay lại nhé.</div>
           ) : (
             <SortableTaskList items={ordered} draggable onReorder={onReorder} renderRow={renderPlanRow} />
           )}
         </div>
 
         <div style={{ padding: "10px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid var(--c-border)" }}>
-          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} bắt buộc · 💤 {optN} để dành · {tasks.length} việc</div>
-          <button data-sfx="confirm" onClick={() => requestClose(onCommit)} disabled={tasks.length === 0} style={{
+          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {ordered.length - mustN} để dành · {ordered.length} việc</div>
+          <button data-sfx="confirm" onClick={() => requestClose(() => onCommit([...mustIds]))} disabled={ordered.length === 0} style={{
             width: "100%", padding: "13px", borderRadius: 14, border: "none",
-            background: tasks.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
-            cursor: tasks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
+            background: ordered.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
+            cursor: ordered.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
           }}>✓ Chốt kế hoạch ngày</button>
         </div>
       </div>
@@ -1711,6 +1716,16 @@ export default function Home() {
     });
     // sync order to Notion (shared across devices), best effort
     fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orders: ids.map((id, i) => ({ id, order: i })) }) }).catch(() => {});
+  };
+  // Commit a whole day's plan: each task → "must" or "optional" (one synced batch)
+  const applyTiers = (pairs) => {
+    setTaskTier(prev => {
+      const next = { ...prev };
+      pairs.forEach(({ id, tier }) => { if (!tier || tier === "normal") delete next[id]; else next[id] = tier; });
+      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tiers: pairs }) }).catch(() => {});
   };
 
   // Theme: load saved choice, keep sound engine in sync
@@ -1839,10 +1854,18 @@ export default function Home() {
       const r = await fetch("/api/tasks");
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      setTasks(d.tasks);
+      // Auto roll-over: unfinished tasks from past days are moved forward to today
+      const overdue = d.tasks.filter(t => t.date && t.date < TODAY && !t.done);
+      const rolled = overdue.length
+        ? d.tasks.map(t => (t.date && t.date < TODAY && !t.done) ? { ...t, date: TODAY } : t)
+        : d.tasks;
+      setTasks(rolled);
+      overdue.forEach(t => {
+        fetch("/api/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, date: TODAY }) }).catch(() => {});
+      });
       // hydrate Plan Day tier/order from Notion (cross-device), merged over local cache
       const tFromN = {}, oFromN = {};
-      d.tasks.forEach(t => { if (t.planTier) tFromN[t.id] = t.planTier; if (typeof t.planOrder === "number") oFromN[t.id] = t.planOrder; });
+      rolled.forEach(t => { if (t.planTier) tFromN[t.id] = t.planTier; if (typeof t.planOrder === "number") oFromN[t.id] = t.planOrder; });
       if (Object.keys(tFromN).length) setTaskTier(prev => { const m = { ...prev, ...tFromN }; try { localStorage.setItem("dat-task-tier", JSON.stringify(m)); } catch {} return m; });
       if (Object.keys(oFromN).length) setTaskOrder(prev => { const m = { ...prev, ...oFromN }; try { localStorage.setItem("dat-task-order", JSON.stringify(m)); } catch {} return m; });
       setStatus("ok");
@@ -2657,10 +2680,17 @@ export default function Home() {
             tasks={dayTasks}
             taskTier={taskTier}
             taskOrder={taskOrder}
-            onSetTier={setTierFor}
+            onSetSession={(id, s) => updateTask(id, { session: s })}
             onReorder={reorderTasks}
             onClose={() => setPlanning(false)}
-            onCommit={() => { markPlanned(selectedDate); changeSortMode("manual"); setPlanning(false); haptic(20); }}
+            onCommit={(mustIds) => {
+              const mustSet = new Set(mustIds);
+              applyTiers(dayTasks.map(t => ({ id: t.id, tier: mustSet.has(t.id) ? "must" : "optional" })));
+              markPlanned(selectedDate);
+              changeSortMode("manual");
+              setPlanning(false);
+              haptic(20);
+            }}
           />
         )}
 
