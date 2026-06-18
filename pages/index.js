@@ -1575,51 +1575,137 @@ function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
   );
 }
 
-// ---- Plan Day sheet: pick today's priority tasks (rest = low priority) + buổi + order ----
-const PLAN_SESS = [["🌅", "Sáng", "🌅 Sáng"], ["🏢", "Office", "🏢 Office (11–7h)"], ["🌙", "Tối", "🌙 Tối"]];
-function PlanSheet({ date, tasks, taskTier, taskOrder, onSetSession, onReorder, onClose, onCommit }) {
+// ---- Plan Day: tasks grouped by buổi, drag between groups (sets session) + order ----
+const PLAN_GROUPS = [
+  { session: "🌅 Sáng", label: "🌅 Buổi sáng" },
+  { session: "🏢 Office (11–7h)", label: "🏢 Office · 11–7h" },
+  { session: "🌙 Tối", label: "🌙 Buổi tối" },
+  { session: "", label: "📋 Chưa xếp buổi" },
+];
+const PlanLine = () => <div style={{ height: 3, borderRadius: 2, background: "var(--c2)", margin: "3px 6px", boxShadow: "0 0 6px var(--c2)" }} />;
+
+// Cross-group drag board: drag a task into a buổi group → sets session + order.
+// Tap a task → toggle 🔥 priority (with pop motion + sound).
+function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
+  const [drag, setDrag] = useState(null);   // { id, name, icon, w, ptrX, ptrY }
+  const dragRef = useRef(null);             // mutable target: { id, overSession, overIndex, ... }
+  const rowRefs = useRef(new Map());
+  const groupRefs = useRef(new Map());
+
+  const computeTarget = (y) => {
+    const d = dragRef.current; if (!d) return;
+    let over = null, near = d.overSession, best = Infinity;
+    groups.forEach(g => {
+      const el = groupRefs.current.get(g.session); if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (y >= r.top && y <= r.bottom) over = g.session;
+      const dist = Math.abs(y - (r.top + r.bottom) / 2);
+      if (dist < best) { best = dist; near = g.session; }
+    });
+    const session = over != null ? over : near;
+    const g = groups.find(gr => gr.session === session);
+    let idx = 0;
+    if (g) {
+      const others = g.items.filter(t => t.id !== d.id);
+      for (let i = 0; i < others.length; i++) {
+        const el = rowRefs.current.get(others[i].id); if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (y > r.top + r.height / 2) idx = i + 1;
+      }
+    }
+    d.overSession = session; d.overIndex = idx;
+  };
+  const onDown = (e, t) => {
+    e.preventDefault(); e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const el = rowRefs.current.get(t.id);
+    dragRef.current = { id: t.id, w: el ? el.offsetWidth : 280, overSession: t.session || "", overIndex: 0 };
+    playLift(); haptic(10);
+    computeTarget(e.clientY);
+    setDrag({ id: t.id, name: t.name, icon: t.icon, w: dragRef.current.w, ptrX: e.clientX, ptrY: e.clientY });
+  };
+  const onMoveEvt = (e) => {
+    if (!dragRef.current) return;
+    computeTarget(e.clientY);
+    setDrag(s => s && { ...s, ptrX: e.clientX, ptrY: e.clientY });
+  };
+  const onUp = () => {
+    const d = dragRef.current; if (!d) return;
+    dragRef.current = null;
+    setDrag(null);
+    playDrop(); haptic(15);
+    onMove(d.id, d.overSession, d.overIndex);
+  };
+
+  const dr = dragRef.current;
+  const overSession = dr ? dr.overSession : null;
+  const overIndex = dr ? dr.overIndex : -1;
+
+  return (
+    <div>
+      {groups.map(g => {
+        const items = drag ? g.items.filter(t => t.id !== drag.id) : g.items;
+        const isOver = !!drag && overSession === g.session;
+        return (
+          <div key={g.session || "none"} ref={el => { if (el) groupRefs.current.set(g.session, el); }} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: g.session ? wine : "var(--c-muted)", marginBottom: 6, padding: "4px 8px", background: g.session ? "rgba(232,196,184,.25)" : "transparent", borderRadius: 8, display: "inline-block" }}>{g.label}{items.length ? ` · ${items.length}` : ""}</div>
+            <div style={{ minHeight: 34, borderRadius: 10, padding: "2px 0", background: isOver ? "color-mix(in srgb, var(--c2) 9%, transparent)" : "transparent", transition: "background .15s" }}>
+              {items.length === 0 && (
+                <div style={{ fontSize: ".72rem", color: "var(--c-muted2)", fontStyle: "italic", padding: "9px 10px", textAlign: "center" }}>{isOver ? "↓ thả vào đây" : "— trống —"}</div>
+              )}
+              {items.map((t, i) => {
+                const must = mustIds.has(t.id);
+                return (
+                  <div key={t.id}>
+                    {isOver && overIndex === i && <PlanLine />}
+                    <div ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ marginBottom: 7 }}>
+                      <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
+                        <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp} title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 26, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.1rem", touchAction: "none", userSelect: "none" }}>⠿</div>
+                        <div onClick={() => onToggleMust(t.id)} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s" }}>
+                          <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.25rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3 }}>{t.icon} {t.name}</div>
+                            <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · để dành"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {isOver && overIndex >= items.length && <PlanLine />}
+            </div>
+          </div>
+        );
+      })}
+      {drag && (
+        <div style={{ position: "fixed", left: 0, top: 0, transform: `translate(${drag.ptrX - 28}px, ${drag.ptrY - 18}px)`, width: Math.max(160, drag.w - 26), pointerEvents: "none", zIndex: 200 }}>
+          <div style={{ padding: "9px 11px", borderRadius: 12, background: "var(--c-surface)", border: "1.5px solid var(--c2)", boxShadow: "0 14px 30px rgba(0,0,0,.32)", transform: "rotate(-1.5deg) scale(1.03)" }}>
+            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{drag.icon} {drag.name}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit }) {
   const [closing, setClosing] = useState(false);
   const [mustIds, setMustIds] = useState(() => new Set(tasks.filter(t => taskTier[t.id] === "must").map(t => t.id)));
   const requestClose = (fn) => { if (closing) return; setClosing(true); setTimeout(fn, 270); };
   const dObj = new Date(date + "T00:00:00");
   const label = date === TODAY ? "Hôm nay" : `${DAYS[dObj.getDay()]} ${fmt(dObj)}`;
-  const ordered = sortTasks(tasks, "manual", taskOrder);
-  const mustN = ordered.filter(t => mustIds.has(t.id)).length;
-  const toggleMust = (id) => { haptic(8); setMustIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
-
-  const renderPlanRow = (t) => {
-    const must = mustIds.has(t.id);
-    return (
-      <div style={{ padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", marginBottom: 7, opacity: must ? 1 : .66,
-        border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)",
-        boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 40%, transparent)" : "none",
-        transition: "opacity .2s, box-shadow .2s, border-color .2s" }}>
-        <div data-sfx="pop" onClick={() => toggleMust(t.id)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
-          <span style={{ fontSize: "1.25rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3 }}>{t.icon} {t.name}</div>
-            <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · đang để dành"}</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 5 }}>
-          {PLAN_SESS.map(([em, lbl, val]) => {
-            const on = (t.session || "") === val;
-            return (
-              <button key={val} data-sfx="pop" onClick={() => onSetSession(t.id, on ? "" : val)} style={{
-                flex: 1, padding: "6px 4px", borderRadius: 8, fontSize: ".66rem", fontWeight: 700, cursor: "pointer",
-                border: on ? `1.5px solid ${wine}` : "1px solid var(--c-border)",
-                background: on ? wine : "transparent", color: on ? "var(--c-on-accent)" : "var(--c-muted2)",
-              }}>{em} {lbl}</button>
-            );
-          })}
-        </div>
-      </div>
-    );
+  const toggleMust = (id) => {
+    const willMust = !mustIds.has(id);
+    playClick(willMust ? "pop" : "soft"); haptic(8);
+    setMustIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
+  const groups = PLAN_GROUPS.map(g => ({ ...g, items: sortTasks(tasks.filter(t => (t.session || "") === g.session), "manual", taskOrder) }));
+  const mustN = tasks.filter(t => mustIds.has(t.id)).length;
 
   return (
     <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{ position: "fixed", inset: 0, background: "rgba(74,48,48,.45)", backdropFilter: "blur(3px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 110 }}>
-      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{ background: "var(--c-bg)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.25)", height: "84vh", display: "flex", flexDirection: "column" }}>
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{ background: "var(--c-bg)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.25)", height: "86vh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "16px 18px 10px" }}>
           <div style={{ width: 40, height: 4, borderRadius: 3, background: "var(--c-border)", margin: "0 auto 14px" }} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -1627,24 +1713,24 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onSetSession, onReorder, 
             <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{ border: "none", background: "transparent", color: "var(--c-muted)", fontSize: "1.4rem", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
           <div style={{ fontSize: ".74rem", color: "var(--c-muted)", marginTop: 4 }}>
-            Chạm chọn việc <strong style={{ color: "var(--c1)" }}>🔥 ưu tiên hôm nay</strong>; việc không chọn sẽ <span style={{ color: "var(--c-muted2)" }}>💤 để dành (mờ đi)</span>. Chọn buổi & kéo <strong>⠿</strong> để xếp thứ tự.
+            Kéo <strong>⠿</strong> việc vào nhóm <strong>buổi</strong> (xếp luôn thứ tự); chạm việc để chọn <strong style={{ color: "var(--c1)" }}>🔥 ưu tiên</strong> — việc không chọn sẽ 💤 để dành.
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 14px" }}>
-          {ordered.length === 0 ? (
+          {tasks.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--c-muted2)", fontSize: ".88rem", fontStyle: "italic" }}>🕊️ Ngày này chưa có việc nào.<br />Thêm việc rồi quay lại nhé.</div>
           ) : (
-            <SortableTaskList items={ordered} draggable onReorder={onReorder} renderRow={renderPlanRow} />
+            <PlanBoard groups={groups} mustIds={mustIds} onToggleMust={toggleMust} onMove={onMove} />
           )}
         </div>
 
         <div style={{ padding: "10px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid var(--c-border)" }}>
-          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {ordered.length - mustN} để dành · {ordered.length} việc</div>
-          <button data-sfx="confirm" onClick={() => requestClose(() => onCommit([...mustIds]))} disabled={ordered.length === 0} style={{
+          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {tasks.length - mustN} để dành · {tasks.length} việc</div>
+          <button data-sfx="confirm" onClick={() => requestClose(() => onCommit([...mustIds]))} disabled={tasks.length === 0} style={{
             width: "100%", padding: "13px", borderRadius: 14, border: "none",
-            background: ordered.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
-            cursor: ordered.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
+            background: tasks.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
+            cursor: tasks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
           }}>✓ Chốt kế hoạch ngày</button>
         </div>
       </div>
@@ -1694,16 +1780,6 @@ export default function Home() {
     } catch {}
   }, []);
   const changeSortMode = (m) => { setSortMode(m); try { localStorage.setItem("dat-sortmode", m); } catch {} };
-  const setTierFor = (id, tier) => {
-    setTaskTier(prev => {
-      const next = { ...prev };
-      if (!tier || tier === "normal") delete next[id]; else next[id] = tier;
-      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
-      return next;
-    });
-    // sync tier to Notion (shared across devices), best effort
-    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => {});
-  };
   const markPlanned = (date) => {
     setPlannedDays(prev => { const next = { ...prev, [date]: true }; try { localStorage.setItem("dat-planned-days", JSON.stringify(next)); } catch {} return next; });
   };
@@ -1726,6 +1802,14 @@ export default function Home() {
       return next;
     });
     fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tiers: pairs }) }).catch(() => {});
+  };
+  // Plan Day drag: move a task into a buổi group at an index → set session + order
+  const planMove = (id, toSession, toIndex) => {
+    const moved = tasks.find(t => t.id === id); if (!moved) return;
+    const members = sortTasks(tasks.filter(t => t.date === selectedDate && (t.session || "") === toSession && t.id !== id), "manual", taskOrder).map(t => t.id);
+    members.splice(Math.max(0, Math.min(toIndex, members.length)), 0, id);
+    reorderTasks(members);
+    if ((moved.session || "") !== toSession) updateTask(id, { session: toSession });
   };
 
   // Theme: load saved choice, keep sound engine in sync
@@ -2680,8 +2764,7 @@ export default function Home() {
             tasks={dayTasks}
             taskTier={taskTier}
             taskOrder={taskOrder}
-            onSetSession={(id, s) => updateTask(id, { session: s })}
-            onReorder={reorderTasks}
+            onMove={planMove}
             onClose={() => setPlanning(false)}
             onCommit={(mustIds) => {
               const mustSet = new Set(mustIds);
