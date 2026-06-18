@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 Viết một BÁO CÁO NGÀY ngắn gọn, CHU ĐÁO, gồm các phần sau (mỗi phần 1 dòng, có emoji đầu dòng; BỎ phần nào nếu không có dữ liệu):
 - Dòng tổng quan: xong mấy/mấy VIỆC (nói theo SỐ VIỆC, không nhấn vào điểm số), nghiêng về lĩnh vực nào.
 - ✅ Đã xong: tên vài việc đã hoàn thành.
-- ⏳ Còn lại: nhắc việc chưa xong. RẤT QUAN TRỌNG: nếu có việc 🔴 Urgent / 🟡 Important chưa xong (xem "priorityPending") thì NHẮC CÁC VIỆC ĐÓ TRƯỚC TIÊN và nhấn mạnh. Sau đó theo đúng thứ tự trong "pendingInOrder" (đây là thứ tự ưu tiên/sắp xếp người dùng đã chọn). Có thể gom theo buổi (Sáng/Office/Tối) cho dễ theo dõi.
+- ⏳ Còn lại: nhắc việc chưa xong. ƯU TIÊN SỐ 1: nếu có "mustPending" (việc BẮT BUỘC phải xong hôm nay theo kế hoạch của Dat) thì nhắc ĐẦU TIÊN, mạnh mẽ nhất, nói rõ đây là việc bắt buộc. Kế đến là việc 🔴 Urgent / 🟡 Important ("priorityPending"). Sau đó các việc còn lại theo đúng thứ tự "pendingInOrder" (thứ tự Dat đã tự sắp). Có thể gom theo buổi (Sáng/Office/Tối) cho dễ theo dõi.
 - 💪 Một câu động viên chân thành, hợp tình hình.
 
 QUAN TRỌNG — nhắc đúng thời điểm dựa vào "now" (giờ hiện tại) và "phase" (ca hiện tại), CHỈ khi "isToday" = true:

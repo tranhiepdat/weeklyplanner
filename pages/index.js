@@ -609,7 +609,7 @@ function Particles({ width, height, onDone }) {
   );
 }
 
-function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUndone }) {
+function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone }) {
   const [phase, setPhase] = useState("idle"); // idle | celebrating | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
@@ -637,6 +637,8 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
   const celebrating = phase === "celebrating";
   const reversing = phase === "reversing";
   const accent = typeColor(task.taskType || "");
+  const isMust = tier === "must";       // bắt buộc hôm nay → bold outline
+  const isOptional = tier === "optional"; // để dành → faded
 
   // swipe gesture (pan-y preserved for page scroll)
   const onPD = (e) => { dragRef.current = { startX: e.clientX, startY: e.clientY, active: true, moved: false, baseX: swipeX }; };
@@ -675,9 +677,9 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
         onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
-          opacity: isDoneSettled ? .55 : 1,
+          opacity: isDoneSettled ? .55 : (isOptional ? .58 : 1),
           borderLeft: `5px solid ${accent}`,
-          boxShadow: (!isDoneSettled && !celebrating && !reversing) ? `inset 3px 0 0 ${accent}` : undefined,
+          boxShadow: (!isDoneSettled && !celebrating && !reversing) ? `inset 3px 0 0 ${accent}${isMust ? ", 0 0 0 2px var(--c2)" : ""}` : undefined,
           background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}26` : undefined,
           transform: `translateX(${swipeX}px)`,
           transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1)",
@@ -693,6 +695,8 @@ function TaskRow({ task, onToggle, onEdit, onDelete, removing, justDone, justUnd
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+            {isMust && <span className="tag" style={{ background: "color-mix(in srgb, var(--c2) 22%, transparent)", color: "var(--c1)", border: "1px solid var(--c2)" }}>🔥 Bắt buộc</span>}
+            {isOptional && <span className="tag" style={{ background: "transparent", color: "var(--c-muted2)", border: "1px dashed var(--c-border)" }}>💤 Để dành</span>}
             {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
@@ -1035,7 +1039,7 @@ function ScoreBar({ cat, data }) {
   );
 }
 
-function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder }) {
+function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder, taskTier }) {
   const selObj = new Date(selectedDate + "T00:00:00");
   const selIsToday = selectedDate === TODAY;
   const dayLabel = selIsToday ? "Hôm nay" : `${DAYS[selObj.getDay()]} ${fmt(selObj)}`;
@@ -1086,6 +1090,8 @@ function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder }) {
       // help the coach prioritise reminders by the user's own ordering & priority flags
       pendingInOrder: pendingOrdered.map(t => t.name),
       priorityPending: pending.filter(t => priorityRank(t) > 0).map(t => `${priorityEmoji(t)} ${t.name}`),
+      // Plan Day "must-do today" tasks still pending — remind these the hardest
+      mustPending: pending.filter(t => (taskTier || {})[t.id] === "must").map(t => t.name),
     };
     fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -1569,6 +1575,78 @@ function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
   );
 }
 
+// ---- Plan Day sheet: triage the day's tasks into must-do / optional + order ----
+const PLAN_TIERS = [
+  ["must", "🔥", "Bắt buộc", "#dc2626"],
+  ["normal", "•", "Bình thường", "#8a6a6a"],
+  ["optional", "💤", "Để dành", "#64748b"],
+];
+function PlanSheet({ date, tasks, taskTier, taskOrder, onSetTier, onReorder, onClose, onCommit }) {
+  const [closing, setClosing] = useState(false);
+  const requestClose = (fn) => { if (closing) return; setClosing(true); setTimeout(fn, 270); };
+  const dObj = new Date(date + "T00:00:00");
+  const label = date === TODAY ? "Hôm nay" : `${DAYS[dObj.getDay()]} ${fmt(dObj)}`;
+  const ordered = sortTasks(tasks, "manual", taskOrder);
+  const mustN = tasks.filter(t => taskTier[t.id] === "must").length;
+  const optN = tasks.filter(t => taskTier[t.id] === "optional").length;
+
+  const renderPlanRow = (t) => {
+    const cur = taskTier[t.id] || "normal";
+    return (
+      <div style={{ padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", border: "1px solid var(--c-border)", marginBottom: 7 }}>
+        <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", marginBottom: 7, lineHeight: 1.35 }}>{t.icon} {t.name}</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {PLAN_TIERS.map(([key, em, lbl, col]) => {
+            const on = cur === key;
+            return (
+              <button key={key} data-sfx="pop" data-anim="chip" onClick={() => onSetTier(t.id, key)} style={{
+                flex: 1, padding: "7px 4px", borderRadius: 9, fontSize: ".7rem", fontWeight: 700, cursor: "pointer",
+                border: on ? `1.5px solid ${col}` : "1px solid var(--c-border)",
+                background: on ? `color-mix(in srgb, ${col} 16%, transparent)` : "transparent",
+                color: on ? col : "var(--c-muted2)",
+              }}>{em} {lbl}</button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{ position: "fixed", inset: 0, background: "rgba(74,48,48,.45)", backdropFilter: "blur(3px)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 110 }}>
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{ background: "var(--c-bg)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.25)", height: "84vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "16px 18px 10px" }}>
+          <div style={{ width: 40, height: 4, borderRadius: 3, background: "var(--c-border)", margin: "0 auto 14px" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.3rem", fontWeight: 700, color: wine }}>🗂️ Lên kế hoạch · {label}</span>
+            <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{ border: "none", background: "transparent", color: "var(--c-muted)", fontSize: "1.4rem", cursor: "pointer", lineHeight: 1 }}>×</button>
+          </div>
+          <div style={{ fontSize: ".74rem", color: "var(--c-muted)", marginTop: 4 }}>
+            Chọn việc <strong style={{ color: "#dc2626" }}>🔥 bắt buộc</strong> / <span style={{ color: "var(--c-muted2)" }}>💤 để dành</span>, kéo <strong>⠿</strong> để xếp thứ tự ưu tiên.
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 14px" }}>
+          {ordered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--c-muted2)", fontSize: ".88rem", fontStyle: "italic" }}>🕊️ Ngày này chưa có việc nào để lên kế hoạch.<br />Thêm việc rồi quay lại nhé.</div>
+          ) : (
+            <SortableTaskList items={ordered} draggable onReorder={onReorder} renderRow={renderPlanRow} />
+          )}
+        </div>
+
+        <div style={{ padding: "10px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid var(--c-border)" }}>
+          <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} bắt buộc · 💤 {optN} để dành · {tasks.length} việc</div>
+          <button data-sfx="confirm" onClick={() => requestClose(onCommit)} disabled={tasks.length === 0} style={{
+            width: "100%", padding: "13px", borderRadius: 14, border: "none",
+            background: tasks.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
+            cursor: tasks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
+          }}>✓ Chốt kế hoạch ngày</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
@@ -1595,15 +1673,33 @@ export default function Home() {
   // Task sorting: mode + manual drag order (both persisted per-device)
   const [sortMode, setSortMode] = useState("session"); // session | priority | type | manual
   const [taskOrder, setTaskOrder] = useState({});       // { taskId: orderIndex }
+  const [taskTier, setTaskTier] = useState({});         // { taskId: "must" | "optional" }  (Plan Day)
+  const [plannedDays, setPlannedDays] = useState({});   // { "YYYY-MM-DD": true }
+  const [planning, setPlanning] = useState(false);      // Plan Day sheet open
   useEffect(() => {
     try {
       const m = localStorage.getItem("dat-sortmode");
       if (["session", "priority", "type", "manual"].includes(m)) setSortMode(m);
       const o = localStorage.getItem("dat-task-order");
       if (o) setTaskOrder(JSON.parse(o));
+      const tr = localStorage.getItem("dat-task-tier");
+      if (tr) setTaskTier(JSON.parse(tr));
+      const pd = localStorage.getItem("dat-planned-days");
+      if (pd) setPlannedDays(JSON.parse(pd));
     } catch {}
   }, []);
   const changeSortMode = (m) => { setSortMode(m); try { localStorage.setItem("dat-sortmode", m); } catch {} };
+  const setTierFor = (id, tier) => {
+    setTaskTier(prev => {
+      const next = { ...prev };
+      if (!tier || tier === "normal") delete next[id]; else next[id] = tier;
+      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const markPlanned = (date) => {
+    setPlannedDays(prev => { const next = { ...prev, [date]: true }; try { localStorage.setItem("dat-planned-days", JSON.stringify(next)); } catch {} return next; });
+  };
   const reorderTasks = (ids) => {
     setTaskOrder(prev => {
       const next = { ...prev };
@@ -1862,7 +1958,7 @@ export default function Home() {
   const dayNavBtn = { padding: "8px 11px", borderRadius: 11, border: `1.5px solid ${wine}`, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 800, fontSize: ".76rem", whiteSpace: "nowrap", lineHeight: 1, display: "inline-flex", alignItems: "center", gap: 3 };
   const weekNavBtn = { padding: "8px 10px", borderRadius: 11, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 700, fontSize: ".68rem", whiteSpace: "nowrap", lineHeight: 1, display: "inline-flex", alignItems: "center", gap: 2 };
   const renderTaskRow = (t) => (
-    <TaskRow task={t} onToggle={toggle} onEdit={setEditTask}
+    <TaskRow task={t} tier={taskTier[t.id]} onToggle={toggle} onEdit={setEditTask}
       justDone={justDone === t.id} justUndone={justUndone === t.id}
       removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />
   );
@@ -2304,7 +2400,10 @@ export default function Home() {
         <div className="f3 card" style={{ marginBottom: 14, overflow: "visible" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-border)", paddingBottom: 8, marginBottom: 14 }}>
             <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", fontWeight: 600, color: wine }}>📋 Kế hoạch</span>
-            <button onClick={load} style={{ fontSize: ".7rem", padding: "3px 12px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: "pointer" }}>↻ Làm mới</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button data-sfx="confirm" onClick={() => setPlanning(true)} style={{ fontSize: ".74rem", padding: "5px 12px", border: `1.5px solid ${wine}`, borderRadius: 10, background: `color-mix(in srgb, ${wine} 10%, transparent)`, color: wine, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>🗂️ {plannedDays[selectedDate] ? "Sửa KH" : "Lên kế hoạch"}</button>
+              <button onClick={load} title="Làm mới" style={{ fontSize: ".85rem", padding: "4px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: "pointer" }}>↻</button>
+            </div>
           </div>
 
           {status === "loading" && (
@@ -2351,6 +2450,7 @@ export default function Home() {
               <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? wine : "var(--c-muted)", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                 {DAYS[selDateObj.getDay()]} {fmt(selDateObj)}
                 {selIsToday && <span style={{ background: wine, color: "var(--c-on-accent)", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
+                {plannedDays[selectedDate] && <span style={{ background: "color-mix(in srgb, var(--c2) 22%, transparent)", color: "var(--c1)", border: "1px solid var(--c2)", fontSize: ".55rem", padding: "1px 7px", borderRadius: 8 }}>✓ ĐÃ LÊN KẾ HOẠCH</span>}
               </div>
 
               {/* SORT MODE SELECTOR */}
@@ -2421,7 +2521,7 @@ export default function Home() {
         </div>
 
         {/* INSIGHTS — analysis + coach note + recent days */}
-        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} />}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier} />}
         </div>{/* end col-main */}
 
         <div className="col-side">
@@ -2537,6 +2637,19 @@ export default function Home() {
             onCreateTasks={(tasks) => tasks.forEach(createTask)}
             today={TODAY}
             weekDays={weekDays}
+          />
+        )}
+
+        {planning && (
+          <PlanSheet
+            date={selectedDate}
+            tasks={dayTasks}
+            taskTier={taskTier}
+            taskOrder={taskOrder}
+            onSetTier={setTierFor}
+            onReorder={reorderTasks}
+            onClose={() => setPlanning(false)}
+            onCommit={() => { markPlanned(selectedDate); changeSortMode("manual"); setPlanning(false); haptic(20); }}
           />
         )}
 
