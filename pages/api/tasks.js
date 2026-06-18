@@ -22,8 +22,10 @@ export default async function handler(req, res) {
 
     const data = await r.json();
 
+    const tierName = p => p?.Plan?.select?.name;
     const tasks = data.results.map((page) => {
       const p = page.properties;
+      const tName = tierName(p);
       return {
         id: page.id,
         icon: page.icon?.emoji || "",
@@ -34,6 +36,9 @@ export default async function handler(req, res) {
         session: p["Buổi"]?.select?.name || null,
         priority: p.Priority?.multi_select?.map((s) => s.name) || [],
         project: p.Project?.multi_select?.map((s) => s.name) || [],
+        // Plan Day (synced across devices). Missing props read as null — safe.
+        planTier: tName ? (tName.includes("Bắt buộc") ? "must" : tName.includes("Để dành") ? "optional" : null) : null,
+        planOrder: typeof p["Plan Order"]?.number === "number" ? p["Plan Order"].number : null,
       };
     });
 

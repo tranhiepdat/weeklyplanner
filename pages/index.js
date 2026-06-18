@@ -1696,6 +1696,8 @@ export default function Home() {
       try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
       return next;
     });
+    // sync tier to Notion (shared across devices), best effort
+    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => {});
   };
   const markPlanned = (date) => {
     setPlannedDays(prev => { const next = { ...prev, [date]: true }; try { localStorage.setItem("dat-planned-days", JSON.stringify(next)); } catch {} return next; });
@@ -1707,6 +1709,8 @@ export default function Home() {
       try { localStorage.setItem("dat-task-order", JSON.stringify(next)); } catch {}
       return next;
     });
+    // sync order to Notion (shared across devices), best effort
+    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orders: ids.map((id, i) => ({ id, order: i })) }) }).catch(() => {});
   };
 
   // Theme: load saved choice, keep sound engine in sync
@@ -1836,6 +1840,11 @@ export default function Home() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setTasks(d.tasks);
+      // hydrate Plan Day tier/order from Notion (cross-device), merged over local cache
+      const tFromN = {}, oFromN = {};
+      d.tasks.forEach(t => { if (t.planTier) tFromN[t.id] = t.planTier; if (typeof t.planOrder === "number") oFromN[t.id] = t.planOrder; });
+      if (Object.keys(tFromN).length) setTaskTier(prev => { const m = { ...prev, ...tFromN }; try { localStorage.setItem("dat-task-tier", JSON.stringify(m)); } catch {} return m; });
+      if (Object.keys(oFromN).length) setTaskOrder(prev => { const m = { ...prev, ...oFromN }; try { localStorage.setItem("dat-task-order", JSON.stringify(m)); } catch {} return m; });
       setStatus("ok");
     } catch (e) {
       setError(e.message);
@@ -1999,6 +2008,8 @@ export default function Home() {
     const k = t.date || "no-date";
     (byDate[k] = byDate[k] || []).push(t);
   });
+  // a day counts as "planned" if marked locally or any of its tasks has a tier (synced)
+  const isPlanned = (date) => !!plannedDays[date] || (byDate[date] || []).some(t => taskTier[t.id]);
 
   // Progress — week (selected week) & selected day
   const weekTasks = tasks.filter(t => t.date && weekSet.has(t.date));
@@ -2401,7 +2412,7 @@ export default function Home() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--c-border)", paddingBottom: 8, marginBottom: 14 }}>
             <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.2rem", fontWeight: 600, color: wine }}>📋 Kế hoạch</span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button data-sfx="confirm" onClick={() => setPlanning(true)} style={{ fontSize: ".74rem", padding: "5px 12px", border: `1.5px solid ${wine}`, borderRadius: 10, background: `color-mix(in srgb, ${wine} 10%, transparent)`, color: wine, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>🗂️ {plannedDays[selectedDate] ? "Sửa KH" : "Lên kế hoạch"}</button>
+              <button data-sfx="confirm" onClick={() => setPlanning(true)} style={{ fontSize: ".74rem", padding: "5px 12px", border: `1.5px solid ${wine}`, borderRadius: 10, background: `color-mix(in srgb, ${wine} 10%, transparent)`, color: wine, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>🗂️ {isPlanned(selectedDate) ? "Sửa KH" : "Lên kế hoạch"}</button>
               <button onClick={load} title="Làm mới" style={{ fontSize: ".85rem", padding: "4px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: "pointer" }}>↻</button>
             </div>
           </div>
@@ -2450,7 +2461,7 @@ export default function Home() {
               <div style={{ fontSize: ".75rem", fontWeight: 700, letterSpacing: ".1em", color: selIsToday ? wine : "var(--c-muted)", textTransform: "uppercase", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
                 {DAYS[selDateObj.getDay()]} {fmt(selDateObj)}
                 {selIsToday && <span style={{ background: wine, color: "var(--c-on-accent)", fontSize: ".55rem", padding: "1px 6px", borderRadius: 8 }}>HÔM NAY</span>}
-                {plannedDays[selectedDate] && <span style={{ background: "color-mix(in srgb, var(--c2) 22%, transparent)", color: "var(--c1)", border: "1px solid var(--c2)", fontSize: ".55rem", padding: "1px 7px", borderRadius: 8 }}>✓ ĐÃ LÊN KẾ HOẠCH</span>}
+                {isPlanned(selectedDate) && <span style={{ background: "color-mix(in srgb, var(--c2) 22%, transparent)", color: "var(--c1)", border: "1px solid var(--c2)", fontSize: ".55rem", padding: "1px 7px", borderRadius: 8 }}>✓ ĐÃ LÊN KẾ HOẠCH</span>}
               </div>
 
               {/* SORT MODE SELECTOR */}
