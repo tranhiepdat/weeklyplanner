@@ -711,7 +711,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           {task.done ? "✓" : ""}
         </div>
         <div style={{ flex: 1 }} onClick={guardTap(() => onToggle(task.id, !task.done))}>
-          <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
+          <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
@@ -2347,7 +2347,7 @@ export default function Home() {
         @keyframes emojiPop{0%{transform:scale(.55) rotate(-8deg)}60%{transform:scale(1.32)}100%{transform:scale(1)}}
         .mood-emoji-pop{animation:emojiPop .34s cubic-bezier(.34,1.6,.5,1);}
         /* ===== responsive: desktop = 2 columns (all visible); mobile = bottom tabs ===== */
-        .main-pad{max-width:1400px;margin:0 auto;padding:env(safe-area-inset-top) 16px calc(72px + env(safe-area-inset-bottom));}
+        .main-pad{max-width:1700px;margin:0 auto;padding:env(safe-area-inset-top) 16px calc(72px + env(safe-area-inset-bottom));}
         .day-nav{display:flex;}
         .section-tabs{display:flex;}
         .fab{display:flex;align-items:center;justify-content:center;}
@@ -2364,9 +2364,9 @@ export default function Home() {
           .tab-stats .fab,.tab-habit .fab,.tab-word .fab{display:none;}
         }
         @media(min-width:1000px){
-          .layout{display:flex;align-items:flex-start;gap:18px;max-width:1180px;margin:0 auto;}
-          .col-a{flex:1 1 56%;min-width:0;}
-          .col-b{flex:1 1 44%;min-width:0;}
+          .layout{display:flex;align-items:flex-start;gap:20px;}
+          .col-a{flex:1 1 58%;min-width:0;}
+          .col-b{flex:1 1 42%;min-width:0;}
           .panel{display:block;}
           .section-tabs{display:none;}
           .main-pad{padding-bottom:calc(74px + env(safe-area-inset-bottom));}
@@ -2384,7 +2384,8 @@ export default function Home() {
           .col-side{flex:1 1 44%;min-width:0;}
         }
         /* sessions side-by-side only when there's real room */
-        @media(min-width:1180px){.session-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start;}}
+        /* sessions fill the actual column width (not the viewport) so cards stay roomy */
+        @media(min-width:1180px){.session-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start;}}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
