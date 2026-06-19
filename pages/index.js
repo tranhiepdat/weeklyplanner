@@ -106,6 +106,13 @@ const THEMES = [
   { key: "cutie",  name: "Cutie",   icon: "🎨", sw: ["#5b8fd1", "#e89bb8", "#fdf6ee"] },
   { key: "nature", name: "Nature",  icon: "🌿", sw: ["#6f9e57", "#a7c47f", "#f2f5e6"] },
 ];
+// Main section tabs (mobile-first: switch sections instead of long scroll)
+const SECTION_TABS = [
+  ["plan",  "📋", "Kế hoạch"],
+  ["stats", "📊", "Biểu đồ"],
+  ["habit", "💪", "Thói quen"],
+  ["word",  "📖", "Lời Chúa"],
+];
 
 // ===== Productivity scoring system =====
 // Every realm is valued. Base points are close together; real "impact" comes
@@ -687,7 +694,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
         onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
         className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
-          opacity: (isOptional && !task.done) ? .55 : 1,
+          opacity: celebrating ? 1 : (isDoneSettled ? .62 : (isOptional ? .5 : 1)),
           borderLeft: `5px solid ${accent}`,
           boxShadow: (celebrating || reversing) ? undefined : ([
             !isDoneSettled ? `inset 3px 0 0 ${accent}` : "",
@@ -704,7 +711,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           {task.done ? "✓" : ""}
         </div>
         <div style={{ flex: 1 }} onClick={guardTap(() => onToggle(task.id, !task.done))}>
-          <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4 }}>
+          <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
@@ -1602,6 +1609,16 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
   const dragRef = useRef(null);             // mutable target: { id, overSession, overIndex, ... }
   const rowRefs = useRef(new Map());
   const groupRefs = useRef(new Map());
+  const [pop, setPop] = useState(null);  // priority-select burst: { id, n, w, h }
+  const handleTap = (id) => {
+    const becoming = !mustIds.has(id);
+    onToggleMust(id);
+    if (becoming) {
+      playClick("pop"); haptic(14);
+      const el = rowRefs.current.get(id);
+      setPop({ id, n: (pop ? pop.n : 0) + 1, w: el ? el.offsetWidth : 280, h: el ? el.offsetHeight : 48 });
+    } else { playClick("soft"); haptic(6); }
+  };
 
   const computeTarget = (y) => {
     const d = dragRef.current; if (!d) return;
@@ -1669,17 +1686,18 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
                 return (
                   <div key={t.id}>
                     {isOver && overIndex === i && <PlanLine />}
-                    <div ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ marginBottom: 7 }}>
+                    <div ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ marginBottom: 7, position: "relative" }}>
                       <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
                         <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp} title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 26, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.1rem", touchAction: "none", userSelect: "none" }}>⠿</div>
-                        <div onClick={() => onToggleMust(t.id)} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s" }}>
-                          <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.25rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
+                        <div onClick={() => handleTap(t.id)} className={pop && pop.id === t.id ? "task-drop-pop" : ""} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: must ? "color-mix(in srgb, var(--c2) 12%, transparent)" : "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s, background .2s" }}>
+                          <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.3rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3 }}>{t.icon} {t.name}</div>
+                            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.icon} {t.name}</div>
                             <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".04em", color: must ? "var(--c1)" : "var(--c-muted2)" }}>{must ? "ƯU TIÊN HÔM NAY" : "chạm để ưu tiên · ưu tiên thấp"}</div>
                           </div>
                         </div>
                       </div>
+                      {pop && pop.id === t.id && <Particles key={pop.n} width={pop.w} height={pop.h} onDone={() => setPop(p => (p && p.id === t.id ? null : p))} />}
                     </div>
                   </div>
                 );
@@ -1707,8 +1725,6 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit
   const dObj = new Date(date + "T00:00:00");
   const label = date === TODAY ? "Hôm nay" : `${DAYS[dObj.getDay()]} ${fmt(dObj)}`;
   const toggleMust = (id) => {
-    const willMust = !mustIds.has(id);
-    playClick(willMust ? "pop" : "soft"); haptic(8);
     setMustIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
   const groups = PLAN_GROUPS.map(g => ({ ...g, items: sortTasks(tasks.filter(t => (t.session || "") === g.session), "manual", taskOrder) }));
@@ -1778,8 +1794,12 @@ export default function Home() {
   const [taskTier, setTaskTier] = useState({});         // { taskId: "must" | "optional" }  (Plan Day)
   const [plannedDays, setPlannedDays] = useState({});   // { "YYYY-MM-DD": true }
   const [planning, setPlanning] = useState(false);      // Plan Day sheet open
+  const [tab, setTab] = useState("plan");               // plan | stats | habit | word
+  const changeTab = (t) => { setTab(t); try { localStorage.setItem("dat-tab", t); } catch {} };
   useEffect(() => {
     try {
+      const tb = localStorage.getItem("dat-tab");
+      if (["plan", "stats", "habit", "word"].includes(tb)) setTab(tb);
       const m = localStorage.getItem("dat-sortmode");
       if (["session", "priority", "type"].includes(m)) setSortMode(m);
       const o = localStorage.getItem("dat-task-order");
@@ -2326,6 +2346,9 @@ export default function Home() {
         /* mood emoji pop on change */
         @keyframes emojiPop{0%{transform:scale(.55) rotate(-8deg)}60%{transform:scale(1.32)}100%{transform:scale(1)}}
         .mood-emoji-pop{animation:emojiPop .34s cubic-bezier(.34,1.6,.5,1);}
+        /* ===== tab panels (one section at a time) ===== */
+        .tab-panel{max-width:640px;margin:0 auto;animation:fadeUp .3s ease both;}
+        .section-tabs button:hover{filter:brightness(1.02);}
         /* ===== robust dashboard layout (no overlap, fills width) ===== */
         .col-main,.col-side{min-width:0;}
         @media(min-width:1000px){
@@ -2395,13 +2418,13 @@ export default function Home() {
           transition:background .45s cubic-bezier(.22,1,.36,1), opacity .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1), transform .25s cubic-bezier(.34,1.56,.64,1);}
         .task-row:hover{background:rgba(232,196,184,.22)}
         .task-row .task-name-text{color:#4a3030;transition:color .35s ease;}
-        .task-done{background:linear-gradient(135deg,rgba(168,184,154,.28),rgba(168,184,154,.12));}
-        .task-done:hover{background:linear-gradient(135deg,rgba(168,184,154,.34),rgba(168,184,154,.18));}
-        .task-done .task-name-text{color:#5a7050;}
+        .task-done{background:linear-gradient(135deg,rgba(95,170,95,.40),rgba(95,170,95,.15));}
+        .task-done:hover{background:linear-gradient(135deg,rgba(95,170,95,.48),rgba(95,170,95,.22));}
+        .task-done .task-name-text{color:#3f7a3f;}
         .check{width:18px;height:18px;border:1.5px solid #c9a0a0;border-radius:5px;
           flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;
           background:#fff;transition:all .25s cubic-bezier(.34,1.56,.64,1);font-size:11px;color:#fff;}
-        .check.on{background:#a8b89a;border-color:#a8b89a;transform:scale(1.08);}
+        .check.on{background:#56a256;border-color:#56a256;transform:scale(1.08);box-shadow:0 0 0 3px rgba(86,162,86,.22);}
         .tag{font-size:.62rem;padding:1px 7px;border-radius:10px;font-weight:700;}
         .gratitude{width:100%;border:none;border-bottom:1px solid var(--c-border);background:transparent;
           font-family:'Nunito',sans-serif;font-size:.83rem;color:#4a3030;
@@ -2510,20 +2533,37 @@ export default function Home() {
           </h1>
         </div>
 
-        {/* VERSE — English primary */}
-        <div className="f2" style={{ margin: "0 0 14px", padding: "18px 22px 18px 30px", background: "linear-gradient(135deg,rgba(122,74,74,.07),rgba(201,168,76,.07))", borderLeft: `3px solid ${gold}`, borderRadius: "0 12px 12px 0", position: "relative" }}>
-          <span style={{ position: "absolute", top: -8, left: 12, fontSize: "1.7rem", color: gold, opacity: .4, fontFamily: "serif" }}>❝</span>
-          <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontStyle: "italic", color: wine, lineHeight: 1.55 }}>
-            {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
-          </p>
-          {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>}
-          <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
+        {/* SECTION TABS — switch sections instead of long scrolling (mobile-friendly) */}
+        <div className="f1 section-tabs" style={{
+          position: "sticky", top: "env(safe-area-inset-top)", zIndex: 70,
+          margin: "0 -16px 14px", padding: "6px 14px",
+          background: "color-mix(in srgb, var(--c-bg) 92%, transparent)",
+          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+          borderBottom: "1px solid var(--c-border)",
+        }}>
+          <div style={{ display: "flex", gap: 4, paddingRight: 46, maxWidth: 640, margin: "0 auto" }}>
+            {SECTION_TABS.map(([k, em, lbl]) => {
+              const on = tab === k;
+              return (
+                <button key={k} data-sfx="pop" onClick={() => changeTab(k)} style={{
+                  flex: 1, padding: "7px 4px", borderRadius: 12, cursor: "pointer",
+                  border: on ? `1.5px solid ${wine}` : "1px solid transparent",
+                  background: on ? `color-mix(in srgb, ${wine} 13%, transparent)` : "transparent",
+                  color: on ? wine : "var(--c-muted2)", fontWeight: 700, fontSize: ".68rem",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all .2s", lineHeight: 1.1,
+                }}>
+                  <span style={{ fontSize: "1.2rem", lineHeight: 1 }}>{em}</span>
+                  {lbl}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* (day/week navigation moved to the fixed BOTTOM NAV BAR for easy thumb access) */}
-
-        <div className="main-grid">
-        <div className="col-main">
+        {/* ===== PLAN TAB ===== */}
+        {tab === "plan" && (
+        <div className="tab-panel" key="plan">
+        {/* PROGRESS RINGS + tasks + insights */}
         {/* PROGRESS RINGS — selected day + selected week */}
         <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
           <Ring pct={dayPct} label={selIsToday ? "HÔM NAY" : (DAYS[selDateObj.getDay()] + " " + fmt(selDateObj)).toUpperCase()} sub={`${dayDone}/${dayTasks.length}`} color={wine} loading={status==="loading"} />
@@ -2651,33 +2691,52 @@ export default function Home() {
 
         {/* INSIGHTS — analysis + coach note + recent days */}
         {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier} />}
-        </div>{/* end col-main */}
+        </div>
+        )}
 
-        <div className="col-side">
-        {/* ULTIMATE CHART — tasks / mood / push-ups / score, toggleable */}
-        <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
+        {/* ===== STATS TAB ===== */}
+        {tab === "stats" && (
+        <div className="tab-panel" key="stats">
+          <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
+          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
+          <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />
+        </div>
+        )}
 
-        {/* PUSH-UP TRACKER */}
-        <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} />
+        {/* ===== HABIT TAB ===== */}
+        {tab === "habit" && (
+        <div className="tab-panel" key="habit">
+          <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} />
+        </div>
+        )}
 
-        {/* SCRIPTURE CARD with image — English primary */}
-        <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
-          <img src={COVERS[(coverIdx + 2) % COVERS.length]} alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
-          <div style={{ padding: 18 }}>
-            <div className="card-title" style={{ justifyContent: "space-between" }}>
-              <span>📖 Scripture · Lời Chúa</span>
-              <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
-            </div>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
+        {/* ===== WORD TAB ===== */}
+        {tab === "word" && (
+        <div className="tab-panel" key="word">
+          <div className="f2" style={{ margin: "0 0 14px", padding: "18px 22px 18px 30px", background: "linear-gradient(135deg,rgba(122,74,74,.07),rgba(201,168,76,.07))", borderLeft: `3px solid ${gold}`, borderRadius: "0 12px 12px 0", position: "relative" }}>
+            <span style={{ position: "absolute", top: -8, left: 12, fontSize: "1.7rem", color: gold, opacity: .4, fontFamily: "serif" }}>❝</span>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontStyle: "italic", color: wine, lineHeight: 1.55 }}>
               {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
             </p>
-            {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>}
-            <p style={{ fontSize: ".7rem", color: "var(--c-muted)", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""}</p>
+            {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 6 }}>{v.vi}</p>}
+            <cite style={{ display: "block", marginTop: 4, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref} ✝️</cite>
+          </div>
+          <div className="f4 card" style={{ marginBottom: 14, overflow: "hidden", padding: 0 }}>
+            <img src={COVERS[(coverIdx + 2) % COVERS.length]} alt="" style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
+            <div style={{ padding: 18 }}>
+              <div className="card-title" style={{ justifyContent: "space-between" }}>
+                <span>📖 Scripture · Lời Chúa</span>
+                <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} style={{ fontSize: ".68rem", padding: "3px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
+              </div>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontStyle: "italic", color: wine, lineHeight: 1.7 }}>
+                {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
+              </p>
+              {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 8 }}>{v.vi}</p>}
+              <p style={{ fontSize: ".7rem", color: "var(--c-muted)", marginTop: 8, borderTop: "1px solid rgba(201,160,160,.2)", paddingTop: 8 }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""}</p>
+            </div>
           </div>
         </div>
-
-        </div>{/* end col-side */}
-        </div>{/* end main-grid */}
+        )}
 
         {/* FOOTER */}
         <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "var(--c-muted)" }}>
@@ -2703,7 +2762,8 @@ export default function Home() {
           />
         )}
 
-        {/* BOTTOM NAV BAR — day/week prev·next + reset today, centered in the thumb zone */}
+        {/* BOTTOM NAV BAR — day/week prev·next + reset today (only on the Plan tab) */}
+        {tab === "plan" && (
         <div style={{
           position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 85,
           background: "color-mix(in srgb, var(--c-bg) 92%, transparent)",
@@ -2729,6 +2789,7 @@ export default function Home() {
             </div>
           </div>
         </div>
+        )}
 
         {/* FLOATING CREATE BUTTON */}
         <button data-sfx="pop" onClick={() => setShowCreate(true)} title="Tạo công việc" style={{
