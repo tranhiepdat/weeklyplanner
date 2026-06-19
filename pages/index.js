@@ -1614,7 +1614,7 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
     const becoming = !mustIds.has(id);
     onToggleMust(id);
     if (becoming) {
-      playClick("pop"); haptic(14);
+      playDing(); haptic(16);
       const el = rowRefs.current.get(id);
       setPop({ id, n: (pop ? pop.n : 0) + 1, w: el ? el.offsetWidth : 280, h: el ? el.offsetHeight : 48 });
     } else { playClick("soft"); haptic(6); }
@@ -1689,7 +1689,7 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
                     <div ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ marginBottom: 7, position: "relative" }}>
                       <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
                         <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp} title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 26, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.1rem", touchAction: "none", userSelect: "none" }}>⠿</div>
-                        <div onClick={() => handleTap(t.id)} className={pop && pop.id === t.id ? "task-drop-pop" : ""} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: must ? "color-mix(in srgb, var(--c2) 12%, transparent)" : "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s, background .2s" }}>
+                        <div onClick={() => handleTap(t.id)} className={"plan-row" + (pop && pop.id === t.id ? " task-drop-pop" : "")} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: must ? "color-mix(in srgb, var(--c2) 12%, transparent)" : "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s, background .2s" }}>
                           <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.3rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.icon} {t.name}</div>
@@ -2346,10 +2346,37 @@ export default function Home() {
         /* mood emoji pop on change */
         @keyframes emojiPop{0%{transform:scale(.55) rotate(-8deg)}60%{transform:scale(1.32)}100%{transform:scale(1)}}
         .mood-emoji-pop{animation:emojiPop .34s cubic-bezier(.34,1.6,.5,1);}
-        /* ===== tab panels (one section at a time) ===== */
-        .tab-panel{max-width:640px;margin:0 auto;animation:fadeUp .3s ease both;}
+        /* ===== responsive: desktop = 2 columns (all visible); mobile = bottom tabs ===== */
+        .main-pad{max-width:1400px;margin:0 auto;padding:env(safe-area-inset-top) 16px calc(72px + env(safe-area-inset-bottom));}
+        .day-nav{display:flex;}
+        .section-tabs{display:flex;}
+        .fab{display:flex;align-items:center;justify-content:center;}
         .section-tabs button:hover{filter:brightness(1.02);}
-        /* ===== robust dashboard layout (no overlap, fills width) ===== */
+        @media(max-width:999px){
+          .layout,.col-a,.col-b{display:block;}
+          .panel{display:none;}
+          .panel.active{display:block;max-width:640px;margin:0 auto;animation:fadeUp .3s ease both;}
+          .day-nav{display:none;}
+          .day-nav.is-plan{display:flex;}
+          .tab-plan{padding-bottom:calc(120px + env(safe-area-inset-bottom));}
+          .fab-create{bottom:calc(112px + env(safe-area-inset-bottom));}
+          .fab-chat{bottom:calc(178px + env(safe-area-inset-bottom));}
+          .tab-stats .fab,.tab-habit .fab,.tab-word .fab{display:none;}
+        }
+        @media(min-width:1000px){
+          .layout{display:flex;align-items:flex-start;gap:18px;max-width:1180px;margin:0 auto;}
+          .col-a{flex:1 1 56%;min-width:0;}
+          .col-b{flex:1 1 44%;min-width:0;}
+          .panel{display:block;}
+          .section-tabs{display:none;}
+          .main-pad{padding-bottom:calc(74px + env(safe-area-inset-bottom));}
+          .fab-create{bottom:calc(60px + env(safe-area-inset-bottom));}
+          .fab-chat{bottom:calc(126px + env(safe-area-inset-bottom));}
+        }
+        /* Cyber theme: square the new bars + plan rows, add neon */
+        .theme-dark .bottom-bar{background:rgba(8,18,14,.94)!important;border-top:1px solid rgba(0,255,156,.3)!important;box-shadow:0 0 18px rgba(0,255,156,.12)!important;}
+        .theme-dark .plan-row{border-radius:0!important;}
+        .theme-dark .hero-banner{border-radius:0!important;border-color:rgba(0,255,156,.3)!important;box-shadow:0 0 18px rgba(0,255,156,.1)!important;}
         .col-main,.col-side{min-width:0;}
         @media(min-width:1000px){
           .main-grid{display:flex;align-items:flex-start;gap:18px;}
@@ -2473,7 +2500,7 @@ export default function Home() {
       `}</style>
 
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "env(safe-area-inset-top) 16px calc(88px + env(safe-area-inset-bottom))" }}>
+      <div className={"main-pad tab-" + tab}>
 
         {/* THEME SWITCH — floating top-right, opens style picker */}
         <button data-sfx="swoosh" onClick={() => setShowThemePicker(v => !v)} title="Đổi giao diện" style={{
@@ -2521,7 +2548,7 @@ export default function Home() {
 
         {/* HERO with GIF banner */}
         <div className="f1" style={{ textAlign: "center", padding: "26px 0 14px" }}>
-          <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", marginBottom: 16, border: "1px solid rgba(201,160,160,.3)", boxShadow: "0 6px 24px rgba(122,74,74,.12)" }}>
+          <div className="hero-banner" style={{ position: "relative", borderRadius: 18, overflow: "hidden", marginBottom: 16, border: "1px solid rgba(201,160,160,.3)", boxShadow: "0 6px 24px rgba(122,74,74,.12)" }}>
             <img src={COVERS[coverIdx]} alt="" style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(253,248,242,0) 40%, rgba(253,248,242,.9) 100%)" }} />
             <div style={{ position: "absolute", bottom: 10, left: 0, right: 0 }}>
@@ -2533,36 +2560,11 @@ export default function Home() {
           </h1>
         </div>
 
-        {/* SECTION TABS — switch sections instead of long scrolling (mobile-friendly) */}
-        <div className="f1 section-tabs" style={{
-          position: "sticky", top: "env(safe-area-inset-top)", zIndex: 70,
-          margin: "0 -16px 14px", padding: "6px 14px",
-          background: "color-mix(in srgb, var(--c-bg) 92%, transparent)",
-          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-          borderBottom: "1px solid var(--c-border)",
-        }}>
-          <div style={{ display: "flex", gap: 4, paddingRight: 46, maxWidth: 640, margin: "0 auto" }}>
-            {SECTION_TABS.map(([k, em, lbl]) => {
-              const on = tab === k;
-              return (
-                <button key={k} data-sfx="pop" onClick={() => changeTab(k)} style={{
-                  flex: 1, padding: "7px 4px", borderRadius: 12, cursor: "pointer",
-                  border: on ? `1.5px solid ${wine}` : "1px solid transparent",
-                  background: on ? `color-mix(in srgb, ${wine} 13%, transparent)` : "transparent",
-                  color: on ? wine : "var(--c-muted2)", fontWeight: 700, fontSize: ".68rem",
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all .2s", lineHeight: 1.1,
-                }}>
-                  <span style={{ fontSize: "1.2rem", lineHeight: 1 }}>{em}</span>
-                  {lbl}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ===== PLAN TAB ===== */}
-        {tab === "plan" && (
-        <div className="tab-panel" key="plan">
+        {/* CONTENT — desktop: 2 columns (all visible); mobile: one tab at a time */}
+        <div className="layout">
+        <div className="col-a">
+        {/* ===== PLAN ===== */}
+        <div className={"panel" + (tab === "plan" ? " active" : "")}>
         {/* PROGRESS RINGS + tasks + insights */}
         {/* PROGRESS RINGS — selected day + selected week */}
         <div className="f2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
@@ -2692,27 +2694,20 @@ export default function Home() {
         {/* INSIGHTS — analysis + coach note + recent days */}
         {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier} />}
         </div>
-        )}
+        </div>{/* end col-a */}
 
-        {/* ===== STATS TAB ===== */}
-        {tab === "stats" && (
-        <div className="tab-panel" key="stats">
+        <div className="col-b">
+        {/* ===== STATS ===== */}
+        <div className={"panel" + (tab === "stats" ? " active" : "")}>
           <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
-          <WeekChart weekDays={weekDays} byDate={byDate} moods={moods} />
           <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />
         </div>
-        )}
-
-        {/* ===== HABIT TAB ===== */}
-        {tab === "habit" && (
-        <div className="tab-panel" key="habit">
+        {/* ===== HABIT ===== */}
+        <div className={"panel" + (tab === "habit" ? " active" : "")}>
           <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} />
         </div>
-        )}
-
-        {/* ===== WORD TAB ===== */}
-        {tab === "word" && (
-        <div className="tab-panel" key="word">
+        {/* ===== WORD ===== */}
+        <div className={"panel" + (tab === "word" ? " active" : "")}>
           <div className="f2" style={{ margin: "0 0 14px", padding: "18px 22px 18px 30px", background: "linear-gradient(135deg,rgba(122,74,74,.07),rgba(201,168,76,.07))", borderLeft: `3px solid ${gold}`, borderRadius: "0 12px 12px 0", position: "relative" }}>
             <span style={{ position: "absolute", top: -8, left: 12, fontSize: "1.7rem", color: gold, opacity: .4, fontFamily: "serif" }}>❝</span>
             <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontStyle: "italic", color: wine, lineHeight: 1.55 }}>
@@ -2736,7 +2731,8 @@ export default function Home() {
             </div>
           </div>
         </div>
-        )}
+        </div>{/* end col-b */}
+        </div>{/* end layout */}
 
         {/* FOOTER */}
         <div style={{ textAlign: "center", padding: "28px 0 8px", fontFamily: "'Cormorant Garamond',serif", fontStyle: "italic", fontSize: ".88rem", color: "var(--c-muted)" }}>
@@ -2762,57 +2758,72 @@ export default function Home() {
           />
         )}
 
-        {/* BOTTOM NAV BAR — day/week prev·next + reset today (only on the Plan tab) */}
-        {tab === "plan" && (
-        <div style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 85,
-          background: "color-mix(in srgb, var(--c-bg) 92%, transparent)",
+        {/* BOTTOM BAR — day/week nav (Plan tab) stacked above the section tabs (always) */}
+        <div className="bottom-bar" style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 86,
+          background: "color-mix(in srgb, var(--c-bg) 93%, transparent)",
           backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
           borderTop: "1px solid var(--c-border)",
-          padding: "7px 12px calc(7px + env(safe-area-inset-bottom))",
-          boxShadow: "0 -4px 18px rgba(0,0,0,.10)",
+          boxShadow: "0 -4px 18px rgba(0,0,0,.12)",
+          paddingBottom: "env(safe-area-inset-bottom)",
         }}>
-          <div style={{ maxWidth: 460, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+          <div className={"day-nav" + (tab === "plan" ? " is-plan" : "")} style={{ maxWidth: 480, margin: "0 auto", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "7px 12px 5px" }}>
             <div style={{ display: "flex", gap: 6 }}>
               <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={weekNavBtn}>« Tuần</button>
               <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={dayNavBtn}>‹ Ngày</button>
             </div>
-            <div style={{ textAlign: "center", lineHeight: 1.08, minWidth: 0 }}>
-              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".95rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
+            <div style={{ textAlign: "center", lineHeight: 1.04, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: ".9rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{DAYS_SHORT[selDateObj.getDay()]} · {fmt(selDateObj)}</div>
               {selIsToday
-                ? <div style={{ fontSize: ".52rem", fontWeight: 700, letterSpacing: ".12em", color: gold }}>● HÔM NAY</div>
-                : <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{ fontSize: ".58rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 22%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "2px 10px", cursor: "pointer", whiteSpace: "nowrap", marginTop: 1 }}>↺ Hôm nay</button>}
+                ? <div style={{ fontSize: ".5rem", fontWeight: 700, letterSpacing: ".12em", color: gold }}>● HÔM NAY</div>
+                : <button data-sfx="confirm" onClick={resetToToday} title="Về hôm nay" style={{ fontSize: ".55rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 22%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "1px 9px", cursor: "pointer", whiteSpace: "nowrap" }}>↺ Hôm nay</button>}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button data-sfx="swoosh" onClick={() => shiftDay(1)} title="Ngày sau" style={dayNavBtn}>Ngày ›</button>
               <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={weekNavBtn}>Tuần »</button>
             </div>
           </div>
+          <div className="section-tabs" style={{ maxWidth: 560, margin: "0 auto", gap: 4, padding: "6px 10px 6px" }}>
+            {SECTION_TABS.map(([k, em, lbl]) => {
+              const on = tab === k;
+              return (
+                <button key={k} data-sfx="pop" onClick={() => changeTab(k)} style={{
+                  flex: 1, padding: "5px 4px", borderRadius: 12, cursor: "pointer",
+                  border: on ? `1.5px solid ${wine}` : "1px solid transparent",
+                  background: on ? `color-mix(in srgb, ${wine} 14%, transparent)` : "transparent",
+                  color: on ? wine : "var(--c-muted2)", fontWeight: 700, fontSize: ".64rem",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all .2s", lineHeight: 1.1,
+                }}>
+                  <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>{em}</span>
+                  {lbl}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        )}
 
         {/* FLOATING CREATE BUTTON */}
-        <button data-sfx="pop" onClick={() => setShowCreate(true)} title="Tạo công việc" style={{
-          position: "fixed", bottom: "calc(76px + env(safe-area-inset-bottom))", right: 18, zIndex: 90,
+        <button data-sfx="pop" onClick={() => setShowCreate(true)} title="Tạo công việc" className="fab fab-create" style={{
+          position: "fixed", right: 18, zIndex: 90,
           width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
           border: theme === "dark" ? "1.5px solid rgba(0,255,156,.6)" : "none",
           background: theme === "dark" ? "rgba(8,18,14,.92)" : wine,
           color: theme === "dark" ? "var(--c1)" : "#fff",
           fontSize: "1.7rem", fontWeight: 300, cursor: "pointer",
           boxShadow: theme === "dark" ? "0 0 18px rgba(0,255,156,.45)" : "0 6px 18px rgba(122,74,74,.4)",
-          display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+          lineHeight: 1,
         }}>＋</button>
 
         {/* FLOATING CHAT BUTTON */}
-        <button data-sfx="pop" onClick={() => setShowChat(true)} title="Chat tạo việc với AI" style={{
-          position: "fixed", bottom: "calc(142px + env(safe-area-inset-bottom))", right: 18, zIndex: 90,
+        <button data-sfx="pop" onClick={() => setShowChat(true)} title="Chat tạo việc với AI" className="fab fab-chat" style={{
+          position: "fixed", right: 18, zIndex: 90,
           width: 58, height: 58, borderRadius: theme === "dark" ? 0 : 29,
           border: theme === "dark" ? "1.5px solid rgba(0,208,255,.6)" : "none",
           background: theme === "dark" ? "rgba(8,18,14,.92)" : "var(--c2)",
           color: theme === "dark" ? "var(--c2)" : "#fff",
           fontSize: "1.5rem", cursor: "pointer",
           boxShadow: theme === "dark" ? "0 0 18px rgba(0,208,255,.4)" : "0 6px 18px rgba(201,168,76,.45)",
-          display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+          lineHeight: 1,
         }}>💬</button>
 
         {showCreate && (
