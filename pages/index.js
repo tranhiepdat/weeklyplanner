@@ -54,7 +54,7 @@ function tagStyle(type = "") {
   if (t.includes("personal"))      return { background: "#ede9fe", color: "#6d28d9" };
   if (t.includes("chore"))         return { background: "#fef9c3", color: "#854d0e" };
   if (t.includes("health"))        return { background: "#fce7f3", color: "#9d174d" };
-  if (t.includes("entertainment")) return { background: "#dcfce7", color: "#166534" };
+  if (t.includes("entertainment")) return { background: "#cffafe", color: "#0e7490" };
   if (t.includes("family"))        return { background: "#ffedd5", color: "#9a3412" };
   if (t.includes("vacation"))      return { background: "#fee2e2", color: "#991b1b" };
   return { background: "#e0f2fe", color: "#0369a1" };
@@ -67,7 +67,7 @@ function typeColor(type = "") {
   if (t.includes("personal"))      return "#7c3aed";
   if (t.includes("chore"))         return "#b45309";
   if (t.includes("health"))        return "#db2777";
-  if (t.includes("entertainment")) return "#16a34a";
+  if (t.includes("entertainment")) return "#0891b2";
   if (t.includes("family"))        return "#ea580c";
   if (t.includes("vacation"))      return "#dc2626";
   return "#9aa0a6";
@@ -121,7 +121,7 @@ const SECTION_TABS = [
 // of the day earns you a fun identity title.
 const SCORE_CATS = {
   work:     { key: "work",     label: "Công Việc", emoji: "⚒️", color: "#2f6df0", title: "Thợ Cày Sự Nghiệp", desc: "việc ở công ty" },
-  personal: { key: "personal", label: "Bản Thân",  emoji: "🚀", color: "#7c3aed", title: "Nhà Kiến Tạo",      desc: "dự án & việc cá nhân" },
+  personal: { key: "personal", label: "Bản Thân",  emoji: "🚀", color: "#7c3aed", title: "Nhà Kiến Tạo",      desc: "phát triển bản thân & dự án cá nhân" },
   chore:    { key: "chore",    label: "Việc Nhà",  emoji: "🧹", color: "#c0883b", title: "Quán Quân Tổ Ấm",   desc: "dọn dẹp, chi tiêu, lặt vặt" },
   care:     { key: "care",     label: "Chăm Sóc",  emoji: "🌿", color: "#3aa17e", title: "Trái Tim Ấm Áp",    desc: "gia đình, sức khỏe, nghỉ ngơi" },
 };
@@ -1765,6 +1765,62 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit
   );
 }
 
+// ---- Review: weekly overall + multi-week focus (which realm you leaned into) ----
+function ReviewPanel({ tasks }) {
+  const weeks = {};
+  tasks.forEach(t => {
+    if (!t.date) return;
+    const wkKey = iso(mondayOf(new Date(t.date + "T00:00:00")));
+    const w = weeks[wkKey] || (weeks[wkKey] = { cats: { work: 0, personal: 0, chore: 0, care: 0 }, done: 0, total: 0 });
+    w.cats[taskCategory(t)] += 1; w.total += 1; if (t.done) w.done += 1;
+  });
+  const keys = Object.keys(weeks).sort().reverse().slice(0, 8);
+  const thisWk = iso(mondayOf(new Date()));
+  const dominant = (w) => { let best = null, bv = 0; CAT_ORDER.forEach(k => { if (w.cats[k] > bv) { bv = w.cats[k]; best = k; } }); return best; };
+  const weekLabel = (wkKey) => { const m = new Date(wkKey + "T00:00:00"); const s = new Date(m); s.setDate(m.getDate() + 6); return `${fmt(m)}–${fmt(s)}`; };
+  const tw = weeks[thisWk];
+  const twDom = tw ? dominant(tw) : null;
+
+  return (
+    <div className="card f2" style={{ marginBottom: 14, padding: "16px 18px" }}>
+      <div className="card-title">🔍 Nhìn lại</div>
+      {tw && twDom ? (
+        <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.5, marginBottom: 12 }}>
+          Tuần này bạn nghiêng về <strong style={{ color: SCORE_CATS[twDom].color }}>{SCORE_CATS[twDom].emoji} {SCORE_CATS[twDom].label}</strong> — xong <strong>{tw.done}/{tw.total}</strong> việc{tw.done ? `, xứng danh ${SCORE_CATS[twDom].title}` : ""}.
+        </div>
+      ) : (
+        <div style={{ fontSize: ".8rem", color: "var(--c-muted2)", marginBottom: 12, fontStyle: "italic" }}>Tuần này chưa có việc nào để nhìn lại.</div>
+      )}
+
+      {keys.length > 0 && <div style={{ fontSize: ".62rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted2)", marginBottom: 8 }}>VÀI TUẦN GẦN ĐÂY · BẠN TẬP TRUNG VÀO GÌ</div>}
+      {keys.map(k => {
+        const w = weeks[k]; const dom = dominant(w);
+        return (
+          <div key={k} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3, gap: 8 }}>
+              <span style={{ fontSize: ".72rem", color: k === thisWk ? wine : "var(--c-muted)", fontWeight: k === thisWk ? 700 : 500, whiteSpace: "nowrap" }}>{k === thisWk ? "Tuần này" : weekLabel(k)}</span>
+              <span style={{ fontSize: ".66rem", color: "var(--c-muted)", whiteSpace: "nowrap" }}>{dom && <span style={{ color: SCORE_CATS[dom].color, fontWeight: 700 }}>{SCORE_CATS[dom].emoji} {SCORE_CATS[dom].label}</span>} · {w.done}/{w.total}</span>
+            </div>
+            <div style={{ display: "flex", height: 8, borderRadius: 5, overflow: "hidden", background: "var(--c-track)" }}>
+              {CAT_ORDER.map(c => w.cats[c] > 0 && (
+                <div key={c} title={`${SCORE_CATS[c].label}: ${w.cats[c]}`} style={{ width: `${(w.cats[c] / w.total) * 100}%`, background: SCORE_CATS[c].color, opacity: .92 }} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
+        {CAT_ORDER.map(c => (
+          <span key={c} style={{ fontSize: ".6rem", color: SCORE_CATS[c].color, display: "flex", alignItems: "center", gap: 3 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: SCORE_CATS[c].color, display: "inline-block" }} /> {SCORE_CATS[c].emoji} {SCORE_CATS[c].label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tasks, setTasks]   = useState([]);
   const [status, setStatus] = useState("loading");
@@ -1924,6 +1980,8 @@ export default function Home() {
     document.addEventListener("visibilitychange", onVis);
     return () => { window.removeEventListener("focus", onVis); document.removeEventListener("visibilitychange", onVis); };
   }, [refetchPushups]);
+  // Also re-pull when opening the Habit tab
+  useEffect(() => { if (tab === "habit") refetchPushups(); }, [tab, refetchPushups]);
   const writePushup = (date, value) => {
     const next = Math.max(0, Math.round(value) || 0);
     setPushups(prev => {
@@ -2700,6 +2758,7 @@ export default function Home() {
         <div className="col-b">
         {/* ===== STATS ===== */}
         <div className={"panel" + (tab === "stats" ? " active" : "")}>
+          <ReviewPanel tasks={tasks} />
           <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
           <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />
         </div>
