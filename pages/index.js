@@ -995,7 +995,7 @@ function ScoreChart({ weekDays, byDate, moods }) {
   return (
     <div className="card f3" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6, padding: "0 4px" }}>
-        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>🏆 ĐIỂM NĂNG SUẤT · TUẦN NÀY</span>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>🏆 ĐIỂM NĂNG SUẤT · {weekDays.includes(TODAY) ? "TUẦN NÀY" : "TUẦN ĐANG XEM"}</span>
         <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{weekTotal}</span>
       </div>
       <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 2, flexWrap: "wrap" }}>
@@ -2759,6 +2759,17 @@ export default function Home() {
         {/* ===== STATS ===== */}
         <div className={"panel" + (tab === "stats" ? " active" : "")}>
           <ReviewPanel tasks={tasks} />
+          {/* week navigator for the charts below — step back/forward to compare weeks */}
+          <div className="card f2" style={{ marginBottom: 14, padding: "9px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={{ padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${wine}`, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".72rem", whiteSpace: "nowrap" }}>‹ Tuần trước</button>
+            <div style={{ textAlign: "center", minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1rem", fontWeight: 600, color: wine, whiteSpace: "nowrap" }}>{weekLabel}</div>
+              {isCurrentWeek
+                ? <div style={{ fontSize: ".55rem", fontWeight: 700, letterSpacing: ".1em", color: gold }}>● TUẦN NÀY</div>
+                : <button data-sfx="confirm" onClick={resetToToday} title="Về tuần này" style={{ fontSize: ".58rem", fontWeight: 700, color: wine, background: `color-mix(in srgb, ${gold} 20%, transparent)`, border: `1px solid ${gold}`, borderRadius: 12, padding: "1px 9px", cursor: "pointer", whiteSpace: "nowrap", marginTop: 1 }}>↩ Về tuần này</button>}
+            </div>
+            <button data-sfx="swoosh" onClick={() => shiftWeek(1)} title="Tuần sau" style={{ padding: "8px 12px", borderRadius: 10, border: `1.5px solid ${wine}`, background: "var(--c-surface)", color: wine, cursor: "pointer", fontWeight: 700, fontSize: ".72rem", whiteSpace: "nowrap" }}>Tuần sau ›</button>
+          </div>
           <UltimateChart weekDays={weekDays} byDate={byDate} moods={moods} pushups={pushups} />
           <ScoreChart weekDays={weekDays} byDate={byDate} moods={moods} />
         </div>
