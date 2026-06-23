@@ -52,7 +52,7 @@ function tagStyle(type = "") {
   const t = type.toLowerCase();
   if (t.includes("work"))          return { background: "#dbeafe", color: "#1d4ed8" };
   if (t.includes("personal"))      return { background: "#ede9fe", color: "#6d28d9" };
-  if (t.includes("chore"))         return { background: "#fef9c3", color: "#854d0e" };
+  if (t.includes("chore"))         return { background: "#e7e1d6", color: "#5f4a37" };
   if (t.includes("health"))        return { background: "#fce7f3", color: "#9d174d" };
   if (t.includes("entertainment")) return { background: "#cffafe", color: "#0e7490" };
   if (t.includes("family"))        return { background: "#ffedd5", color: "#9a3412" };
@@ -65,7 +65,7 @@ function typeColor(type = "") {
   const t = type.toLowerCase();
   if (t.includes("work"))          return "#2563eb";
   if (t.includes("personal"))      return "#7c3aed";
-  if (t.includes("chore"))         return "#b45309";
+  if (t.includes("chore"))         return "#8a6d57";
   if (t.includes("health"))        return "#db2777";
   if (t.includes("entertainment")) return "#0891b2";
   if (t.includes("family"))        return "#ea580c";
