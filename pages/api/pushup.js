@@ -42,11 +42,11 @@ export default async function handler(req, res) {
     "Notion-Version": "2022-06-28",
   };
 
-  // GET — return all counts as { "YYYY-MM-DD": n }
+  // GET — return all counts as { "YYYY-MM-DD": n }. Newest-first so dup rows resolve to the latest.
   if (req.method === "GET") {
     try {
       const r = await fetch(`https://api.notion.com/v1/databases/${PUSHUP_DB_ID}/query`, {
-        method: "POST", headers, body: JSON.stringify({ page_size: 100 }),
+        method: "POST", headers, body: JSON.stringify({ page_size: 100, sorts: [{ timestamp: "last_edited_time", direction: "descending" }] }),
       });
       if (!r.ok) { const e = await r.json(); return res.status(r.status).json({ error: e.message }); }
       const data = await r.json();
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         let day = null;
         for (const p of Object.values(props)) { if (p.type === "title") { day = p.title?.[0]?.plain_text; break; } }
         const n = props.Count?.number;
-        if (day && typeof n === "number") counts[day] = n;
+        if (day && typeof n === "number" && counts[day] === undefined) counts[day] = n; // first = newest
       });
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ counts });
@@ -75,10 +75,15 @@ export default async function handler(req, res) {
 
       const q = await fetch(`https://api.notion.com/v1/databases/${PUSHUP_DB_ID}/query`, {
         method: "POST", headers,
-        body: JSON.stringify({ filter: { property: titleName, title: { equals: date } } }),
+        body: JSON.stringify({ filter: { property: titleName, title: { equals: date } }, sorts: [{ timestamp: "last_edited_time", direction: "descending" }] }),
       });
       const qd = await q.json();
-      const existing = qd.results?.[0];
+      const rows = qd.results || [];
+      const existing = rows[0];
+      // archive duplicate rows for this date (best effort)
+      await Promise.all(rows.slice(1).map(p =>
+        fetch(`https://api.notion.com/v1/pages/${p.id}`, { method: "PATCH", headers, body: JSON.stringify({ archived: true }) }).catch(() => {})
+      ));
 
       const props = {
         [titleName]: { title: [{ text: { content: date } }] },

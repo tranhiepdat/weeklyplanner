@@ -849,7 +849,7 @@ function SortableTaskList({ items, draggable, onReorder, renderRow }) {
 }
 
 // ---- Mood slider (Bible-themed) for a given day ----
-function MoodSlider({ date, value, onChange }) {
+function MoodSlider({ date, value, onChange, syncErr }) {
   const info = moodInfo(value || 3);
   const v = value || 3;
   const isToday = date === TODAY;
@@ -863,6 +863,11 @@ function MoodSlider({ date, value, onChange }) {
         <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>TÂM TRẠNG · {dayLabel}</span>
         <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>Tv 118:24</span>
       </div>
+      {syncErr && (
+        <div style={{ fontSize: ".68rem", lineHeight: 1.5, color: "#b3541e", background: "rgba(217,119,40,.10)", border: "1px solid rgba(217,119,40,.32)", borderRadius: 10, padding: "7px 11px", marginBottom: 12 }}>
+          ⚠ Chưa đồng bộ được với Notion — đang lưu tạm trên máy này, sẽ thử lại sau.
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div key={v} className="mood-emoji-pop" style={{ fontSize: "2.4rem", lineHeight: 1, filter: value ? "none" : "grayscale(.6) opacity(.6)", minWidth: 44, textAlign: "center" }}>
           {info?.emoji}
@@ -1475,7 +1480,7 @@ function pushupCoach(today, best, streak) {
   if (today >= 20) return `${today} cái — phong độ ổn định! Giữ nhịp này nhé 🔥`;
   return `${today} cái — khởi động tốt! Thêm vài cái nữa nào 🌱`;
 }
-function PushupTracker({ pushups, weekDays, selectedDate, onAdd, onSet }) {
+function PushupTracker({ pushups, weekDays, selectedDate, onAdd, onSet, syncErr }) {
   const isToday = selectedDate === TODAY;
   const dObj = new Date(selectedDate + "T00:00:00");
   const dayLabel = isToday ? "HÔM NAY" : `${DAYS[dObj.getDay()].toUpperCase()} · ${fmt(dObj)}`;
@@ -1504,6 +1509,12 @@ function PushupTracker({ pushups, weekDays, selectedDate, onAdd, onSet }) {
         <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>💪 HÍT ĐẤT · {dayLabel}</span>
         <span style={{ fontSize: ".66rem", color: "var(--c-muted2)" }}>🔥 {streak} ngày liên tiếp · 🏆 kỷ lục {best}</span>
       </div>
+
+      {syncErr && (
+        <div style={{ fontSize: ".68rem", lineHeight: 1.5, color: "#b3541e", background: "rgba(217,119,40,.10)", border: "1px solid rgba(217,119,40,.32)", borderRadius: 10, padding: "7px 11px", marginBottom: 12 }}>
+          ⚠ Chưa đồng bộ được với Notion — số đang lưu tạm trên máy này. Mở <b>💪 Push-up Tracker</b> trong Notion → ••• → <b>Connections</b> → thêm integration (giống các bảng đang chạy được).
+        </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
         {editing ? (
@@ -1835,6 +1846,7 @@ export default function Home() {
   const [verse, setVerse] = useState(VERSES[0]);
   const [verseLoading, setVerseLoading] = useState(false);
   const [moods, setMoods] = useState({}); // date -> score, from localStorage
+  const [moodErr, setMoodErr] = useState(false); // true if Notion mood sync is failing
   const [showCreate, setShowCreate] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [theme, setTheme] = useState("light");
@@ -1952,19 +1964,21 @@ export default function Home() {
   // Push-ups: local cache + Notion sync (synced across devices). Ref keeps the
   // latest counts for arithmetic without stale closures.
   const pushupsRef = useRef({});
+  const [pushupErr, setPushupErr] = useState(false); // true if Notion sync is failing
   useEffect(() => { pushupsRef.current = pushups; }, [pushups]);
   const refetchPushups = useCallback(() => {
     fetch("/api/pushup")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
         if (!d || !d.counts) return;
+        setPushupErr(false);
         setPushups(prev => {
           const merged = { ...prev, ...d.counts };
           try { localStorage.setItem("dat-pushups", JSON.stringify(merged)); } catch {}
           return merged;
         });
       })
-      .catch(() => {});
+      .catch(() => setPushupErr(true));
   }, []);
   useEffect(() => {
     try {
@@ -1992,7 +2006,7 @@ export default function Home() {
     fetch("/api/pushup", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date, count: next }),
-    }).catch(() => {});
+    }).then(r => setPushupErr(!r.ok)).catch(() => setPushupErr(true));
   };
   const addPushupsFor = (date, delta) => writePushup(date, (pushupsRef.current[date] || 0) + delta);
   const setPushupsFor = (date, value) => writePushup(date, value);
@@ -2138,7 +2152,7 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date, score }),
-    }).catch(() => { /* stays in local cache */ });
+    }).then(r => setMoodErr(!r.ok)).catch(() => setMoodErr(true)); // stays in local cache either way
   };
 
   // Week days for current weekMonday
@@ -2186,27 +2200,41 @@ export default function Home() {
     // eslint-disable-next-line
   }, [weekMonday]);
 
-  // Load moods: local cache first (instant), then Notion to sync across devices
-  useEffect(() => {
-    const local = {};
-    weekDays.forEach(d => { const v = getMood(d); if (v) local[d] = v; });
-    setMoods(local);
+  // Pull moods from Notion (source of truth) and merge into local cache. Derives the
+  // visible week from weekMonday so its only dep is weekMonday (stable focus listener).
+  const refetchMoods = useCallback(() => {
+    const days = [];
+    for (let i = 0; i < 7; i++) { const dd = new Date(weekMonday); dd.setDate(weekMonday.getDate() + i); days.push(iso(dd)); }
     fetch("/api/mood")
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
         if (!d || !d.moods) return;
-        // merge Notion moods (source of truth) and refresh local cache
+        setMoodErr(false);
         setMoods(prev => {
           const merged = { ...prev };
-          weekDays.forEach(day => {
+          days.forEach(day => {
             if (d.moods[day]) { merged[day] = d.moods[day]; saveMood(day, d.moods[day]); }
           });
           return merged;
         });
       })
-      .catch(() => { /* keep local cache */ });
+      .catch(() => setMoodErr(true));
+  }, [weekMonday]);
+  // Load moods: local cache first (instant), then Notion to sync across devices
+  useEffect(() => {
+    const local = {};
+    weekDays.forEach(d => { const v = getMood(d); if (v) local[d] = v; });
+    setMoods(local);
+    refetchMoods();
     // eslint-disable-next-line
   }, [weekMonday]);
+  // Re-sync moods when returning to the tab (another device may have updated them)
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible") refetchMoods(); };
+    window.addEventListener("focus", onVis);
+    document.addEventListener("visibilitychange", onVis);
+    return () => { window.removeEventListener("focus", onVis); document.removeEventListener("visibilitychange", onVis); };
+  }, [refetchMoods]);
 
   // Group
   const byDate = {};
@@ -2633,7 +2661,7 @@ export default function Home() {
 
         {/* MOOD SLIDER — for selected day */}
         <div className="f2">
-          <MoodSlider date={selectedDate} value={moods[selectedDate] || null} onChange={(s) => setMoodFor(selectedDate, s)} />
+          <MoodSlider date={selectedDate} value={moods[selectedDate] || null} onChange={(s) => setMoodFor(selectedDate, s)} syncErr={moodErr} />
         </div>
 
         {/* TASKS */}
@@ -2775,7 +2803,7 @@ export default function Home() {
         </div>
         {/* ===== HABIT ===== */}
         <div className={"panel" + (tab === "habit" ? " active" : "")}>
-          <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} />
+          <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} syncErr={pushupErr} />
         </div>
         {/* ===== WORD ===== */}
         <div className={"panel" + (tab === "word" ? " active" : "")}>
