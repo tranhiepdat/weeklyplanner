@@ -1548,6 +1548,60 @@ function PushupTracker({ pushups, weekDays, selectedDate, onAdd, onSet, syncErr 
   );
 }
 
+// ---- Push-up weekly bar chart: reps per day, tap a bar to edit that day ----
+function PushupChart({ weekDays, pushups, selectedDate, onSelectDay }) {
+  const W = 320, H = 172, padL = 14, padR = 14, padT = 24, padB = 26;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const counts = weekDays.map(d => pushups[d] || 0);
+  const weekTotal = counts.reduce((s, c) => s + c, 0);
+  const activeDays = counts.filter(c => c > 0).length;
+  const avg = activeDays ? Math.round(weekTotal / activeDays) : 0;
+  const peak = Math.max(0, ...counts);
+  const maxVal = Math.max(10, peak);
+  const slot = innerW / 7;
+  const barW = Math.min(26, slot * 0.56);
+  const isThisWeek = weekDays.includes(TODAY);
+
+  return (
+    <div className="card f3" style={{ marginBottom: 14, padding: "16px 14px 10px", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, padding: "0 4px" }}>
+        <span style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)" }}>📊 HÍT ĐẤT · {isThisWeek ? "TUẦN NÀY" : "TUẦN ĐANG XEM"}</span>
+        <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{weekTotal}</span>
+      </div>
+      <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 2, fontSize: ".64rem", color: "var(--c-muted2)" }}>
+        <span>Tổng tuần <strong style={{ color: wine }}>{weekTotal}</strong></span>
+        <span>TB/ngày tập <strong style={{ color: wine }}>{avg}</strong></span>
+        <span>Cao nhất <strong style={{ color: wine }}>{peak}</strong></span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0, 0.5, 1].map((g, i) => (
+          <line key={i} x1={padL} x2={W - padR} y1={padT + innerH * g} y2={padT + innerH * g} stroke="var(--c-track)" strokeWidth="1" />
+        ))}
+        {counts.map((c, i) => {
+          const cx = padL + slot * i + slot / 2;
+          const isSel = weekDays[i] === selectedDate;
+          const isT = weekDays[i] === TODAY;
+          const h = c > 0 ? (innerH * c) / maxVal : 0;
+          const y = padT + innerH - h;
+          const dt = new Date(weekDays[i] + "T00:00:00");
+          return (
+            <g key={i} onClick={() => onSelectDay(weekDays[i])} style={{ cursor: "pointer" }}>
+              <rect x={cx - slot / 2} y={padT} width={slot} height={innerH} fill="transparent" />
+              {c > 0
+                ? <rect x={cx - barW / 2} y={y} width={barW} height={h} rx="3" fill={wine} opacity={isSel ? 1 : 0.4} />
+                : <rect x={cx - barW / 2} y={padT + innerH - 2} width={barW} height={2} rx="1" fill="var(--c-track)" />}
+              {isSel && <rect x={cx - barW / 2 - 2.5} y={(c > 0 ? y : padT + innerH - 2) - 2.5} width={barW + 5} height={(c > 0 ? h : 2) + 5} rx="4" fill="none" stroke={gold} strokeWidth="1.5" />}
+              {c > 0 && <text x={cx} y={y - 5} textAnchor="middle" fontSize="9" fontWeight="700" fill={wine}>{c}</text>}
+              <text x={cx} y={H - 9} textAnchor="middle" fontSize="9" fill={isT ? gold : (isSel ? wine : "var(--c-muted2)")} fontWeight={isT || isSel ? "700" : "400"}>{DAYS_SHORT[dt.getDay()]}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ textAlign: "center", fontSize: ".64rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 2 }}>Chạm vào cột để chọn &amp; chỉnh ngày đó</div>
+    </div>
+  );
+}
+
 // ---- AI chat sheet: talk to the assistant to create tasks by message ----
 function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
   const [closing, setClosing] = useState(false);
@@ -2443,8 +2497,8 @@ export default function Home() {
           .panel{display:none;}
           .panel.active{display:block;max-width:640px;margin:0 auto;animation:fadeUp .3s ease both;}
           .day-nav{display:none;}
-          .day-nav.is-plan{display:flex;}
-          .tab-plan{padding-bottom:calc(120px + env(safe-area-inset-bottom));}
+          .day-nav.mnav-on{display:flex;}
+          .tab-plan,.tab-habit{padding-bottom:calc(120px + env(safe-area-inset-bottom));}
           .fab-create{bottom:calc(112px + env(safe-area-inset-bottom));}
           .fab-chat{bottom:calc(178px + env(safe-area-inset-bottom));}
           .tab-stats .fab,.tab-habit .fab,.tab-word .fab{display:none;}
@@ -2804,6 +2858,7 @@ export default function Home() {
         {/* ===== HABIT ===== */}
         <div className={"panel" + (tab === "habit" ? " active" : "")}>
           <PushupTracker pushups={pushups} weekDays={weekDays} selectedDate={selectedDate} onAdd={addPushupsFor} onSet={setPushupsFor} syncErr={pushupErr} />
+          <PushupChart weekDays={weekDays} pushups={pushups} selectedDate={selectedDate} onSelectDay={(d) => { haptic(8); goToDate(d); }} />
         </div>
         {/* ===== WORD ===== */}
         <div className={"panel" + (tab === "word" ? " active" : "")}>
@@ -2866,7 +2921,7 @@ export default function Home() {
           boxShadow: "0 -4px 18px rgba(0,0,0,.12)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}>
-          <div className={"day-nav" + (tab === "plan" ? " is-plan" : "")} style={{ maxWidth: 480, margin: "0 auto", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "7px 12px 5px" }}>
+          <div className={"day-nav" + (tab === "plan" || tab === "habit" ? " mnav-on" : "")} style={{ maxWidth: 480, margin: "0 auto", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "7px 12px 5px" }}>
             <div style={{ display: "flex", gap: 6 }}>
               <button data-sfx="swoosh" onClick={() => shiftWeek(-1)} title="Tuần trước" style={weekNavBtn}>« Tuần</button>
               <button data-sfx="swoosh" onClick={() => shiftDay(-1)} title="Ngày trước" style={dayNavBtn}>‹ Ngày</button>
