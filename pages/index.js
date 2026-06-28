@@ -626,7 +626,7 @@ function Particles({ width, height, onDone }) {
   );
 }
 
-function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone }) {
+function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove }) {
   const [phase, setPhase] = useState("idle"); // idle | celebrating | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
@@ -656,6 +656,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
   const accent = typeColor(task.taskType || "");
   const isMust = tier === "must";       // bắt buộc hôm nay → bold outline
   const isOptional = tier === "optional"; // để dành → faded
+  const moveBtn = { flexShrink: 0, width: 22, height: 30, borderRadius: 7, border: "none", background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1.3rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
+  const guardBtn = (fn) => (e) => { e.stopPropagation(); if (dragRef.current.moved) { dragRef.current.moved = false; return; } fn(); };
 
   // swipe gesture (pan-y preserved for page scroll)
   const onPD = (e) => { dragRef.current = { startX: e.clientX, startY: e.clientY, active: true, moved: false, baseX: swipeX }; };
@@ -720,7 +722,13 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
           </div>
         </div>
-        <button onClick={(e) => { e.stopPropagation(); if (dragRef.current.moved) { dragRef.current.moved = false; return; } onEdit(task); }} style={{
+        {onMove && task.date && (
+          <>
+            <button onClick={guardBtn(() => onMove(task, -1))} style={moveBtn} title="Dời sang hôm trước">‹</button>
+            <button onClick={guardBtn(() => onMove(task, 1))} style={moveBtn} title="Dời sang hôm sau">›</button>
+          </>
+        )}
+        <button onClick={guardBtn(() => onEdit(task))} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -1062,77 +1070,14 @@ function ScoreBar({ cat, data }) {
   );
 }
 
-function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder, taskTier }) {
+function InsightsPanel({ selectedDate, byDate, moods }) {
   const selObj = new Date(selectedDate + "T00:00:00");
   const selIsToday = selectedDate === TODAY;
   const dayLabel = selIsToday ? "Hôm nay" : `${DAYS[selObj.getDay()]} ${fmt(selObj)}`;
   const a = analyzeDay(byDate[selectedDate] || [], moods[selectedDate]);
   const note = coachNote(a, dayLabel);
 
-  // AI evaluation — cached in localStorage by date; only re-calls when the day's
-  // signature changes (tasks done/added or time-of-day phase) or on manual ↻ refresh.
-  const nowD = new Date();
-  const nowHour = nowD.getHours();
-  const phase = selIsToday ? (nowHour < 11 ? "Sáng" : nowHour < 19 ? "Office" : "Tối") : "";
-  const sig = `${a.done}/${a.total}|${phase}`;
-  const [refreshTick, setRefreshTick] = useState(0);
-  const [aiNote, setAiNote] = useState(() => {
-    if (typeof window === "undefined") return null;
-    try { const raw = localStorage.getItem("dat-coach:" + selectedDate); if (raw) return JSON.parse(raw).note; } catch {}
-    return null;
-  });
-  const [aiLoading, setAiLoading] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let cached = null;
-    try { const raw = localStorage.getItem("dat-coach:" + selectedDate); if (raw) cached = JSON.parse(raw); } catch {}
-    setAiNote(cached?.note || null);
-    if (a.total === 0) return;
-    if (cached && cached.sig === sig) return;        // already summarised, no change → save credit
-    let cancelled = false;
-    setAiLoading(true);
-    const SESS = [["🌅 Sáng", "Sáng"], ["🏢 Office (11–7h)", "Office"], ["🌙 Tối", "Tối"], ["", "Khác"]];
-    const dayTasks = byDate[selectedDate] || [];
-    const bySession = {};
-    SESS.forEach(([k, label]) => {
-      const items = dayTasks.filter(t => (t.session || "") === k);
-      if (items.length) bySession[label] = { done: items.filter(t => t.done).map(t => t.name), pending: items.filter(t => !t.done).map(t => t.name) };
-    });
-    const dom = dominantCat(a);
-    const pending = dayTasks.filter(t => !t.done);
-    const pendingOrdered = sortTasks(pending, sortMode === "session" ? "manual" : "priority", taskOrder || {}, taskTier || {});
-    const summary = {
-      isToday: selIsToday,
-      now: selIsToday ? `${String(nowHour).padStart(2, "0")}:${String(nowD.getMinutes()).padStart(2, "0")}` : null,
-      phase: phase || null,
-      ratePct: Math.round(a.rate * 100), done: a.done, total: a.total, earned: a.earned, possible: a.possible,
-      dominant: dom ? SCORE_CATS[dom].label : null,
-      mood: a.mood ? moodInfo(a.mood)?.label : null,
-      byRealm: CAT_ORDER.reduce((o, k) => { if (a.cats[k].n > 0) o[SCORE_CATS[k].label] = `${a.cats[k].doneN}/${a.cats[k].n} việc xong`; return o; }, {}),
-      bySession,
-      // help the coach prioritise reminders by the user's own ordering & priority flags
-      pendingInOrder: pendingOrdered.map(t => t.name),
-      priorityPending: pending.filter(t => priorityRank(t) > 0).map(t => `${priorityEmoji(t)} ${t.name}`),
-      // Plan Day "must-do today" tasks still pending — remind these the hardest
-      mustPending: pending.filter(t => (taskTier || {})[t.id] === "must").map(t => t.name),
-    };
-    fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayLabel, summary }) })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => {
-        if (cancelled || !d || !d.body || d.error) return;
-        const note = { title: d.title, body: d.body, verse: d.verse };
-        try { localStorage.setItem("dat-coach:" + selectedDate, JSON.stringify({ sig, note })); } catch {}
-        setAiNote(note);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setAiLoading(false); });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line
-  }, [selectedDate, refreshTick]);
-  const refreshAi = () => { try { localStorage.removeItem("dat-coach:" + selectedDate); } catch {} setRefreshTick(t => t + 1); };
-  const noteTitle = aiNote?.title || note.title;
-  const noteBody = aiNote?.body || note.body;
-  const noteVerse = aiNote?.verse || note.verse;
+  const noteTitle = note.title, noteBody = note.body, noteVerse = note.verse;
 
   // recent days (previous two days relative to selected)
   const prevDays = [1, 2].map(off => {
@@ -1174,13 +1119,8 @@ function InsightsPanel({ selectedDate, byDate, moods, sortMode, taskOrder, taskT
 
       {/* coach note */}
       <div style={{ background: toneBg[note.tone] || toneBg.ok, padding: "14px 18px", borderTop: "1px solid rgba(201,160,160,.18)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+        <div style={{ marginBottom: 3 }}>
           <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.15rem", fontWeight: 700, color: wine }}>{noteTitle}</span>
-          {aiNote && <span style={{ fontSize: ".58rem", fontWeight: 700, letterSpacing: ".05em", color: "var(--c-mood)", border: "1px solid var(--c-mood)", borderRadius: 8, padding: "1px 6px" }}>✨ AI</span>}
-          {aiLoading && <span style={{ fontSize: ".64rem", color: "var(--c-muted)", fontStyle: "italic" }}>đang phân tích…</span>}
-          {a.total > 0 && !aiLoading && (
-            <button data-sfx="pop" onClick={refreshAi} title="Làm mới đánh giá AI" style={{ marginLeft: "auto", border: "none", background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: ".9rem", padding: 2 }}>↻</button>
-          )}
         </div>
         <div style={{ fontSize: ".82rem", color: "var(--c-ink)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{noteBody}</div>
         <div style={{ fontSize: ".74rem", color: "var(--c-muted)", fontStyle: "italic", marginTop: 7 }}>{noteVerse}</div>
@@ -2182,6 +2122,16 @@ export default function Home() {
     setTimeout(() => { setRemovingId(null); action(); }, 300);
   };
 
+  // Quick-move a task to the previous/next day: shrink out of the current day, then re-date.
+  const moveTaskByDays = (task, delta) => {
+    if (!task || !task.date) return;
+    haptic(8); playClick("swoosh");
+    const d = new Date(task.date + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    const newDate = iso(d);
+    removeWithShrink(task.id, () => updateTask(task.id, { date: newDate }));
+  };
+
   // Delete (archive) a task with optimistic removal + revert on failure
   const deleteTask = async (id) => {
     const prevTasks = tasks;
@@ -2243,7 +2193,8 @@ export default function Home() {
   const renderTaskRow = (t) => (
     <TaskRow task={t} tier={taskTier[t.id]} onToggle={toggle} onEdit={setEditTask}
       justDone={justDone === t.id} justUndone={justUndone === t.id}
-      removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />
+      removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))}
+      onMove={moveTaskByDays} />
   );
 
   // Make sure selectedDate stays within visible week
@@ -2833,7 +2784,7 @@ export default function Home() {
         </div>
 
         {/* INSIGHTS — analysis + coach note + recent days */}
-        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier} />}
+        {status === "ok" && <InsightsPanel selectedDate={selectedDate} byDate={byDate} moods={moods} />}
         </div>
         </div>{/* end col-a */}
 
