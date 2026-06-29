@@ -2652,6 +2652,21 @@ export default function Home() {
           </h1>
         </div>
 
+        {/* DAILY SCRIPTURE — đọc đầu tiên trong ngày; ở đầu app, trên mọi tab (trừ tab Lời Chúa đã có bản đầy đủ) */}
+        {tab !== "word" && (
+          <div className="f2 card" style={{ marginBottom: 16, padding: "15px 20px 15px 22px", borderLeft: `3px solid ${gold}`, background: "linear-gradient(135deg,rgba(122,74,74,.06),rgba(201,168,76,.07))" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7, gap: 10 }}>
+              <span style={{ fontSize: ".64rem", fontWeight: 700, letterSpacing: ".12em", color: "var(--c-muted)" }}>📖 LỜI CHÚA HÔM NAY</span>
+              <button data-sfx="pop" onClick={() => loadVerse(false)} disabled={verseLoading} title="Câu khác" style={{ flexShrink: 0, fontSize: ".64rem", padding: "3px 10px", border: "1px solid var(--c-border)", borderRadius: 8, background: "transparent", color: "var(--c-muted)", cursor: verseLoading ? "wait" : "pointer", opacity: verseLoading ? .5 : 1 }}>{verseLoading ? "…" : "🔄 Câu khác"}</button>
+            </div>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: "1.18rem", fontStyle: "italic", color: wine, lineHeight: 1.6, margin: 0 }}>
+              {v.en.map((line, i) => <span key={i}>{line}<br/></span>)}
+            </p>
+            {v.vi && <p style={{ fontSize: ".82rem", color: "var(--c-muted2)", fontStyle: "italic", marginTop: 7 }}>{v.vi}</p>}
+            <cite style={{ display: "block", marginTop: 6, fontSize: ".72rem", color: "var(--c-muted)", fontStyle: "normal" }}>— {v.ref}{v.vi ? ` · ${v.refVi}` : ""} ✝️</cite>
+          </div>
+        )}
+
         {/* CONTENT — desktop: 2 columns (all visible); mobile: one tab at a time */}
         <div className="layout">
         <div className="col-a">
