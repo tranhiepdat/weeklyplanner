@@ -1149,6 +1149,8 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
 
 // ---- Create task bottom sheet ----
 const ICON_CHOICES = ["💼","💻","✨","📞","💰","💵","💸","🏦","🏠","🧹","👕","🛒","📦","🍲","🥖","⛽","🏸","🏋️","🦷","💊","📄","📋","⛪","🙏","🎮","✈️","⌨️","🎧","📱","🕐"];
+// Project tags (Notion "Project" multi-select). Add new work projects here — used by both Create & Edit.
+const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG", "🟢 AOV26"];
 function CreateModal({ defaultDate, onClose, onCreate }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
@@ -1264,7 +1266,7 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
               <button key={pp} data-sfx="pop" data-anim="chip" onClick={() => togglePriority(pp)}
                 style={chip(priority.includes(pp), pp.includes("Urgent") ? "#dc2626" : "#ca8a04")}>{pp}</button>
             ))}
-            {["🔷 Nacon","🟣 VP91","🟠 KUNVANDONG"].map(pj => (
+            {PROJECTS.map(pj => (
               <button key={pj} data-sfx="pop" data-anim="chip" onClick={() => toggleProject(pj)}
                 style={chip(project.includes(pj), "#0369a1")}>{pj}</button>
             ))}
@@ -3109,7 +3111,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
                 }}>{pp}</button>
               );
             })}
-            {["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG"].map(pj => {
+            {PROJECTS.map(pj => {
               const sel = project.includes(pj);
               return (
                 <button key={pj} data-sfx="pop" data-anim="chip" onClick={() => toggleProject(pj)} style={{

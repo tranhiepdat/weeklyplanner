@@ -6,7 +6,7 @@
 const MODEL = process.env.AI_MODEL || "claude-sonnet-4-6";
 const TASK_TYPES = ["💼 Works", "🧍 Personal", "🏥 Health", "🧹 Chore", "👨‍👩‍👧 Family", "🎮 Entertainment", "🏖️ Vacation"];
 const SESSIONS = ["🌅 Sáng", "🏢 Office (11–7h)", "🌙 Tối"];
-const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG"];
+const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG", "🟢 AOV26"];
 const PRIORITIES = ["🔴 Urgent", "🟡 Important"];
 const VN_DOW = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
 
@@ -76,7 +76,7 @@ Cách hiểu ngày:
 QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI CÒN HƠN ĐOÁN SAI:
 - "taskType" ∈ ${JSON.stringify(TASK_TYPES)} — suy luận hợp lý, nếu không chắc để "".
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
-- "project" mỗi phần tử ∈ ${JSON.stringify(PROJECTS)}. CHỈ đặt khi user nhắc tên dự án. KUNVANDONG = phim cá nhân; VP91 = studio (tool UE/sequencer); Nacon = công ty/khách. Không rõ thì để [].
+- "project" mỗi phần tử ∈ ${JSON.stringify(PROJECTS)}. CHỈ đặt khi user nhắc tên dự án. KUNVANDONG = phim cá nhân; VP91 = studio (tool UE/sequencer); Nacon = công ty/khách; AOV26 = dự án công ty (công việc ở cty). Không rõ thì để [].
 - "priority" ∈ ${JSON.stringify(PRIORITIES)}. Chỉ đặt khi user nói gấp/khẩn (🔴 Urgent) hoặc quan trọng (🟡 Important). Bình thường để [].
 - "icon": 1 emoji hợp ngữ cảnh.
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
