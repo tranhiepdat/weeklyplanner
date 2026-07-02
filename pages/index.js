@@ -177,8 +177,7 @@ function planPriorityRank(task, tierMap = {}) {
   const pr = priorityRank(task);
   if (pr === 2) return 3;   // urgent
   if (pr === 1) return 2;   // important
-  if (tier === "optional") return 0;
-  return 1;                 // normal
+  return 0;                 // ưu tiên thấp = mặc định (optional hoặc chưa đặt)
 }
 // Sort a task list by the chosen mode. `order` is a {id:number} manual-order map.
 // Returns a NEW array; ties fall back to the list's original order (stable).
@@ -654,8 +653,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
   const celebrating = phase === "celebrating";
   const reversing = phase === "reversing";
   const accent = typeColor(task.taskType || "");
-  const isMust = tier === "must";       // bắt buộc hôm nay → bold outline
-  const isOptional = tier === "optional"; // để dành → faded
+  const isMust = tier === "must";       // ưu tiên → bold outline
+  const isOptional = !isMust;           // mọi task không phải Ưu tiên = Ưu tiên thấp → faded (mặc định)
   const moveBtn = { flexShrink: 0, width: 22, height: 30, borderRadius: 7, border: "none", background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1.3rem", lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
   const guardBtn = (fn) => (e) => { e.stopPropagation(); if (dragRef.current.moved) { dragRef.current.moved = false; return; } fn(); };
 
@@ -2998,7 +2997,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
   const [taskType, setTaskType] = useState(task.taskType || "");
   const [priority, setPriority] = useState(Array.isArray(task.priority) ? task.priority : []);
   const [project, setProject] = useState(Array.isArray(task.project) ? task.project : []);
-  const [tier, setTier] = useState(currentTier || "normal");
+  const [tier, setTier] = useState(currentTier || "optional");
   const [confirmDel, setConfirmDel] = useState(false);
   const [closing, setClosing] = useState(false);
   // Tuần đang hiển thị trong phần chọn ngày (mặc định tuần chứa ngày hiện tại của task)
@@ -3029,7 +3028,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
   if (!sameArr(priority, task.priority)) patch.priority = priority;
   if (!sameArr(project, task.project)) patch.project = project;
   const hasChange = Object.keys(patch).length > 0;
-  const tierChanged = tier !== (currentTier || "normal");
+  const tierChanged = tier !== (currentTier || "optional");
   const dirty = hasChange || tierChanged;
   const togglePriority = (p) => setPriority(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
@@ -3133,7 +3132,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".08em", color: "var(--c-muted)", marginBottom: 8 }}>ƯU TIÊN TRONG NGÀY</div>
           <div style={{ display: "flex", gap: 8 }}>
-            {[["must", "🔥 Ưu tiên", "var(--c2)"], ["normal", "• Bình thường", "var(--c-muted)"], ["optional", "💤 Ưu tiên thấp", "#64748b"]].map(([key, lbl, col]) => {
+            {[["must", "🔥 Ưu tiên", "var(--c2)"], ["optional", "💤 Ưu tiên thấp", "#64748b"]].map(([key, lbl, col]) => {
               const sel = tier === key;
               return (
                 <button key={key} data-sfx="pop" data-anim="chip" onClick={() => setTier(key)} style={{
