@@ -2477,7 +2477,7 @@ export default function Home() {
         }
         /* sessions side-by-side only when there's real room */
         /* sessions fill the actual column width (not the viewport) so cards stay roomy */
-        @media(min-width:1180px){.session-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start;}}
+        @media(min-width:1180px){.session-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;}.session-grid>div{min-width:0;}}
         @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -2779,7 +2779,7 @@ export default function Home() {
                   ))}
                   </div>
                   {noSession.length > 0 && (
-                    <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s" }}>
+                    <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s", borderTop: "1px dashed var(--c-border)", paddingTop: 14 }}>
                       <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
                       <SortableTaskList items={sortTasks(noSession, sortMode === "session" ? "manual" : sortMode, taskOrder, taskTier)} draggable={sortMode === "session"} onReorder={reorderTasks} renderRow={renderTaskRow} />
                     </div>
