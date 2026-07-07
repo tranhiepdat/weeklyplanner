@@ -45,19 +45,37 @@ export default async function handler(req, res) {
   const KEY = process.env.ANTHROPIC_API_KEY;
   if (!KEY) return res.status(200).json({ reply: "Mình chưa được cắm chìa khoá AI (ANTHROPIC_API_KEY) trên Vercel nên chưa chat được nha. Khi nào bạn thêm vào là mình hỗ trợ liền! 🙏", tasks: [], noKey: true });
 
-  const { messages = [], weekDays = [] } = req.body || {};
+  const { messages = [], weekDays = [], tasks = [] } = req.body || {};
 
   const vn = vnNow();
   const today = vn.dateStr;
   const phase = vn.hour < 11 ? "🌅 Sáng" : vn.hour < 19 ? "🏢 Office (11–7h)" : "🌙 Tối";
 
-  // Explicit 14-day lookup table so the model NEVER has to compute dates itself
+  // Explicit lookup table (past week → +2 weeks) so the model NEVER computes dates itself
   const dateTable = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = -7; i < 14; i++) {
     const d = addDays(today, i);
-    const rel = i === 0 ? "  ← HÔM NAY" : i === 1 ? "  ← ngày mai" : i === 2 ? "  ← ngày kia" : "";
+    const rel = i === 0 ? "  ← HÔM NAY" : i === 1 ? "  ← ngày mai" : i === 2 ? "  ← ngày kia"
+      : i === -1 ? "  ← hôm qua" : i === -2 ? "  ← hôm kia" : "";
     dateTable.push(`${d} = ${VN_DOW[dowOf(d)]}${rel}`);
   }
+
+  // Learn Dat's tagging patterns from existing tasks + list tasks the AI can reschedule
+  const distinct = (arr, cap) => [...new Set(arr)].slice(0, cap);
+  const byType = {}, byProj = {};
+  (tasks || []).forEach(t => {
+    if (!t || !t.name) return;
+    if (t.taskType) (byType[t.taskType] = byType[t.taskType] || []).push(t.name);
+    (Array.isArray(t.project) ? t.project : []).forEach(p => (byProj[p] = byProj[p] || []).push(t.name));
+  });
+  const typeHints = Object.entries(byType).map(([k, v]) => `  ${k}: ${distinct(v, 6).join(", ")}`).join("\n");
+  const projHints = Object.entries(byProj).map(([k, v]) => `  ${k}: ${distinct(v, 5).join(", ")}`).join("\n");
+  const lo = addDays(today, -7), hi = addDays(today, 14);
+  const movable = (tasks || [])
+    .filter(t => t && t.id && t.name && t.date && t.date >= lo && t.date <= hi)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .slice(0, 40);
+  const refList = movable.map((t, i) => `  #${i + 1} ${t.name} — ${t.date}${t.done ? " (đã xong)" : ""}`).join("\n");
 
   const sys = `Bạn là trợ lý lập kế hoạch thân thiện, tích cực, đồng hành theo tinh thần Công giáo, trò chuyện tiếng Việt với Dat (Matthew) — một người làm VFX/animation.
 
@@ -70,9 +88,10 @@ Tuần Dat đang xem trên app: ${weekDays.length ? `${weekDays[0]} → ${weekDa
 Cách hiểu ngày:
 - "hôm nay"/không nói ngày nhưng ngụ ý làm ngay → ${today}.
 - "mai"/"ngày mai" → ${addDays(today, 1)}; "ngày kia"/"mốt" → ${addDays(today, 2)}.
-- "thứ X" (không nói tuần nào) → lấy NGÀY thứ X gần nhất SẮP TỚI trong bảng. "thứ X tuần sau" → lấy thứ X ở tuần kế tiếp.
+- "hôm qua" → ${addDays(today, -1)}; "hôm kia" → ${addDays(today, -2)}. ĐƯỢC PHÉP tạo hoặc dời việc vào NGÀY ĐÃ QUA trong bảng (vd ghi lại việc đã làm hôm qua) — cứ dùng ngày quá khứ trong bảng, không được từ chối.
+- "thứ X" (không nói tuần nào) → lấy NGÀY thứ X gần nhất SẮP TỚI trong bảng. "thứ X tuần sau" → tuần kế tiếp; "thứ X tuần trước" → tuần trước (ngày quá khứ trong bảng).
 - Luôn đối chiếu thứ trong bảng để chắc chắn ngày↔thứ khớp nhau.
-
+${typeHints || projHints ? `\nTAG DAT HAY DÙNG — HỌC theo cách Dat gán tag: việc mới có tên/ý na ná việc cũ thì gán taskType (và dự án) GIỐNG như vậy. Vd nếu "đi bán" từng là 🧍 Personal thì lần sau cũng để Personal.\n${typeHints}${projHints ? "\n  — Dự án —\n" + projHints : ""}\n` : ""}${movable.length ? `\nVIỆC HIỆN CÓ (để DỜI ngày — tham chiếu bằng số #n, KHÔNG tạo lại việc đã có trong đây):\n${refList}\n` : ""}
 QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI CÒN HƠN ĐOÁN SAI:
 - "taskType" ∈ ${JSON.stringify(TASK_TYPES)} — suy luận hợp lý, nếu không chắc để "".
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
@@ -81,6 +100,7 @@ QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI C
 - "icon": 1 emoji hợp ngữ cảnh.
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
 - Nhiều việc trong 1 câu → tách thành nhiều task.
+- DỜI/ĐỔI NGÀY việc ĐÃ CÓ: nếu user muốn chuyển một việc đang có sang ngày khác (vd "dời đi bán qua mai", "chuyển họp sang thứ 5", "đẩy mấy việc hôm nay sang mai") → KHÔNG tạo task mới. Thêm vào "moves": mỗi phần tử {"ref": <số #n trong VIỆC HIỆN CÓ>, "date": "<ngày mới trong bảng>"}. Nếu không tìm thấy việc khớp trong danh sách thì hỏi lại cho rõ.
 
 KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - User muốn thêm việc nhưng KHÔNG rõ NGÀY và không ngụ ý "hôm nay" → hỏi gọn ngày nào.
@@ -89,9 +109,10 @@ KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - Nếu chỉ trò chuyện/hỏi han, không yêu cầu thêm việc → "tasks": [], trả lời ấm áp.
 
 CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ nào ngoài JSON):
-{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD"}]}
+{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}]}
 - Khi tạo task: "reply" xác nhận ngắn gọn đã thêm việc gì + ngày/thứ (vd "đã thêm 'đi chợ' vào Thứ Ba ${addDays(today, 1)}"), giọng khích lệ.
-- Khi hỏi lại: "reply" là câu hỏi gọn gàng, "tasks": [].`;
+- Khi dời việc: "reply" xác nhận đã dời việc gì sang ngày/thứ nào.
+- Khi hỏi lại: "reply" là câu hỏi gọn gàng, "tasks": [], "moves": [].`;
 
   const anthropicMessages = messages
     .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
@@ -118,10 +139,19 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
     const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
     const obj = extractJson(text);
     if (obj) {
-      const tasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
-        // keep only tasks that at least have a name + a date in the allowed table
+      const outTasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
+        // keep only tasks that at least have a name + a date
         .filter(t => t && t.name && t.date);
-      return res.status(200).json({ reply: obj.reply || (tasks.length ? "Đã thêm xong!" : "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!"), tasks, needsClarification: !!obj.needsClarification });
+      // resolve reschedule requests (#ref → real task id from `movable`), validate the new date
+      const moves = [];
+      if (!obj.needsClarification && Array.isArray(obj.moves)) {
+        obj.moves.forEach(mv => {
+          const t = movable[Number(mv && mv.ref) - 1];
+          if (t && typeof mv.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(mv.date)) moves.push({ id: t.id, name: t.name, date: mv.date });
+        });
+      }
+      const did = outTasks.length || moves.length;
+      return res.status(200).json({ reply: obj.reply || (did ? "Đã xong!" : "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!"), tasks: outTasks, moves, needsClarification: !!obj.needsClarification });
     }
     return res.status(200).json({ reply: text || "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!", tasks: [] });
   } catch (e) {

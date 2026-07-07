@@ -1544,9 +1544,9 @@ function PushupChart({ weekDays, pushups, selectedDate, onSelectDay }) {
 }
 
 // ---- AI chat sheet: talk to the assistant to create tasks by message ----
-function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
+function ChatSheet({ onClose, onCreateTasks, onMoveTasks, today, weekDays, tasks }) {
   const [closing, setClosing] = useState(false);
-  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\" — mình sẽ tạo task giúp bạn ✝️" }]);
+  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\". Mình còn dời được việc (\"dời đi bán qua mai\") và ghi cả việc hôm qua nữa nha ✝️" }]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
@@ -1561,12 +1561,21 @@ function ChatSheet({ onClose, onCreateTasks, today, weekDays }) {
     try {
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, today, weekDays }),
+        body: JSON.stringify({
+          messages: next, today, weekDays,
+          // send existing tasks so the AI learns tag patterns + can reschedule by reference
+          tasks: (tasks || []).map(t => ({ id: t.id, name: t.name, date: t.date, taskType: t.taskType, project: t.project, done: t.done })),
+        }),
       });
       const d = await r.json();
       const created = Array.isArray(d.tasks) ? d.tasks : [];
+      const moved = Array.isArray(d.moves) ? d.moves : [];
       if (created.length) onCreateTasks(created);
-      const note = created.length ? `\n\n✅ Đã thêm ${created.length} việc: ${created.map(t => t.name).join(", ")}` : "";
+      if (moved.length && onMoveTasks) onMoveTasks(moved);
+      const parts = [];
+      if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => t.name).join(", ")}`);
+      if (moved.length) parts.push(`🔀 Đã dời ${moved.length} việc: ${moved.map(m => m.name).join(", ")}`);
+      const note = parts.length ? "\n\n" + parts.join("\n") : "";
       setMsgs(m => [...m, { role: "assistant", content: (d.reply || "Đã xong!") + note }]);
     } catch {
       setMsgs(m => [...m, { role: "assistant", content: "Có lỗi kết nối, thử lại nhé!" }]);
@@ -2959,8 +2968,10 @@ export default function Home() {
           <ChatSheet
             onClose={() => setShowChat(false)}
             onCreateTasks={(tasks) => tasks.forEach(createTask)}
+            onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}
             today={TODAY}
             weekDays={weekDays}
+            tasks={tasks}
           />
         )}
 
