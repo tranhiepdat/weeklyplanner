@@ -470,6 +470,23 @@ const SFX = {
   },
 };
 function playClick(kind = "tick") { try { (SFX[kind] || SFX.tick)(); } catch {} }
+// Hover whisper — mỗi theme một chất liệu, RẤT khẽ (gain ~1/5 tiếng click) + throttle
+// để rê chuột qua nhiều nút thành gợn nhẹ chứ không thành tràng liên thanh.
+let _lastHoverAt = 0;
+function playHover() {
+  try {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now - _lastHoverAt < 90) return;
+    _lastHoverAt = now;
+    const c = actx(); if (!c || c.state !== "running") return; // im lặng cho tới cử chỉ đầu tiên (autoplay policy)
+    const v = rnd(0.96, 1.05);
+    if (_uiTheme === "dark") { blip(c, { freq: 1900 * v, dur: 0.022, gain: 0.011, cutoff: 4200 }); return; }          // cursor-tick terminal
+    if (_uiTheme === "cozy") { wood(c, { freq: 340 * v, gain: 0.016, dur: 0.03, cutoff: 1300, reverb: 0, click: 0.012, glide: 0.9 }); return; } // gõ nỉ
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1760 * v, dur: 0.045, gain: 0.011, cutoff: 5200, glideTo: 2093 * v, glideAt: 0.04, reverb: 0.06 }); return; } // bong bóng tí hon
+    if (_uiTheme === "nature") { noise(c, { dur: 0.05, gain: 0.006, type: "lowpass", freq: 1000, q: 0.4, sweepTo: 1500 }); voice(c, { type: "sine", freq: 987 * v, dur: 0.04, gain: 0.007, cutoff: 2600, reverb: 0.08 }); return; } // lá chạm
+    voice(c, { type: "sine", freq: 1568 * v, dur: 0.05, gain: 0.01, cutoff: 3800, reverb: 0.14 }); // sacred: hơi chuông xa
+  } catch {}
+}
 // Subtle haptic feedback on supported mobile devices (native-app feel)
 function haptic(ms = 12) { try { if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(ms); } catch {} }
 
@@ -626,7 +643,7 @@ function Particles({ width, height, onDone }) {
 }
 
 function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove }) {
-  const [phase, setPhase] = useState("idle"); // idle | celebrating | reversing | done
+  const [phase, setPhase] = useState("idle"); // idle | celebrating | settling | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
   const rowRef = useRef(null);
@@ -638,7 +655,11 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
         setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
       }
       setPhase("celebrating");
-      const t = setTimeout(() => setPhase("done"), 1000);
+      // sau màn highlight, chuyển qua "settling" — lớp màu fade-out êm rồi mới về done
+      // (reduced-motion: về thẳng done). Kết thúc settling do animationend của settleFade
+      // đảm nhiệm — timer ở đây có thể bị cleanup nuốt khi justDone được parent clear ở 1100ms.
+      const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const t = setTimeout(() => setPhase(reduce ? "done" : "settling"), 1000);
       return () => clearTimeout(t);
     } else if (justUndone && !task.done) {
       setPhase("reversing");
@@ -651,6 +672,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
 
   const isDoneSettled = task.done && phase !== "celebrating";
   const celebrating = phase === "celebrating";
+  const settling = phase === "settling";
   const reversing = phase === "reversing";
   const accent = typeColor(task.taskType || "");
   const isMust = tier === "must";       // ưu tiên → bold outline
@@ -693,7 +715,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
 
       <div ref={rowRef}
         onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU} onPointerCancel={onPU}
-        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${reversing ? "task-unpop" : ""}`}
+        onAnimationEnd={(e) => { if (e.animationName === "settleFade") setPhase("done"); }}
+        className={`task-row ${isDoneSettled ? "task-done" : ""} ${celebrating ? "task-rainbow" : ""} ${settling ? "task-settle" : ""} ${reversing ? "task-unpop" : ""}`}
         style={{
           opacity: celebrating ? 1 : (isDoneSettled ? .62 : (isOptional ? .5 : 1)),
           borderLeft: `5px solid ${accent}`,
@@ -2057,7 +2080,20 @@ export default function Home() {
       tid = setTimeout(() => done(), 700);
     };
     document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
+    // hover whisper — desktop only; play once per control entered (not per child)
+    const canHover = typeof window.matchMedia === "function" && window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+    const onOver = (e) => {
+      if (e.pointerType === "touch") return;
+      const el = e.target.closest && e.target.closest("button, .check, .task-row, .bar-hit");
+      if (!el || el.disabled) return;
+      if (e.relatedTarget && el.contains(e.relatedTarget)) return; // di chuyển bên trong cùng một control
+      playHover();
+    };
+    if (canHover) document.addEventListener("pointerover", onOver);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      if (canHover) document.removeEventListener("pointerover", onOver);
+    };
   }, []);
 
   const load = useCallback(async () => {
@@ -2452,6 +2488,18 @@ export default function Home() {
         .theme-dark .task-rainbow .task-name-text{color:var(--c-on-accent)!important;font-weight:700;text-shadow:none;}
         .theme-cozy .task-rainbow .task-name-text{color:#fff8ef!important;font-weight:700;text-shadow:none;}
         @keyframes wipeIn{to{transform:translateX(0)}}
+        /* done settle — lớp màu celebration LỊM DẦN rồi mới về trạng thái done (không tắt bụp) */
+        .task-settle{position:relative;overflow:hidden;}
+        .task-settle::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+          background:linear-gradient(90deg,rgba(86,162,86,.92),rgba(86,162,86,.6));
+          animation:settleFade .55s ease-out forwards;}
+        .task-settle>*{position:relative;z-index:1;}
+        @keyframes settleFade{from{opacity:1}to{opacity:0}}
+        .theme-dark .task-settle::before{background:var(--c1);}
+        .theme-cozy .task-settle::before{background:#d98e4a;}
+        .theme-cutie .task-settle::before{background:linear-gradient(90deg,#5b8fd1,#e89bb8);}
+        .theme-nature .task-settle::before{background:linear-gradient(90deg,#6f9e57,#a7c47f);}
+        @media(prefers-reduced-motion:reduce){.task-settle::before{animation:none!important;opacity:0!important;}}
         /* task shrink-out (move/delete) */
         .task-shrink{animation:taskShrink .3s ease forwards;}
         @keyframes taskShrink{0%{max-height:140px;opacity:1;transform:scale(1)}100%{max-height:0;opacity:0;transform:scale(.82);margin:0;padding:0}}
