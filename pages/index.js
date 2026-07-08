@@ -2599,6 +2599,172 @@ export default function Home() {
         .sheet-backdrop{animation:backdropIn .32s ease;}
         .sheet-backdrop.closing{animation:backdropOut .28s ease forwards;}
         @media(prefers-reduced-motion:reduce){.sheet,.sheet.closing{animation:none}}
+
+        /* ================================================================
+           MOTION SYSTEM v2 — mỗi theme một ngôn ngữ chuyển động riêng
+           Sacred: vòm nhà thờ + ánh nến | Cyber: reticle + glitch
+           Cozy: giấy thủ công đung đưa  | Cutie: jelly/blob | Nature: lá + gió
+           ================================================================ */
+        button{position:relative;}
+        button, .check, .tag, .card, .task-name-text{
+          transition:transform .28s cubic-bezier(.34,1.45,.5,1), border-radius .32s cubic-bezier(.4,1.3,.5,1),
+            box-shadow .24s ease, filter .18s ease, border-color .25s ease, background-color .25s ease, opacity .3s ease;
+        }
+        .hero-banner img{transition:transform 4s cubic-bezier(.16,.6,.2,1);}
+
+        /* ---- shared keyframes ---- */
+        @keyframes sheenSweep{0%{background-position:140% 0;opacity:1}100%{background-position:-60% 0;opacity:0}}
+        @keyframes cyJitter{0%{transform:translate(0,0)}30%{transform:translate(-1px,1px)}60%{transform:translate(1px,-1px)}100%{transform:translate(0,0)}}
+        @keyframes cyScan{0%{background-position:0 -18px}100%{background-position:0 18px}}
+        @keyframes cozyRock{0%,100%{transform:translateY(-1px) rotate(-1.3deg)}50%{transform:translateY(-2px) rotate(1.5deg)}}
+        @keyframes cozyRockBig{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3.4deg)}}
+        @keyframes jelly{0%,100%{transform:scale(1,1)}25%{transform:scale(1.05,.93)}50%{transform:scale(.95,1.06)}75%{transform:scale(1.03,.97)}}
+        @keyframes natureSway{0%,100%{transform:translateY(-1px) rotate(-1.1deg)}50%{transform:translateY(-1px) rotate(1.4deg)}}
+        @keyframes haloPulse{0%{box-shadow:0 0 0 0 rgba(201,168,76,.35)}100%{box-shadow:0 0 0 12px rgba(201,168,76,0)}}
+        @keyframes neonBreath{0%,100%{filter:drop-shadow(0 0 4px rgba(0,255,156,.35))}50%{filter:drop-shadow(0 0 12px rgba(0,255,156,.7))}}
+        @keyframes petalPop{0%{opacity:0;transform:translateY(5px) scale(.4) rotate(-30deg)}100%{opacity:.85;transform:translateY(0) scale(1) rotate(0)}}
+
+        /* ================= HOVER (chỉ thiết bị có chuột) ================= */
+        @media(hover:hover) and (pointer:fine){
+
+          /* ---------- SACRED — vòm thánh đường & ánh nến ---------- */
+          .theme-light button:not(.fab):hover{
+            transform:translateY(-2px);
+            border-radius:1.15em 1.15em .45em .45em!important; /* morph thành vòm */
+            filter:saturate(1.12) brightness(1.04);
+            box-shadow:0 4px 12px rgba(122,74,74,.18);
+          }
+          .theme-light button::after{
+            content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
+            background:linear-gradient(115deg,transparent 40%,rgba(255,228,150,.4) 50%,transparent 60%);
+            background-size:230% 100%;
+          }
+          .theme-light button:hover::after{animation:sheenSweep .9s ease forwards;} /* vệt nến quét ngang */
+          .theme-light .check:not(.on):hover{border-radius:50%;transform:rotate(90deg) scale(1.1);border-color:var(--c2);}
+          .theme-light .check.on:hover{animation:haloPulse .7s ease-out;}
+          .theme-light .tag{transition:transform .3s cubic-bezier(.34,1.6,.5,1);}
+          .theme-light .task-row:hover .tag{transform:translateY(-1px) skewX(-6deg);} /* nghiêng như nét mực */
+          .theme-light .card{position:relative;}
+          .theme-light .card::after{content:"✦";position:absolute;top:8px;right:12px;color:var(--c2);font-size:.8rem;
+            opacity:0;transform:translateY(5px) rotate(-40deg);transition:all .5s cubic-bezier(.3,1.5,.5,1);pointer-events:none;}
+          .theme-light .card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(122,74,74,.14);}
+          .theme-light .card:hover::after{opacity:.8;transform:translateY(0) rotate(12deg);}
+          .theme-light .task-row:hover .task-name-text{transform:translateX(4px);}
+          .theme-light .task-row:hover .check:not(.on){transform:rotate(90deg) scale(1.1);border-radius:50%;}
+          .theme-light .fab:hover{transform:scale(1.07) rotate(90deg);}
+
+          /* ---------- CYBER — targeting reticle & glitch ---------- */
+          .theme-dark button, .theme-dark .check, .theme-dark .task-row{cursor:crosshair!important;}
+          .theme-dark button:not(.fab):hover{
+            clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px)); /* cắt góc notch */
+            animation:cyJitter .22s steps(2,end);
+            filter:drop-shadow(0 0 7px rgba(0,255,156,.45));
+            text-shadow:1.5px 0 0 rgba(255,60,120,.6), -1.5px 0 0 rgba(0,208,255,.6)!important; /* tách màu RGB */
+          }
+          .theme-dark button::before, .theme-dark button::after{
+            content:"";position:absolute;width:8px;height:8px;pointer-events:none;opacity:0;
+            transition:opacity .12s steps(2,end), transform .16s steps(2,end);
+          }
+          .theme-dark button::before{top:-2px;left:-2px;border-top:1.5px solid var(--c1);border-left:1.5px solid var(--c1);transform:translate(4px,4px);}
+          .theme-dark button::after{bottom:-2px;right:-2px;border-bottom:1.5px solid var(--c1);border-right:1.5px solid var(--c1);transform:translate(-4px,-4px);}
+          .theme-dark button:hover::before, .theme-dark button:hover::after{opacity:1;transform:translate(0,0);} /* ngoặc ngắm bung ra */
+          .theme-dark .check:hover{animation:cyJitter .22s steps(2,end);border-color:var(--c1);box-shadow:0 0 8px rgba(0,255,156,.5);}
+          .theme-dark .task-row:hover::after{
+            content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+            background:repeating-linear-gradient(0deg,rgba(0,255,156,.06) 0 2px,transparent 2px 6px);
+            animation:cyScan 1s linear infinite; /* scanline trôi */
+          }
+          .theme-dark .task-row:hover .task-name-text{transform:translateX(5px);text-shadow:1px 0 0 rgba(255,60,120,.4),-1px 0 0 rgba(0,208,255,.4);}
+          .theme-dark .card:hover{border-color:rgba(0,255,156,.55);box-shadow:0 0 22px rgba(0,255,156,.16), inset 0 0 30px rgba(0,255,156,.05);}
+          .theme-dark .fab:hover{animation:cyJitter .22s steps(2,end);filter:drop-shadow(0 0 14px rgba(0,255,156,.8));}
+
+          /* ---------- COZY — giấy thủ công, bảng gỗ đung đưa ---------- */
+          .theme-cozy button:not(.fab):hover{
+            border-radius:255px 15px 225px 15px/15px 225px 15px 255px!important; /* viền cắt tay */
+            animation:cozyRock 1.5s ease-in-out infinite; /* đung đưa như bảng treo */
+            box-shadow:3.5px 3.5px 0 rgba(160,92,44,.3);
+            filter:saturate(1.1);
+          }
+          .theme-cozy .check:hover{transform:rotate(-5deg) scale(1.12);border-radius:9px 3px 9px 3px;}
+          .theme-cozy .task-row:hover .task-name-text{transform:rotate(-.7deg) translateX(3px);}
+          .theme-cozy .task-row:hover .check{transform:rotate(-5deg) scale(1.1);}
+          .theme-cozy .tag{transition:transform .3s cubic-bezier(.34,1.6,.5,1);}
+          .theme-cozy .task-row:hover .tag{transform:rotate(2deg) translateY(-1px);}
+          .theme-cozy .card:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 rgba(160,92,44,.18);border-color:#c89a68;}
+          .theme-cozy .fab:hover{animation:cozyRockBig 1.1s ease-in-out infinite;}
+
+          /* ---------- CUTIE — jelly & blob ---------- */
+          .theme-cutie button:not(.fab):hover{
+            border-radius:58% 42% 55% 45%/48% 60% 40% 52%!important; /* morph thành blob */
+            animation:jelly .9s cubic-bezier(.36,1.6,.5,1) infinite;
+            filter:saturate(1.18) brightness(1.03);
+          }
+          .theme-cutie button::after{
+            content:"❀";position:absolute;top:-7px;right:-4px;font-size:.62rem;color:var(--c2);pointer-events:none;
+            opacity:0;transform:translateY(5px) scale(.4) rotate(-30deg);transition:all .35s cubic-bezier(.3,1.7,.5,1);
+          }
+          .theme-cutie button:hover::after{animation:petalPop .4s cubic-bezier(.3,1.7,.5,1) forwards;} /* hoa nở góc nút */
+          .theme-cutie .check:hover{border-radius:58% 42% 55% 45%/48% 60% 40% 52%;transform:rotate(10deg) scale(1.14);}
+          .theme-cutie .task-row:hover .task-name-text{transform:translateX(4px);}
+          .theme-cutie .task-row:hover .check{transform:rotate(10deg) scale(1.12);border-radius:58% 42% 55% 45%/48% 60% 40% 52%;}
+          .theme-cutie .card:hover{transform:translateY(-3px);border-color:#e89bb8;box-shadow:0 9px 0 rgba(232,155,184,.22), 0 12px 24px rgba(120,150,210,.14);}
+          .theme-cutie .fab:hover{animation:jelly .8s cubic-bezier(.36,1.6,.5,1) infinite;}
+
+          /* ---------- NATURE — lá đung đưa trong gió ---------- */
+          .theme-nature button:not(.fab):hover{
+            border-radius:1.3em .35em 1.3em .35em!important; /* morph thành chiếc lá */
+            animation:natureSway 2.2s ease-in-out infinite;transform-origin:50% 100%; /* xoay từ cuống lá */
+            filter:saturate(1.12);
+            box-shadow:0 5px 10px rgba(111,158,87,.2);
+          }
+          .theme-nature .check:hover{border-radius:1em .3em 1em .3em;transform:rotate(-8deg) scale(1.1);border-color:var(--c1);}
+          .theme-nature .task-row:hover .task-name-text{transform:translateX(4px);}
+          .theme-nature .task-row:hover .check{border-radius:1em .3em 1em .3em;transform:rotate(-8deg) scale(1.08);}
+          .theme-nature .tag{transition:transform .35s ease;}
+          .theme-nature .task-row:hover .tag{transform:rotate(-2deg) translateY(-1px);border-radius:1em .3em 1em .3em;}
+          .theme-nature .card{position:relative;}
+          .theme-nature .card::after{content:"🍃";position:absolute;top:8px;right:12px;font-size:.72rem;pointer-events:none;
+            opacity:0;transform:translate(6px,4px) rotate(40deg);transition:all .6s cubic-bezier(.25,1.2,.4,1);}
+          .theme-nature .card:hover{transform:translateY(-2px);box-shadow:0 7px 0 rgba(111,158,87,.15), 0 12px 22px rgba(111,158,87,.12);}
+          .theme-nature .card:hover::after{opacity:.85;transform:translate(0,0) rotate(0);}
+          .theme-nature .fab:hover{animation:natureSway 1.6s ease-in-out infinite;transform-origin:50% 100%;}
+
+          /* ---------- chung: banner sống động + slider ---------- */
+          .hero-banner:hover img{transform:scale(1.06);}
+          .mood-range::-webkit-slider-thumb:hover{transform:scale(1.28);}
+          .theme-dark .mood-range::-webkit-slider-thumb:hover{transform:scale(1.2) rotate(45deg);} /* tròn → kim cương */
+        }
+        /* thumb cyber vuông (mọi thiết bị) */
+        .theme-dark .mood-range::-webkit-slider-thumb{border-radius:0;}
+
+        /* ================= PRESS — mỗi theme một kiểu chạm ================= */
+        .theme-dark .btn-press:not([data-sfx="danger"]){animation:cyPress .26s steps(3,end);}
+        @keyframes cyPress{0%{transform:scale(1) skewX(0)}34%{transform:scale(.93) skewX(-6deg)}67%{transform:scale(1.03) skewX(3deg)}100%{transform:scale(1) skewX(0)}}
+        .theme-cozy .btn-press:not([data-sfx="danger"]){animation:doughPress .5s cubic-bezier(.34,1.5,.5,1);}
+        @keyframes doughPress{0%{transform:scale(1,1)}30%{transform:scale(1.08,.78)}60%{transform:scale(.92,1.1)}100%{transform:scale(1,1)}} /* nhấn bột */
+        .theme-cutie .btn-press:not([data-sfx="danger"]){animation:jellyPress .55s cubic-bezier(.36,1.7,.5,1);}
+        @keyframes jellyPress{0%{transform:scale(1,1)}22%{transform:scale(.82,1.12)}45%{transform:scale(1.12,.85)}68%{transform:scale(.94,1.05)}100%{transform:scale(1,1)}}
+        .theme-nature .btn-press:not([data-sfx="danger"]){animation:swayPress .5s cubic-bezier(.3,1.4,.5,1);}
+        @keyframes swayPress{0%{transform:rotate(0) scale(1)}30%{transform:rotate(-4deg) scale(.9)}65%{transform:rotate(3deg) scale(1.05)}100%{transform:rotate(0) scale(1)}}
+
+        /* ================= FAB idle — app luôn "thở" ================= */
+        .theme-light .fab:not(.btn-press){animation:haloPulse 2.6s ease-out infinite;}
+        .theme-dark .fab:not(.btn-press){animation:neonBreath 2.4s ease-in-out infinite;}
+        .theme-cozy .fab:not(.btn-press){animation:cozyRockBig 3.4s ease-in-out infinite;}
+        .theme-cutie .fab:not(.btn-press){animation:jelly 3.2s ease-in-out infinite;}
+        .theme-nature .fab:not(.btn-press){animation:natureSway 3.6s ease-in-out infinite;transform-origin:50% 100%;}
+
+        /* ================= FOCUS (bàn phím) ================= */
+        button:focus-visible{outline:2px solid var(--c2);outline-offset:2px;transition:outline-offset .2s ease;}
+        .theme-dark button:focus-visible{outline:1.5px dashed var(--c1);outline-offset:3px;}
+
+        /* ================= reduced motion: tắt hết ================= */
+        @media(prefers-reduced-motion:reduce){
+          button,.check,.tag,.card,.task-name-text,.hero-banner img{transition:none!important;animation:none!important;}
+          button::before,button::after,.card::after{transition:none!important;animation:none!important;}
+          .fab:not(.btn-press){animation:none!important;}
+          .theme-dark .task-row:hover::after{animation:none!important;}
+        }
       `}</style>
 
       <div className={`app-wrap theme-${theme} ${themeFlipping ? "theme-flipping" : ""}`}>
