@@ -1526,7 +1526,7 @@ function PushupChart({ weekDays, pushups, selectedDate, onSelectDay }) {
           const y = padT + innerH - h;
           const dt = new Date(weekDays[i] + "T00:00:00");
           return (
-            <g key={i} onClick={() => onSelectDay(weekDays[i])} style={{ cursor: "pointer" }}>
+            <g key={i} className="bar-hit" onClick={() => onSelectDay(weekDays[i])} style={{ cursor: "pointer" }}>
               <rect x={cx - slot / 2} y={padT} width={slot} height={innerH} fill="transparent" />
               {c > 0
                 ? <rect x={cx - barW / 2} y={y} width={barW} height={h} rx="3" fill={wine} opacity={isSel ? 1 : 0.4} />
@@ -2031,19 +2031,30 @@ export default function Home() {
 
   useEffect(() => { loadVerse(true); }, [loadVerse]);
 
-  // Global button feedback: sound (by data-sfx) + springy press animation for EVERY button
+  // Global press feedback: sound (buttons, by data-sfx) + themed press animation for
+  // every button AND task checkbox. Hardened so .btn-press can never stick: ignores
+  // bubbled animationend from children/pseudos, listens for animationcancel, and has
+  // a timeout fallback (hover animations can preempt the press animation entirely).
   useEffect(() => {
     const onDown = (e) => {
-      const btn = e.target.closest && e.target.closest("button");
-      if (!btn || btn.disabled) return;
-      playClick(btn.dataset.sfx || "tick");
-      // spring press animation (CSS animation overrides inline transforms while running)
-      btn.classList.remove("btn-press");
+      const el = e.target.closest && e.target.closest("button, .check");
+      if (!el || el.disabled) return;
+      if (el.tagName === "BUTTON") playClick(el.dataset.sfx || "tick"); // .check plays its own toggle sound
+      el.classList.remove("btn-press");
       // force reflow so the animation can retrigger on rapid taps
-      void btn.offsetWidth;
-      btn.classList.add("btn-press");
-      const done = () => btn.classList.remove("btn-press");
-      btn.addEventListener("animationend", done, { once: true });
+      void el.offsetWidth;
+      el.classList.add("btn-press");
+      let tid;
+      const done = (ev) => {
+        if (ev && ev.type !== "timeout" && ev.target !== el) return; // child/pseudo animation — not ours
+        el.classList.remove("btn-press");
+        el.removeEventListener("animationend", done);
+        el.removeEventListener("animationcancel", done);
+        clearTimeout(tid);
+      };
+      el.addEventListener("animationend", done);
+      el.addEventListener("animationcancel", done);
+      tid = setTimeout(() => done(), 700);
     };
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -2535,8 +2546,8 @@ export default function Home() {
         }
         .task-drop-pop{ animation:dropPop .42s cubic-bezier(.34,1.56,.64,1); }
         @media(prefers-reduced-motion:reduce){.task-drop-pop{animation:none}}
-        .f1{animation:fadeUp .5s .05s both}.f2{animation:fadeUp .5s .15s both}
-        .f3{animation:fadeUp .5s .25s both}.f4{animation:fadeUp .5s .35s both}
+        .f1{animation:fadeUp .5s .05s backwards}.f2{animation:fadeUp .5s .15s backwards}
+        .f3{animation:fadeUp .5s .25s backwards}.f4{animation:fadeUp .5s .35s backwards}
         .card{background:rgba(255,255,255,.82);backdrop-filter:blur(8px);
           border:1px solid rgba(201,160,160,.25);border-radius:16px;padding:18px;}
         .card-title{font-family:'Cormorant Garamond',serif;font-size:1rem;font-weight:600;
@@ -2546,7 +2557,7 @@ export default function Home() {
           border-radius:10px;margin-bottom:5px;cursor:pointer;
           transition:background .45s cubic-bezier(.22,1,.36,1), opacity .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1), transform .25s cubic-bezier(.34,1.56,.64,1);}
         .task-row:hover{background:rgba(232,196,184,.22)}
-        .task-row .task-name-text{color:#4a3030;transition:color .35s ease;}
+        .task-row .task-name-text{color:#4a3030;transition:color .35s ease, transform .28s cubic-bezier(.34,1.45,.5,1), text-shadow .25s ease;}
         .task-done{background:linear-gradient(135deg,rgba(95,170,95,.40),rgba(95,170,95,.15));}
         .task-done:hover{background:linear-gradient(135deg,rgba(95,170,95,.48),rgba(95,170,95,.22));}
         .task-done .task-name-text{color:#3f7a3f;}
@@ -2608,20 +2619,24 @@ export default function Home() {
         button{position:relative;}
         button, .check, .tag, .card, .task-name-text{
           transition:transform .28s cubic-bezier(.34,1.45,.5,1), border-radius .32s cubic-bezier(.4,1.3,.5,1),
-            box-shadow .24s ease, filter .18s ease, border-color .25s ease, background-color .25s ease, opacity .3s ease;
+            box-shadow .24s ease, filter .18s ease, border-color .25s ease, background-color .25s ease,
+            opacity .3s ease, outline-offset .2s ease;
         }
         .hero-banner img{transition:transform 4s cubic-bezier(.16,.6,.2,1);}
 
         /* ---- shared keyframes ---- */
         @keyframes sheenSweep{0%{background-position:140% 0;opacity:1}100%{background-position:-60% 0;opacity:0}}
+        @keyframes sacredLift{to{transform:translateY(-2px)}}
         @keyframes cyJitter{0%{transform:translate(0,0)}30%{transform:translate(-1px,1px)}60%{transform:translate(1px,-1px)}100%{transform:translate(0,0)}}
         @keyframes cyScan{0%{background-position:0 -18px}100%{background-position:0 18px}}
-        @keyframes cozyRock{0%,100%{transform:translateY(-1px) rotate(-1.3deg)}50%{transform:translateY(-2px) rotate(1.5deg)}}
+        /* cozy = con lắc bảng gỗ treo (pivot TRÊN đầu nút) — khác nature (lá xoay từ cuống DƯỚI) */
+        @keyframes cozySwing{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.6deg)}}
         @keyframes cozyRockBig{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3.4deg)}}
-        @keyframes jelly{0%,100%{transform:scale(1,1)}25%{transform:scale(1.05,.93)}50%{transform:scale(.95,1.06)}75%{transform:scale(1.03,.97)}}
-        @keyframes natureSway{0%,100%{transform:translateY(-1px) rotate(-1.1deg)}50%{transform:translateY(-1px) rotate(1.4deg)}}
+        @keyframes jelly{0%,100%{transform:scale(1,1)}25%{transform:scale(1.04,.95)}50%{transform:scale(.96,1.05)}75%{transform:scale(1.02,.98)}}
+        @keyframes natureSway{0%,100%{transform:translateY(-1px) rotate(-.9deg)}50%{transform:translateY(-1px) rotate(1.1deg)}}
         @keyframes haloPulse{0%{box-shadow:0 0 0 0 rgba(201,168,76,.35)}100%{box-shadow:0 0 0 12px rgba(201,168,76,0)}}
-        @keyframes neonBreath{0%,100%{filter:drop-shadow(0 0 4px rgba(0,255,156,.35))}50%{filter:drop-shadow(0 0 12px rgba(0,255,156,.7))}}
+        @keyframes fabHalo{0%{transform:scale(.85);opacity:.75}70%{transform:scale(1.3);opacity:0}100%{transform:scale(1.3);opacity:0}}
+        @keyframes neonRingPulse{0%,100%{opacity:.15;transform:scale(1)}50%{opacity:.85;transform:scale(1.05)}}
         @keyframes petalPop{0%{opacity:0;transform:translateY(5px) scale(.4) rotate(-30deg)}100%{opacity:.85;transform:translateY(0) scale(1) rotate(0)}}
 
         /* ================= HOVER (chỉ thiết bị có chuột) ================= */
@@ -2629,11 +2644,11 @@ export default function Home() {
 
           /* ---------- SACRED — vòm thánh đường & ánh nến ---------- */
           .theme-light button:not(.fab):hover{
-            transform:translateY(-2px);
             border-radius:1.15em 1.15em .45em .45em!important; /* morph thành vòm */
-            filter:saturate(1.12) brightness(1.04);
-            box-shadow:0 4px 12px rgba(122,74,74,.18);
+            filter:saturate(1.12) brightness(1.04) drop-shadow(0 4px 5px rgba(122,74,74,.2)); /* bóng ôm theo hình (kể cả nút trong suốt) */
           }
+          /* lift bằng animation để thắng cả inline transform; nhường chỗ khi đang press */
+          .theme-light button:not(.fab):not(.btn-press):hover{animation:sacredLift .3s cubic-bezier(.34,1.45,.5,1) forwards;}
           .theme-light button::after{
             content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
             background:linear-gradient(115deg,transparent 40%,rgba(255,228,150,.4) 50%,transparent 60%);
@@ -2642,10 +2657,9 @@ export default function Home() {
           .theme-light button:hover::after{animation:sheenSweep .9s ease forwards;} /* vệt nến quét ngang */
           .theme-light .check:not(.on):hover{border-radius:50%;transform:rotate(90deg) scale(1.1);border-color:var(--c2);}
           .theme-light .check.on:hover{animation:haloPulse .7s ease-out;}
-          .theme-light .tag{transition:transform .3s cubic-bezier(.34,1.6,.5,1);}
           .theme-light .task-row:hover .tag{transform:translateY(-1px) skewX(-6deg);} /* nghiêng như nét mực */
           .theme-light .card{position:relative;}
-          .theme-light .card::after{content:"✦";position:absolute;top:8px;right:12px;color:var(--c2);font-size:.8rem;
+          .theme-light .card::after{content:"✦";position:absolute;bottom:8px;right:12px;color:var(--c2);font-size:.8rem;
             opacity:0;transform:translateY(5px) rotate(-40deg);transition:all .5s cubic-bezier(.3,1.5,.5,1);pointer-events:none;}
           .theme-light .card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(122,74,74,.14);}
           .theme-light .card:hover::after{opacity:.8;transform:translateY(0) rotate(12deg);}
@@ -2654,115 +2668,136 @@ export default function Home() {
           .theme-light .fab:hover{transform:scale(1.07) rotate(90deg);}
 
           /* ---------- CYBER — targeting reticle & glitch ---------- */
-          .theme-dark button, .theme-dark .check, .theme-dark .task-row{cursor:crosshair!important;}
+          .theme-dark button:enabled, .theme-dark .check, .theme-dark .task-row{cursor:crosshair!important;}
           .theme-dark button:not(.fab):hover{
-            clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px)); /* cắt góc notch */
-            animation:cyJitter .22s steps(2,end);
-            filter:drop-shadow(0 0 7px rgba(0,255,156,.45));
+            /* notch co theo nút nhỏ; clip-path nuốt mọi shadow nên glow chuyển cho brackets + text */
+            clip-path:polygon(0 0,calc(100% - min(7px,26%)) 0,100% min(7px,26%),100% 100%,min(7px,26%) 100%,0 calc(100% - min(7px,26%)));
             text-shadow:1.5px 0 0 rgba(255,60,120,.6), -1.5px 0 0 rgba(0,208,255,.6)!important; /* tách màu RGB */
           }
-          .theme-dark button::before, .theme-dark button::after{
+          .theme-dark button:not(.fab):not(.btn-press):hover{animation:cyJitter .22s steps(2,end);}
+          .theme-dark button:not(.fab)::before, .theme-dark button:not(.fab)::after{
             content:"";position:absolute;width:8px;height:8px;pointer-events:none;opacity:0;
             transition:opacity .12s steps(2,end), transform .16s steps(2,end);
           }
-          .theme-dark button::before{top:-2px;left:-2px;border-top:1.5px solid var(--c1);border-left:1.5px solid var(--c1);transform:translate(4px,4px);}
-          .theme-dark button::after{bottom:-2px;right:-2px;border-bottom:1.5px solid var(--c1);border-right:1.5px solid var(--c1);transform:translate(-4px,-4px);}
-          .theme-dark button:hover::before, .theme-dark button:hover::after{opacity:1;transform:translate(0,0);} /* ngoặc ngắm bung ra */
-          .theme-dark .check:hover{animation:cyJitter .22s steps(2,end);border-color:var(--c1);box-shadow:0 0 8px rgba(0,255,156,.5);}
+          .theme-dark button:not(.fab)::before{top:2px;left:2px;border-top:1.5px solid var(--c1);border-left:1.5px solid var(--c1);transform:translate(4px,4px);}
+          .theme-dark button:not(.fab)::after{bottom:2px;right:2px;border-bottom:1.5px solid var(--c1);border-right:1.5px solid var(--c1);transform:translate(-4px,-4px);}
+          .theme-dark button:not(.fab):hover::before, .theme-dark button:not(.fab):hover::after{opacity:1;transform:translate(0,0);} /* ngoặc ngắm bung ra */
+          .theme-dark .check:not(.btn-press):hover{animation:cyJitter .22s steps(2,end);}
+          .theme-dark .check:hover{border-color:var(--c1);box-shadow:0 0 8px rgba(0,255,156,.5);}
           .theme-dark .task-row:hover::after{
             content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
             background:repeating-linear-gradient(0deg,rgba(0,255,156,.06) 0 2px,transparent 2px 6px);
-            animation:cyScan 1s linear infinite; /* scanline trôi */
+            animation:cyScan 1s steps(6) infinite; /* scanline nhảy nấc — đúng chất glitch, đỡ paint */
           }
           .theme-dark .task-row:hover .task-name-text{transform:translateX(5px);text-shadow:1px 0 0 rgba(255,60,120,.4),-1px 0 0 rgba(0,208,255,.4);}
           .theme-dark .card:hover{border-color:rgba(0,255,156,.55);box-shadow:0 0 22px rgba(0,255,156,.16), inset 0 0 30px rgba(0,255,156,.05);}
-          .theme-dark .fab:hover{animation:cyJitter .22s steps(2,end);filter:drop-shadow(0 0 14px rgba(0,255,156,.8));}
+          .theme-dark .fab:hover{filter:drop-shadow(0 0 14px rgba(0,255,156,.8));}
+          .theme-dark .fab:not(.btn-press):hover{animation:cyJitter .22s steps(2,end);}
 
-          /* ---------- COZY — giấy thủ công, bảng gỗ đung đưa ---------- */
+          /* ---------- COZY — bảng gỗ treo đung đưa (pivot TRÊN) ---------- */
           .theme-cozy button:not(.fab):hover{
             border-radius:255px 15px 225px 15px/15px 225px 15px 255px!important; /* viền cắt tay */
-            animation:cozyRock 1.5s ease-in-out infinite; /* đung đưa như bảng treo */
-            box-shadow:3.5px 3.5px 0 rgba(160,92,44,.3);
-            filter:saturate(1.1);
+            transform-origin:50% -35%; /* đinh treo phía trên nút */
+            filter:saturate(1.1) drop-shadow(3px 3px 0 rgba(160,92,44,.26)); /* bóng giấy ôm theo hình */
           }
+          .theme-cozy button:not(.fab):not(.btn-press):hover{animation:cozySwing 1.6s ease-in-out infinite;transform-origin:50% -35%;}
           .theme-cozy .check:hover{transform:rotate(-5deg) scale(1.12);border-radius:9px 3px 9px 3px;}
           .theme-cozy .task-row:hover .task-name-text{transform:rotate(-.7deg) translateX(3px);}
           .theme-cozy .task-row:hover .check{transform:rotate(-5deg) scale(1.1);}
-          .theme-cozy .tag{transition:transform .3s cubic-bezier(.34,1.6,.5,1);}
           .theme-cozy .task-row:hover .tag{transform:rotate(2deg) translateY(-1px);}
           .theme-cozy .card:hover{transform:translate(-1px,-1px);box-shadow:6px 6px 0 rgba(160,92,44,.18);border-color:#c89a68;}
-          .theme-cozy .fab:hover{animation:cozyRockBig 1.1s ease-in-out infinite;}
+          .theme-cozy .fab:not(.btn-press):hover{animation:cozyRockBig 1.1s ease-in-out infinite;}
 
           /* ---------- CUTIE — jelly & blob ---------- */
           .theme-cutie button:not(.fab):hover{
             border-radius:58% 42% 55% 45%/48% 60% 40% 52%!important; /* morph thành blob */
-            animation:jelly .9s cubic-bezier(.36,1.6,.5,1) infinite;
             filter:saturate(1.18) brightness(1.03);
           }
+          .theme-cutie button:not(.fab):not(.btn-press):hover{animation:jelly .9s cubic-bezier(.36,1.6,.5,1) infinite;}
           .theme-cutie button::after{
-            content:"❀";position:absolute;top:-7px;right:-4px;font-size:.62rem;color:var(--c2);pointer-events:none;
+            content:"❀";position:absolute;top:0;right:1px;font-size:.62rem;color:var(--c2);pointer-events:none;
             opacity:0;transform:translateY(5px) scale(.4) rotate(-30deg);transition:all .35s cubic-bezier(.3,1.7,.5,1);
           }
           .theme-cutie button:hover::after{animation:petalPop .4s cubic-bezier(.3,1.7,.5,1) forwards;} /* hoa nở góc nút */
           .theme-cutie .check:hover{border-radius:58% 42% 55% 45%/48% 60% 40% 52%;transform:rotate(10deg) scale(1.14);}
           .theme-cutie .task-row:hover .task-name-text{transform:translateX(4px);}
           .theme-cutie .task-row:hover .check{transform:rotate(10deg) scale(1.12);border-radius:58% 42% 55% 45%/48% 60% 40% 52%;}
+          .theme-cutie .task-row:hover .tag{transform:scale(1.08) rotate(3deg);border-radius:12px 5px 12px 5px;}
           .theme-cutie .card:hover{transform:translateY(-3px);border-color:#e89bb8;box-shadow:0 9px 0 rgba(232,155,184,.22), 0 12px 24px rgba(120,150,210,.14);}
-          .theme-cutie .fab:hover{animation:jelly .8s cubic-bezier(.36,1.6,.5,1) infinite;}
+          .theme-cutie .fab:not(.btn-press):hover{animation:jelly .8s cubic-bezier(.36,1.6,.5,1) infinite;}
 
-          /* ---------- NATURE — lá đung đưa trong gió ---------- */
+          /* ---------- NATURE — lá đung đưa trong gió (xoay từ cuống DƯỚI) ---------- */
           .theme-nature button:not(.fab):hover{
             border-radius:1.3em .35em 1.3em .35em!important; /* morph thành chiếc lá */
-            animation:natureSway 2.2s ease-in-out infinite;transform-origin:50% 100%; /* xoay từ cuống lá */
-            filter:saturate(1.12);
-            box-shadow:0 5px 10px rgba(111,158,87,.2);
+            transform-origin:50% 100%;
+            filter:saturate(1.12) drop-shadow(0 4px 5px rgba(111,158,87,.24)); /* bóng lá ôm theo hình */
           }
+          .theme-nature button:not(.fab):not(.btn-press):hover{animation:natureSway 2.2s ease-in-out infinite;transform-origin:50% 100%;}
           .theme-nature .check:hover{border-radius:1em .3em 1em .3em;transform:rotate(-8deg) scale(1.1);border-color:var(--c1);}
           .theme-nature .task-row:hover .task-name-text{transform:translateX(4px);}
           .theme-nature .task-row:hover .check{border-radius:1em .3em 1em .3em;transform:rotate(-8deg) scale(1.08);}
-          .theme-nature .tag{transition:transform .35s ease;}
           .theme-nature .task-row:hover .tag{transform:rotate(-2deg) translateY(-1px);border-radius:1em .3em 1em .3em;}
           .theme-nature .card{position:relative;}
-          .theme-nature .card::after{content:"🍃";position:absolute;top:8px;right:12px;font-size:.72rem;pointer-events:none;
+          .theme-nature .card::after{content:"🍃";position:absolute;bottom:8px;right:12px;font-size:.72rem;pointer-events:none;
             opacity:0;transform:translate(6px,4px) rotate(40deg);transition:all .6s cubic-bezier(.25,1.2,.4,1);}
           .theme-nature .card:hover{transform:translateY(-2px);box-shadow:0 7px 0 rgba(111,158,87,.15), 0 12px 22px rgba(111,158,87,.12);}
           .theme-nature .card:hover::after{opacity:.85;transform:translate(0,0) rotate(0);}
-          .theme-nature .fab:hover{animation:natureSway 1.6s ease-in-out infinite;transform-origin:50% 100%;}
+          .theme-nature .fab:not(.btn-press):hover{animation:natureSway 1.6s ease-in-out infinite;transform-origin:50% 100%;}
 
-          /* ---------- chung: banner sống động + slider ---------- */
+          /* ---------- chung: banner, slider, cột biểu đồ ---------- */
           .hero-banner:hover img{transform:scale(1.06);}
           .mood-range::-webkit-slider-thumb:hover{transform:scale(1.28);}
+          .mood-range::-moz-range-thumb:hover{transform:scale(1.28);}
           .theme-dark .mood-range::-webkit-slider-thumb:hover{transform:scale(1.2) rotate(45deg);} /* tròn → kim cương */
+          .bar-hit rect{transition:transform .28s cubic-bezier(.34,1.45,.5,1), opacity .2s ease;transform-box:fill-box;transform-origin:50% 100%;}
+          .bar-hit:hover rect{transform:scaleY(1.05);} /* cột mọc lên từ gốc */
+          .bar-hit:hover text{font-weight:800;}
         }
         /* thumb cyber vuông (mọi thiết bị) */
         .theme-dark .mood-range::-webkit-slider-thumb{border-radius:0;}
+        .mood-range::-moz-range-thumb{transition:transform .15s;}
+        /* ô biết ơn: gạch chân sáng dần khi focus */
+        .gratitude{transition:border-color .3s ease, box-shadow .3s ease;}
+        .gratitude:focus{border-bottom-color:var(--c2);box-shadow:0 1.5px 0 0 var(--c2);}
 
-        /* ================= PRESS — mỗi theme một kiểu chạm ================= */
-        .theme-dark .btn-press:not([data-sfx="danger"]){animation:cyPress .26s steps(3,end);}
+        /* ============ PRESS — mỗi theme một kiểu chạm (chip dùng chung ngôn ngữ theme;
+           confirm giữ vòng vàng semantic bằng cách chồng 2 animation; danger giữ đỏ) ============ */
+        .theme-light .btn-press:not([data-sfx="danger"]):not([data-sfx="confirm"]){animation:candlePress .42s cubic-bezier(.3,1.3,.4,1);}
+        @keyframes candlePress{0%{transform:scale(1);filter:brightness(1)}30%{transform:scale(.93);filter:brightness(1.25) saturate(1.25)}65%{transform:scale(1.02);filter:brightness(.98)}100%{transform:scale(1);filter:brightness(1)}} /* nến bùng sáng */
+        .theme-dark .btn-press:not([data-sfx="danger"]):not([data-sfx="confirm"]){animation:cyPress .26s steps(3,end);}
         @keyframes cyPress{0%{transform:scale(1) skewX(0)}34%{transform:scale(.93) skewX(-6deg)}67%{transform:scale(1.03) skewX(3deg)}100%{transform:scale(1) skewX(0)}}
-        .theme-cozy .btn-press:not([data-sfx="danger"]){animation:doughPress .5s cubic-bezier(.34,1.5,.5,1);}
+        .theme-cozy .btn-press:not([data-sfx="danger"]):not([data-sfx="confirm"]){animation:doughPress .5s cubic-bezier(.34,1.5,.5,1);}
         @keyframes doughPress{0%{transform:scale(1,1)}30%{transform:scale(1.08,.78)}60%{transform:scale(.92,1.1)}100%{transform:scale(1,1)}} /* nhấn bột */
-        .theme-cutie .btn-press:not([data-sfx="danger"]){animation:jellyPress .55s cubic-bezier(.36,1.7,.5,1);}
+        .theme-cutie .btn-press:not([data-sfx="danger"]):not([data-sfx="confirm"]){animation:jellyPress .55s cubic-bezier(.36,1.7,.5,1);}
         @keyframes jellyPress{0%{transform:scale(1,1)}22%{transform:scale(.82,1.12)}45%{transform:scale(1.12,.85)}68%{transform:scale(.94,1.05)}100%{transform:scale(1,1)}}
-        .theme-nature .btn-press:not([data-sfx="danger"]){animation:swayPress .5s cubic-bezier(.3,1.4,.5,1);}
+        .theme-nature .btn-press:not([data-sfx="danger"]):not([data-sfx="confirm"]){animation:swayPress .5s cubic-bezier(.3,1.4,.5,1);}
         @keyframes swayPress{0%{transform:rotate(0) scale(1)}30%{transform:rotate(-4deg) scale(.9)}65%{transform:rotate(3deg) scale(1.05)}100%{transform:rotate(0) scale(1)}}
+        /* confirm = vòng vàng (glow trước để transform của theme thắng) + kiểu chạm theme */
+        .theme-light .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1), candlePress .42s cubic-bezier(.3,1.3,.4,1);}
+        .theme-dark .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1), cyPress .26s steps(3,end);}
+        .theme-cozy .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1), doughPress .5s cubic-bezier(.34,1.5,.5,1);}
+        .theme-cutie .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1), jellyPress .55s cubic-bezier(.36,1.7,.5,1);}
+        .theme-nature .btn-press[data-sfx="confirm"]{animation:btnPressGlow .42s cubic-bezier(.34,1.6,.5,1), swayPress .5s cubic-bezier(.3,1.4,.5,1);}
 
-        /* ================= FAB idle — app luôn "thở" ================= */
-        .theme-light .fab:not(.btn-press){animation:haloPulse 2.6s ease-out infinite;}
-        .theme-dark .fab:not(.btn-press){animation:neonBreath 2.4s ease-in-out infinite;}
-        .theme-cozy .fab:not(.btn-press){animation:cozyRockBig 3.4s ease-in-out infinite;}
-        .theme-cutie .fab:not(.btn-press){animation:jelly 3.2s ease-in-out infinite;}
-        .theme-nature .fab:not(.btn-press){animation:natureSway 3.6s ease-in-out infinite;transform-origin:50% 100%;}
+        /* ============ FAB idle — vòng "thở" trên pseudo (không đụng shadow inline, chỉ transform/opacity) ============ */
+        .theme-light .fab::before{content:"";position:absolute;inset:-3px;border-radius:inherit;border:2px solid rgba(201,168,76,.5);opacity:0;pointer-events:none;}
+        .theme-light .fab:not(.btn-press):not(:hover)::before{animation:fabHalo 2.6s ease-out infinite;}
+        .theme-dark .fab::before{content:"";position:absolute;inset:-4px;border:1px solid rgba(0,255,156,.55);opacity:.15;pointer-events:none;}
+        .theme-dark .fab:not(.btn-press):not(:hover)::before{animation:neonRingPulse 2.4s ease-in-out infinite;}
+        .theme-cozy .fab:not(.btn-press):not(:hover){animation:cozyRockBig 3.4s ease-in-out infinite;}
+        .theme-cutie .fab:not(.btn-press):not(:hover){animation:jelly 3.2s ease-in-out infinite;}
+        .theme-nature .fab:not(.btn-press):not(:hover){animation:natureSway 3.6s ease-in-out infinite;transform-origin:50% 100%;}
 
         /* ================= FOCUS (bàn phím) ================= */
-        button:focus-visible{outline:2px solid var(--c2);outline-offset:2px;transition:outline-offset .2s ease;}
+        button:focus-visible{outline:2px solid var(--c2);outline-offset:2px;}
         .theme-dark button:focus-visible{outline:1.5px dashed var(--c1);outline-offset:3px;}
 
         /* ================= reduced motion: tắt hết ================= */
         @media(prefers-reduced-motion:reduce){
-          button,.check,.tag,.card,.task-name-text,.hero-banner img{transition:none!important;animation:none!important;}
-          button::before,button::after,.card::after{transition:none!important;animation:none!important;}
+          button,.check,.tag,.card,.task-name-text,.hero-banner img,.gratitude,.bar-hit rect{transition:none!important;animation:none!important;}
+          button::before,button::after,.card::after,.fab::before{transition:none!important;animation:none!important;}
           .fab:not(.btn-press){animation:none!important;}
+          .btn-press,.btn-press[data-sfx="confirm"],.btn-press[data-sfx="danger"],.btn-press[data-anim="chip"]{animation:none!important;}
           .theme-dark .task-row:hover::after{animation:none!important;}
         }
       `}</style>
