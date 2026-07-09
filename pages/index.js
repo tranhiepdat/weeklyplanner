@@ -480,11 +480,11 @@ function playHover() {
     _lastHoverAt = now;
     const c = actx(); if (!c || c.state !== "running") return; // im lặng cho tới cử chỉ đầu tiên (autoplay policy)
     const v = rnd(0.96, 1.05);
-    if (_uiTheme === "dark") { blip(c, { freq: 1900 * v, dur: 0.022, gain: 0.011, cutoff: 4200 }); return; }          // cursor-tick terminal
-    if (_uiTheme === "cozy") { wood(c, { freq: 340 * v, gain: 0.016, dur: 0.03, cutoff: 1300, reverb: 0, click: 0.012, glide: 0.9 }); return; } // gõ nỉ
-    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1760 * v, dur: 0.045, gain: 0.011, cutoff: 5200, glideTo: 2093 * v, glideAt: 0.04, reverb: 0.06 }); return; } // bong bóng tí hon
-    if (_uiTheme === "nature") { noise(c, { dur: 0.05, gain: 0.006, type: "lowpass", freq: 1000, q: 0.4, sweepTo: 1500 }); voice(c, { type: "sine", freq: 987 * v, dur: 0.04, gain: 0.007, cutoff: 2600, reverb: 0.08 }); return; } // lá chạm
-    voice(c, { type: "sine", freq: 1568 * v, dur: 0.05, gain: 0.01, cutoff: 3800, reverb: 0.14 }); // sacred: hơi chuông xa
+    if (_uiTheme === "dark") { blip(c, { freq: 1900 * v, dur: 0.024, gain: 0.026, cutoff: 4200 }); return; }          // cursor-tick terminal
+    if (_uiTheme === "cozy") { wood(c, { freq: 340 * v, gain: 0.036, dur: 0.032, cutoff: 1300, reverb: 0.03, click: 0.02, glide: 0.9 }); return; } // gõ nỉ
+    if (_uiTheme === "cutie") { voice(c, { type: "sine", freq: 1760 * v, dur: 0.05, gain: 0.026, cutoff: 5200, glideTo: 2093 * v, glideAt: 0.045, reverb: 0.08 }); return; } // bong bóng tí hon
+    if (_uiTheme === "nature") { noise(c, { dur: 0.05, gain: 0.013, type: "lowpass", freq: 1000, q: 0.4, sweepTo: 1500 }); voice(c, { type: "sine", freq: 987 * v, dur: 0.045, gain: 0.016, cutoff: 2600, reverb: 0.1 }); return; } // lá chạm
+    voice(c, { type: "sine", freq: 1568 * v, dur: 0.055, gain: 0.024, cutoff: 3800, reverb: 0.16 }); // sacred: hơi chuông xa
   } catch {}
 }
 // Subtle haptic feedback on supported mobile devices (native-app feel)
@@ -646,6 +646,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
   const [phase, setPhase] = useState("idle"); // idle | celebrating | settling | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => { try { setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch {} }, []);
   const rowRef = useRef(null);
   const dragRef = useRef({ startX: 0, startY: 0, active: false, moved: false, baseX: 0 });
 
@@ -655,11 +657,10 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
         setDims({ w: rowRef.current.offsetWidth, h: rowRef.current.offsetHeight });
       }
       setPhase("celebrating");
-      // sau màn highlight, chuyển qua "settling" — lớp màu fade-out êm rồi mới về done
-      // (reduced-motion: về thẳng done). Kết thúc settling do animationend của settleFade
-      // đảm nhiệm — timer ở đây có thể bị cleanup nuốt khi justDone được parent clear ở 1100ms.
-      const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const t = setTimeout(() => setPhase(reduce ? "done" : "settling"), 1000);
+      // Một mạch: flourish (rainbow 480ms + shake 560ms) → settling (green lịm 1s) → done.
+      // Vào settling ngay sau flourish để không có khoảng chữ-trắng-trên-nền-trong-suốt ở giữa.
+      // Particles vẫn bay tiếp trong lúc settling (render theo celebrating||settling).
+      const t = setTimeout(() => setPhase(p => (p === "celebrating" ? (reduceMotion ? "done" : "settling") : p)), 620);
       return () => clearTimeout(t);
     } else if (justUndone && !task.done) {
       setPhase("reversing");
@@ -726,7 +727,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           ].filter(Boolean).join(", ") || undefined),
           background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}26` : undefined,
           transform: `translateX(${swipeX}px)`,
-          transition: dragRef.current.active ? "none" : "transform .26s cubic-bezier(.22,1,.36,1), opacity .5s cubic-bezier(.22,1,.36,1), background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)",
+          transition: dragRef.current.active ? "none" : `transform .26s cubic-bezier(.22,1,.36,1), opacity ${settling ? "1s cubic-bezier(.16,1,.3,1)" : ".5s cubic-bezier(.22,1,.36,1)"}, background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)`,
           touchAction: "pan-y",
         }}>
         <div className={`check ${task.done ? "on" : ""}`}
@@ -756,8 +757,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           display: "flex", alignItems: "center", justifyContent: "center",
         }} title="Sửa">⋯</button>
       </div>
-      {celebrating && (
-        <Particles width={dims.w} height={dims.h} onDone={() => setPhase("done")} />
+      {(celebrating || settling) && (
+        <Particles width={dims.w} height={dims.h} onDone={() => setPhase(p => (p === "celebrating" ? (reduceMotion ? "done" : "settling") : p))} />
       )}
     </div>
   );
@@ -2488,18 +2489,22 @@ export default function Home() {
         .theme-dark .task-rainbow .task-name-text{color:var(--c-on-accent)!important;font-weight:700;text-shadow:none;}
         .theme-cozy .task-rainbow .task-name-text{color:#fff8ef!important;font-weight:700;text-shadow:none;}
         @keyframes wipeIn{to{transform:translateX(0)}}
-        /* done settle — lớp màu celebration LỊM DẦN rồi mới về trạng thái done (không tắt bụp) */
-        .task-settle{position:relative;overflow:hidden;}
-        .task-settle::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
-          background:linear-gradient(90deg,rgba(86,162,86,.92),rgba(86,162,86,.6));
-          animation:settleFade .55s ease-out forwards;}
+        /* done settle — highlight LỊM DẦN một mạch vào trạng thái done (1s, expo-out, không bước giữa) */
+        .task-settle{position:relative;overflow:hidden;z-index:4;
+          animation:settleGlow 1s cubic-bezier(.16,1,.3,1) forwards;}
+        .task-settle::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:inherit;
+          background:linear-gradient(135deg,rgba(86,162,86,.9),rgba(86,162,86,.5));
+          animation:settleFade 1s cubic-bezier(.16,1,.3,1) forwards;}
         .task-settle>*{position:relative;z-index:1;}
-        @keyframes settleFade{from{opacity:1}to{opacity:0}}
+        @keyframes settleFade{0%{opacity:1}100%{opacity:0}}
+        @keyframes settleGlow{0%{box-shadow:0 3px 18px rgba(86,162,86,.5)}100%{box-shadow:0 0 0 0 rgba(86,162,86,0)}}
+        @keyframes settleGlowNeon{0%{box-shadow:0 0 20px rgba(0,255,156,.55)}100%{box-shadow:0 0 0 0 rgba(0,255,156,0)}}
+        .theme-dark .task-settle{animation-name:settleGlowNeon;}
         .theme-dark .task-settle::before{background:var(--c1);}
         .theme-cozy .task-settle::before{background:#d98e4a;}
-        .theme-cutie .task-settle::before{background:linear-gradient(90deg,#5b8fd1,#e89bb8);}
-        .theme-nature .task-settle::before{background:linear-gradient(90deg,#6f9e57,#a7c47f);}
-        @media(prefers-reduced-motion:reduce){.task-settle::before{animation:none!important;opacity:0!important;}}
+        .theme-cutie .task-settle::before{background:linear-gradient(135deg,#5b8fd1,#e89bb8);}
+        .theme-nature .task-settle::before{background:linear-gradient(135deg,#6f9e57,#a7c47f);}
+        @media(prefers-reduced-motion:reduce){.task-settle,.task-settle::before{animation:none!important;}.task-settle::before{opacity:0!important;}}
         /* task shrink-out (move/delete) */
         .task-shrink{animation:taskShrink .3s ease forwards;}
         @keyframes taskShrink{0%{max-height:140px;opacity:1;transform:scale(1)}100%{max-height:0;opacity:0;transform:scale(.82);margin:0;padding:0}}
