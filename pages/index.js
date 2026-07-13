@@ -879,6 +879,130 @@ function SortableTaskList({ items, draggable, onReorder, renderRow }) {
   );
 }
 
+// ---- Cross-session drag board (main plan view) ----
+// Drag the ⠿ handle to reorder WITHIN a buổi or move a task ACROSS buổi (and to
+// "chưa xếp buổi"). Reuses renderRow (the full TaskRow) for rows and onMove(id,
+// session, index) — the same handler the Plan sheet uses — to set session + order.
+function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove, renderRow }) {
+  const dragRef = useRef(null);          // { id, w, overSession, overIndex }
+  const groupRefs = useRef(new Map());   // session -> group container el
+  const rowRefs = useRef(new Map());     // taskId -> row wrapper el
+  const [drag, setDrag] = useState(null); // { id, name, icon, w, ptrX, ptrY }
+
+  const sorted = (items) => sortTasks(items, sortMode === "session" ? "manual" : sortMode, taskOrder || {}, taskTier || {});
+
+  // Hit-test which buổi the pointer is over (columns sit side-by-side on desktop,
+  // so we need X as well as Y), then the drop index within that buổi by row midpoints.
+  const computeTarget = (x, y) => {
+    const d = dragRef.current; if (!d) return;
+    let over = null, near = d.overSession, best = Infinity;
+    groups.forEach(g => {
+      const el = groupRefs.current.get(g.session); if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) over = g.session;
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      const dist = Math.hypot(x - cx, y - cy);
+      if (dist < best) { best = dist; near = g.session; }
+    });
+    const session = over != null ? over : near;
+    const g = groups.find(gr => gr.session === session);
+    let idx = 0;
+    if (g) {
+      const others = sorted(g.items).filter(t => t.id !== d.id);
+      for (let i = 0; i < others.length; i++) {
+        const el = rowRefs.current.get(others[i].id); if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (y > r.top + r.height / 2) idx = i + 1;
+      }
+    }
+    d.overSession = session; d.overIndex = idx;
+  };
+
+  const onDown = (e, t) => {
+    if (!draggable) return;
+    e.preventDefault(); e.stopPropagation();
+    const rowEl = rowRefs.current.get(t.id);
+    const w = rowEl ? rowEl.getBoundingClientRect().width : 280;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    dragRef.current = { id: t.id, w, overSession: t.session || "", overIndex: 0 };
+    playLift(); haptic(10);
+    computeTarget(e.clientX, e.clientY);
+    setDrag({ id: t.id, name: t.name, icon: t.icon, w, ptrX: e.clientX, ptrY: e.clientY });
+  };
+  const onMoveEvt = (e) => {
+    if (!dragRef.current) return;
+    computeTarget(e.clientX, e.clientY);
+    setDrag(s => s && { ...s, ptrX: e.clientX, ptrY: e.clientY });
+  };
+  const onUp = () => {
+    const d = dragRef.current; if (!d) return;
+    const dropId = d.id, sess = d.overSession, idx = d.overIndex;
+    dragRef.current = null;
+    setDrag(null);
+    playDrop(); haptic(15);
+    onMove(dropId, sess, idx);
+    requestAnimationFrame(() => {
+      const node = rowRefs.current.get(dropId);
+      if (node) { node.classList.remove("task-drop-pop"); void node.offsetWidth; node.classList.add("task-drop-pop"); node.addEventListener("animationend", () => node.classList.remove("task-drop-pop"), { once: true }); }
+    });
+  };
+
+  const dr = dragRef.current;
+  const overSession = dr ? dr.overSession : null;
+  const overIndex = dr ? dr.overIndex : -1;
+  const dragging = !!drag;
+
+  const renderGroup = (g) => {
+    const isNone = g.session === "";
+    const items = sorted(dragging ? g.items.filter(t => t.id !== drag.id) : g.items);
+    const isOver = dragging && overSession === g.session;
+    // no-session row: hidden when empty & idle; sessions always render (stable grid tracks)
+    if (isNone && items.length === 0 && !dragging) return null;
+    return (
+      <div key={g.session || "none"} ref={el => { if (el) groupRefs.current.set(g.session, el); }}
+        className="rise" style={{ marginBottom: 14, ...(isNone ? { borderTop: "1px dashed var(--c-border)", paddingTop: 14 } : {}) }}>
+        <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: isNone ? "var(--c-muted)" : (items.length ? wine : "var(--c-muted2)"), marginBottom: 6, padding: "4px 8px", background: isNone ? "transparent" : (items.length ? "rgba(232,196,184,.25)" : "transparent"), borderRadius: 8, display: "inline-block" }}>{g.label}{items.length ? ` · ${items.length}` : ""}</div>
+        <div style={{ borderRadius: 10, background: isOver ? "color-mix(in srgb, var(--c2) 10%, transparent)" : "transparent", transition: "background .15s", padding: dragging ? "2px" : 0 }}>
+          {items.length === 0 && dragging && (
+            <div style={{ fontSize: ".7rem", color: isOver ? wine : "var(--c-muted2)", fontStyle: "italic", padding: "10px", textAlign: "center", border: "1.5px dashed var(--c-border)", borderRadius: 10 }}>
+              {isOver ? "↓ thả vào đây" : "kéo vào đây"}
+            </div>
+          )}
+          {items.map((t, i) => (
+            <div key={t.id} ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ position: "relative" }}>
+              {isOver && overIndex === i && <PlanLine />}
+              <div style={{ display: "flex", alignItems: "stretch", gap: 4 }}>
+                {draggable && (
+                  <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp}
+                    title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", width: 24, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.05rem", touchAction: "none", userSelect: "none" }}>⠿</div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>{renderRow(t)}</div>
+              </div>
+            </div>
+          ))}
+          {isOver && overIndex >= items.length && <PlanLine />}
+        </div>
+      </div>
+    );
+  };
+
+  const sessionCols = groups.filter(g => g.session !== "");
+  const noneGroup = groups.find(g => g.session === "");
+  return (
+    <div>
+      <div className="session-grid">{sessionCols.map(renderGroup)}</div>
+      {noneGroup && renderGroup(noneGroup)}
+      {drag && (
+        <div style={{ position: "fixed", left: 0, top: 0, transform: `translate(${drag.ptrX - 20}px, ${drag.ptrY - 16}px)`, width: Math.max(160, (drag.w || 280) - 26), pointerEvents: "none", zIndex: 200 }}>
+          <div style={{ padding: "9px 11px", borderRadius: 10, background: "var(--c-surface)", border: "1.5px solid var(--c2)", boxShadow: "0 14px 30px rgba(0,0,0,.32)", transform: "rotate(-1.5deg) scale(1.03)" }}>
+            <div style={{ fontSize: ".9rem", fontWeight: 600, color: "var(--c-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{drag.icon} {drag.name}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Mood slider (Bible-themed) for a given day ----
 function MoodSlider({ date, value, onChange, syncErr }) {
   const info = moodInfo(value || 3);
@@ -3029,24 +3153,16 @@ export default function Home() {
               ) : (
                 <>
                   <div style={{ fontSize: ".66rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>
-                    {sortMode === "session" ? <>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để sắp xếp trong mỗi buổi</>
+                    {sortMode === "session" ? <>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để xếp thứ tự & <b>chuyển việc qua buổi khác</b></>
                       : sortMode === "priority" ? "🔥 Ưu tiên (bắt buộc → khẩn → quan trọng) lên đầu mỗi buổi"
                       : "🏷️ Sắp theo loại việc trong mỗi buổi"}
                   </div>
-                  <div className="session-grid">
-                  {sessionGroups.map((sg, gi) => sg.items.length > 0 && (
-                    <div key={sg.key} className="rise" style={{ marginBottom: 14, animationDelay: `${gi * 0.06}s` }}>
-                      <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: wine, marginBottom: 6, padding: "4px 8px", background: "rgba(232,196,184,.25)", borderRadius: 8, display: "inline-block" }}>{sg.label}</div>
-                      <SortableTaskList items={sortTasks(sg.items, sortMode === "session" ? "manual" : sortMode, taskOrder, taskTier)} draggable={sortMode === "session"} onReorder={reorderTasks} renderRow={renderTaskRow} />
-                    </div>
-                  ))}
-                  </div>
-                  {noSession.length > 0 && (
-                    <div className="rise" style={{ marginBottom: 14, animationDelay: "0.2s", borderTop: "1px dashed var(--c-border)", paddingTop: 14 }}>
-                      <div style={{ fontSize: ".7rem", fontWeight: 700, letterSpacing: ".06em", color: "var(--c-muted)", marginBottom: 6 }}>📋 Chưa xếp buổi</div>
-                      <SortableTaskList items={sortTasks(noSession, sortMode === "session" ? "manual" : sortMode, taskOrder, taskTier)} draggable={sortMode === "session"} onReorder={reorderTasks} renderRow={renderTaskRow} />
-                    </div>
-                  )}
+                  <SessionBoard
+                    groups={[...sessionGroups.map(sg => ({ session: sg.key, label: sg.label, items: sg.items })), { session: "", label: "📋 Chưa xếp buổi", items: noSession }]}
+                    draggable={sortMode === "session"}
+                    sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier}
+                    onMove={planMove} renderRow={renderTaskRow}
+                  />
                 </>
               )}
 
