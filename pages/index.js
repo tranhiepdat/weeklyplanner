@@ -1297,7 +1297,7 @@ function InsightsPanel({ selectedDate, byDate, moods }) {
 // ---- Create task bottom sheet ----
 const ICON_CHOICES = ["💼","💻","✨","📞","💰","💵","💸","🏦","🏠","🧹","👕","🛒","📦","🍲","🥖","⛽","🏸","🏋️","🦷","💊","📄","📋","⛪","🙏","🎮","✈️","⌨️","🎧","📱","🕐"];
 // Project tags (Notion "Project" multi-select). Add new work projects here — used by both Create & Edit.
-const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG", "🟢 AOV26"];
+const PROJECTS = ["🔷 Nacon", "🟣 VP91", "🟠 KUNVANDONG", "🟢 AOV26", "Nội Bộ"];
 function CreateModal({ defaultDate, onClose, onCreate }) {
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("");
