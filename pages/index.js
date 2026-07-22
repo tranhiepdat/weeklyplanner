@@ -918,22 +918,6 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
     d.overSession = session; d.overIndex = idx;
   };
 
-  const onDown = (e, t) => {
-    if (!draggable) return;
-    e.preventDefault(); e.stopPropagation();
-    const rowEl = rowRefs.current.get(t.id);
-    const w = rowEl ? rowEl.getBoundingClientRect().width : 280;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    dragRef.current = { id: t.id, w, overSession: t.session || "", overIndex: 0 };
-    playLift(); haptic(10);
-    computeTarget(e.clientX, e.clientY);
-    setDrag({ id: t.id, name: t.name, icon: t.icon, w, ptrX: e.clientX, ptrY: e.clientY });
-  };
-  const onMoveEvt = (e) => {
-    if (!dragRef.current) return;
-    computeTarget(e.clientX, e.clientY);
-    setDrag(s => s && { ...s, ptrX: e.clientX, ptrY: e.clientY });
-  };
   const onUp = () => {
     const d = dragRef.current; if (!d) return;
     const dropId = d.id, sess = d.overSession, idx = d.overIndex;
@@ -945,6 +929,34 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
       const node = rowRefs.current.get(dropId);
       if (node) { node.classList.remove("task-drop-pop"); void node.offsetWidth; node.classList.add("task-drop-pop"); node.addEventListener("animationend", () => node.classList.remove("task-drop-pop"), { once: true }); }
     });
+  };
+  // Drag is driven by WINDOW listeners, NOT the handle's own pointer events: while
+  // dragging we unmount the lifted row (ghost-follows-pointer), which drops pointer
+  // capture and would stall a handle-bound move/up — window listeners fire no matter
+  // what's under the pointer, so vertical drags across tall rows track smoothly.
+  const onDown = (e, t) => {
+    if (!draggable || dragRef.current) return;
+    e.preventDefault(); e.stopPropagation();
+    const rowEl = rowRefs.current.get(t.id);
+    const w = rowEl ? rowEl.getBoundingClientRect().width : 280;
+    dragRef.current = { id: t.id, w, overSession: t.session || "", overIndex: 0 };
+    playLift(); haptic(10);
+    computeTarget(e.clientX, e.clientY);
+    setDrag({ id: t.id, name: t.name, icon: t.icon, w, ptrX: e.clientX, ptrY: e.clientY });
+    const move = (ev) => {
+      if (!dragRef.current) return;
+      computeTarget(ev.clientX, ev.clientY);
+      setDrag(s => s && { ...s, ptrX: ev.clientX, ptrY: ev.clientY });
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      onUp();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
 
   const dr = dragRef.current;
@@ -973,7 +985,7 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
               {isOver && overIndex === i && <PlanLine />}
               <div style={{ display: "flex", alignItems: "stretch", gap: 4 }}>
                 {draggable && (
-                  <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp}
+                  <div onPointerDown={e => onDown(e, t)}
                     title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", width: 24, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.05rem", touchAction: "none", userSelect: "none" }}>⠿</div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>{renderRow(t)}</div>
@@ -1806,26 +1818,37 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
     }
     d.overSession = session; d.overIndex = idx;
   };
-  const onDown = (e, t) => {
-    e.preventDefault(); e.stopPropagation();
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    const el = rowRefs.current.get(t.id);
-    dragRef.current = { id: t.id, w: el ? el.offsetWidth : 280, overSession: t.session || "", overIndex: 0 };
-    playLift(); haptic(10);
-    computeTarget(e.clientY);
-    setDrag({ id: t.id, name: t.name, icon: t.icon, w: dragRef.current.w, ptrX: e.clientX, ptrY: e.clientY });
-  };
-  const onMoveEvt = (e) => {
-    if (!dragRef.current) return;
-    computeTarget(e.clientY);
-    setDrag(s => s && { ...s, ptrX: e.clientX, ptrY: e.clientY });
-  };
   const onUp = () => {
     const d = dragRef.current; if (!d) return;
     dragRef.current = null;
     setDrag(null);
     playDrop(); haptic(15);
     onMove(d.id, d.overSession, d.overIndex);
+  };
+  // Window-driven drag (see SessionBoard): the lifted row unmounts mid-drag, so
+  // handle-bound move/up would stall once pointer capture drops — window listeners keep tracking.
+  const onDown = (e, t) => {
+    if (dragRef.current) return;
+    e.preventDefault(); e.stopPropagation();
+    const el = rowRefs.current.get(t.id);
+    dragRef.current = { id: t.id, w: el ? el.offsetWidth : 280, overSession: t.session || "", overIndex: 0 };
+    playLift(); haptic(10);
+    computeTarget(e.clientY);
+    setDrag({ id: t.id, name: t.name, icon: t.icon, w: dragRef.current.w, ptrX: e.clientX, ptrY: e.clientY });
+    const move = (ev) => {
+      if (!dragRef.current) return;
+      computeTarget(ev.clientY);
+      setDrag(s => s && { ...s, ptrX: ev.clientX, ptrY: ev.clientY });
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      onUp();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
 
   const dr = dragRef.current;
@@ -1851,7 +1874,7 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
                     {isOver && overIndex === i && <PlanLine />}
                     <div ref={el => { if (el) rowRefs.current.set(t.id, el); }} style={{ marginBottom: 7, position: "relative" }}>
                       <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
-                        <div onPointerDown={e => onDown(e, t)} onPointerMove={onMoveEvt} onPointerUp={onUp} onPointerCancel={onUp} title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 26, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.1rem", touchAction: "none", userSelect: "none" }}>⠿</div>
+                        <div onPointerDown={e => onDown(e, t)} title="Kéo qua buổi khác / xếp thứ tự" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 26, cursor: "grab", color: "var(--c-muted2)", fontSize: "1.1rem", touchAction: "none", userSelect: "none" }}>⠿</div>
                         <div onClick={() => handleTap(t.id)} className={"plan-row" + (pop && pop.id === t.id ? " task-drop-pop" : "")} style={{ flex: 1, minWidth: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 12, background: must ? "color-mix(in srgb, var(--c2) 12%, transparent)" : "var(--c-surface)", opacity: must ? 1 : .7, border: must ? "1.5px solid var(--c2)" : "1px solid var(--c-border)", boxShadow: must ? "0 0 0 2px color-mix(in srgb, var(--c2) 38%, transparent)" : "none", transition: "opacity .2s, box-shadow .2s, border-color .2s, background .2s" }}>
                           <span key={must ? "m" : "o"} className="mood-emoji-pop" style={{ fontSize: "1.3rem", lineHeight: 1 }}>{must ? "🔥" : "💤"}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
