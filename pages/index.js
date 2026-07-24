@@ -6,6 +6,7 @@ const DAYS_SHORT = ["CN","T2","T3","T4","T5","T6","T7"];
 const fmt = d => d.toLocaleDateString("vi-VN", { day: "numeric", month: "numeric" });
 const iso = d => {
   const x = new Date(d);
+  if (isNaN(x.getTime())) return null; // invalid date → return null instead of throwing on toISOString
   x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
   return x.toISOString().split("T")[0];
 };
@@ -1957,6 +1958,7 @@ function ReviewPanel({ tasks }) {
   tasks.forEach(t => {
     if (!t.date) return;
     const wkKey = iso(mondayOf(new Date(t.date + "T00:00:00")));
+    if (!wkKey) return; // skip tasks with an unparseable date rather than crash
     const w = weeks[wkKey] || (weeks[wkKey] = { cats: { work: 0, personal: 0, chore: 0, care: 0 }, done: 0, total: 0 });
     w.cats[taskCategory(t)] += 1; w.total += 1; if (t.done) w.done += 1;
   });
@@ -2499,6 +2501,7 @@ export default function Home() {
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#7a4a4a" />
         <meta name="apple-mobile-web-app-title" content="Dat Planner" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

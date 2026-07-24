@@ -42,7 +42,9 @@ export default async function handler(req, res) {
         icon: page.icon?.emoji || "",
         name: p.Task?.title?.[0]?.plain_text || "Untitled",
         done: p.Done?.checkbox || false,
-        date: p["Due Date"]?.date?.start || null,
+        // Due Date may come back with a time component (e.g. 2025-01-15T10:30:00+07:00);
+        // keep only YYYY-MM-DD so `date + "T00:00:00"` never yields an Invalid Date.
+        date: (p["Due Date"]?.date?.start || "").slice(0, 10) || null,
         taskType: p["Task Type"]?.select?.name || null,
         session: p["Buổi"]?.select?.name || null,
         priority: p.Priority?.multi_select?.map((s) => s.name) || [],
