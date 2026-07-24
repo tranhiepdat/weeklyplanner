@@ -2255,10 +2255,19 @@ export default function Home() {
       const rolled = overdue.length
         ? d.tasks.map(t => (t.date && t.date < TODAY && !t.done) ? { ...t, date: TODAY } : t)
         : d.tasks;
-      setTasks(rolled);
-      overdue.forEach(t => {
-        fetch("/api/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, date: TODAY }) }).catch(() => {});
-      });
+      setTasks(rolled); // reflect the roll-over locally right away
+      // Persist the roll-over to Notion in small throttled batches (~3 req/s) so a big
+      // backlog doesn't blow Notion's rate limit → 429 → silent fail → re-roll forever.
+      if (overdue.length) {
+        (async () => {
+          for (let i = 0; i < overdue.length; i += 3) {
+            await Promise.all(overdue.slice(i, i + 3).map(t =>
+              fetch("/api/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, date: TODAY }) }).catch(() => {})
+            ));
+            if (i + 3 < overdue.length) await new Promise(r => setTimeout(r, 900));
+          }
+        })();
+      }
       // hydrate Plan Day tier/order from Notion (cross-device), merged over local cache
       const tFromN = {}, oFromN = {};
       rolled.forEach(t => { if (t.planTier) tFromN[t.id] = t.planTier; if (typeof t.planOrder === "number") oFromN[t.id] = t.planOrder; });
