@@ -91,7 +91,7 @@ Cách hiểu ngày:
 - "hôm qua" → ${addDays(today, -1)}; "hôm kia" → ${addDays(today, -2)}. ĐƯỢC PHÉP tạo hoặc dời việc vào NGÀY ĐÃ QUA trong bảng (vd ghi lại việc đã làm hôm qua) — cứ dùng ngày quá khứ trong bảng, không được từ chối.
 - "thứ X" (không nói tuần nào) → lấy NGÀY thứ X gần nhất SẮP TỚI trong bảng. "thứ X tuần sau" → tuần kế tiếp; "thứ X tuần trước" → tuần trước (ngày quá khứ trong bảng).
 - Luôn đối chiếu thứ trong bảng để chắc chắn ngày↔thứ khớp nhau.
-${typeHints || projHints ? `\nTAG DAT HAY DÙNG — HỌC theo cách Dat gán tag: việc mới có tên/ý na ná việc cũ thì gán taskType (và dự án) GIỐNG như vậy. Vd nếu "đi bán" từng là 🧍 Personal thì lần sau cũng để Personal.\n${typeHints}${projHints ? "\n  — Dự án —\n" + projHints : ""}\n` : ""}${movable.length ? `\nVIỆC HIỆN CÓ (để DỜI ngày — tham chiếu bằng số #n, KHÔNG tạo lại việc đã có trong đây):\n${refList}\n` : ""}
+${typeHints || projHints ? `\nTAG DAT HAY DÙNG — HỌC theo cách Dat gán tag: việc mới có tên/ý na ná việc cũ thì gán taskType (và dự án) GIỐNG như vậy. Vd nếu "đi bán" từng là 🧍 Personal thì lần sau cũng để Personal.\n${typeHints}${projHints ? "\n  — Dự án —\n" + projHints : ""}\n` : ""}${movable.length ? `\nVIỆC HIỆN CÓ (để DỜI ngày / TICK xong / đặt ƯU TIÊN — tham chiếu bằng số #n, KHÔNG tạo lại việc đã có trong đây):\n${refList}\n` : ""}
 QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI CÒN HƠN ĐOÁN SAI:
 - "taskType" ∈ ${JSON.stringify(TASK_TYPES)} — suy luận hợp lý, nếu không chắc để "".
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
@@ -101,6 +101,8 @@ QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI C
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
 - Nhiều việc trong 1 câu → tách thành nhiều task.
 - DỜI/ĐỔI NGÀY việc ĐÃ CÓ: nếu user muốn chuyển một việc đang có sang ngày khác (vd "dời đi bán qua mai", "chuyển họp sang thứ 5", "đẩy mấy việc hôm nay sang mai") → KHÔNG tạo task mới. Thêm vào "moves": mỗi phần tử {"ref": <số #n trong VIỆC HIỆN CÓ>, "date": "<ngày mới trong bảng>"}. Nếu không tìm thấy việc khớp trong danh sách thì hỏi lại cho rõ.
+- TICK XONG việc ĐÃ CÓ: nếu user báo đã làm/đã xong một việc (vd "xong đi chợ rồi", "tick giúp việc X", "làm xong họp rồi") → thêm vào "dones": mỗi phần tử {"ref": <số #n>, "done": true}. Nếu user muốn BỎ tick (đánh dấu chưa xong lại) → "done": false.
+- ĐẶT ƯU TIÊN việc ĐÃ CÓ: nếu user muốn ưu tiên / bỏ ưu tiên một việc (vd "ưu tiên việc X", "đánh dấu X quan trọng, làm trước", "hạ ưu tiên Y", "để dành Z") → thêm vào "tiers": mỗi phần tử {"ref": <số #n>, "tier": "must"|"optional"}. must = 🔥 Ưu tiên (làm ngay, nổi bật); optional = 💤 Ưu tiên thấp (để dành). Đây là mức ưu tiên trong ngày, KHÁC với trường "priority" (Urgent/Important) khi tạo việc mới.
 
 KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - User muốn thêm việc nhưng KHÔNG rõ NGÀY và không ngụ ý "hôm nay" → hỏi gọn ngày nào.
@@ -109,10 +111,11 @@ KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - Nếu chỉ trò chuyện/hỏi han, không yêu cầu thêm việc → "tasks": [], trả lời ấm áp.
 
 CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ nào ngoài JSON):
-{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}]}
+{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}],"dones":[{"ref":<số #n>,"done":true}],"tiers":[{"ref":<số #n>,"tier":"must"}]}
 - Khi tạo task: "reply" xác nhận ngắn gọn đã thêm việc gì + ngày/thứ (vd "đã thêm 'đi chợ' vào Thứ Ba ${addDays(today, 1)}"), giọng khích lệ.
 - Khi dời việc: "reply" xác nhận đã dời việc gì sang ngày/thứ nào.
-- Khi hỏi lại: "reply" là câu hỏi gọn gàng, "tasks": [], "moves": [].`;
+- Khi tick xong / đặt ưu tiên: "reply" xác nhận đã tick việc gì, hoặc đã đặt ưu tiên (🔥) / hạ ưu tiên (💤) việc gì.
+- Khi hỏi lại: "reply" là câu hỏi gọn gàng, mọi mảng ("tasks","moves","dones","tiers") để [].`;
 
   const anthropicMessages = messages
     .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
@@ -142,16 +145,25 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
       const outTasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
         // keep only tasks that at least have a name + a date
         .filter(t => t && t.name && t.date);
-      // resolve reschedule requests (#ref → real task id from `movable`), validate the new date
-      const moves = [];
-      if (!obj.needsClarification && Array.isArray(obj.moves)) {
-        obj.moves.forEach(mv => {
+      // resolve #ref → real task id from `movable`, for reschedule / done / priority
+      const moves = [], dones = [], tiers = [];
+      if (!obj.needsClarification) {
+        (Array.isArray(obj.moves) ? obj.moves : []).forEach(mv => {
           const t = movable[Number(mv && mv.ref) - 1];
           if (t && typeof mv.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(mv.date)) moves.push({ id: t.id, name: t.name, date: mv.date });
         });
+        (Array.isArray(obj.dones) ? obj.dones : []).forEach(dv => {
+          const t = movable[Number(dv && dv.ref) - 1];
+          if (t) dones.push({ id: t.id, name: t.name, done: dv.done !== false }); // default = mark done
+        });
+        (Array.isArray(obj.tiers) ? obj.tiers : []).forEach(tv => {
+          const t = movable[Number(tv && tv.ref) - 1];
+          const tier = tv && (tv.tier === "must" || tv.tier === "optional") ? tv.tier : null;
+          if (t && tier) tiers.push({ id: t.id, name: t.name, tier });
+        });
       }
-      const did = outTasks.length || moves.length;
-      return res.status(200).json({ reply: obj.reply || (did ? "Đã xong!" : "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!"), tasks: outTasks, moves, needsClarification: !!obj.needsClarification });
+      const did = outTasks.length || moves.length || dones.length || tiers.length;
+      return res.status(200).json({ reply: obj.reply || (did ? "Đã xong!" : "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!"), tasks: outTasks, moves, dones, tiers, needsClarification: !!obj.needsClarification });
     }
     return res.status(200).json({ reply: text || "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!", tasks: [] });
   } catch (e) {

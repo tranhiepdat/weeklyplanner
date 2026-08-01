@@ -643,7 +643,7 @@ function Particles({ width, height, onDone }) {
   );
 }
 
-function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove }) {
+function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove, onTogglePriority }) {
   const [phase, setPhase] = useState("idle"); // idle | celebrating | settling | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
@@ -746,6 +746,15 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
           </div>
         </div>
+        {onTogglePriority && (
+          <button onClick={guardBtn(() => onTogglePriority(task.id))} title={isMust ? "Bỏ ưu tiên" : "Đánh ưu tiên"} style={{
+            flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
+            background: isMust ? "color-mix(in srgb, var(--c2) 22%, transparent)" : "transparent",
+            cursor: "pointer", fontSize: "1rem", opacity: isMust ? 1 : .34,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transform: isMust ? "scale(1.06)" : "scale(1)", transition: "opacity .2s, background .2s, transform .2s",
+          }}>🔥</button>
+        )}
         {onMove && task.date && (
           <>
             <button onClick={guardBtn(() => onMove(task, -1))} style={moveBtn} title="Dời sang hôm trước">‹</button>
@@ -1705,9 +1714,9 @@ function PushupChart({ weekDays, pushups, selectedDate, onSelectDay }) {
 }
 
 // ---- AI chat sheet: talk to the assistant to create tasks by message ----
-function ChatSheet({ onClose, onCreateTasks, onMoveTasks, today, weekDays, tasks }) {
+function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, today, weekDays, tasks }) {
   const [closing, setClosing] = useState(false);
-  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\". Mình còn dời được việc (\"dời đi bán qua mai\") và ghi cả việc hôm qua nữa nha ✝️" }]);
+  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\". Mình còn dời việc, tick xong (\"xong đi chợ rồi\") và đặt ưu tiên (\"ưu tiên việc họp\") giúp bạn nữa nha ✝️" }]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef(null);
@@ -1731,11 +1740,21 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, today, weekDays, tasks
       const d = await r.json();
       const created = Array.isArray(d.tasks) ? d.tasks : [];
       const moved = Array.isArray(d.moves) ? d.moves : [];
+      const doneItems = Array.isArray(d.dones) ? d.dones : [];
+      const tierItems = Array.isArray(d.tiers) ? d.tiers : [];
       if (created.length) onCreateTasks(created);
       if (moved.length && onMoveTasks) onMoveTasks(moved);
+      if (doneItems.length && onSetDone) onSetDone(doneItems);
+      if (tierItems.length && onSetTier) onSetTier(tierItems);
       const parts = [];
       if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => t.name).join(", ")}`);
       if (moved.length) parts.push(`🔀 Đã dời ${moved.length} việc: ${moved.map(m => m.name).join(", ")}`);
+      const ticked = doneItems.filter(x => x.done !== false), unticked = doneItems.filter(x => x.done === false);
+      if (ticked.length) parts.push(`☑️ Đã tick xong: ${ticked.map(x => x.name).join(", ")}`);
+      if (unticked.length) parts.push(`↩️ Đã bỏ tick: ${unticked.map(x => x.name).join(", ")}`);
+      const musts = tierItems.filter(x => x.tier === "must"), lows = tierItems.filter(x => x.tier === "optional");
+      if (musts.length) parts.push(`🔥 Đã đặt ưu tiên: ${musts.map(x => x.name).join(", ")}`);
+      if (lows.length) parts.push(`💤 Đã hạ ưu tiên: ${lows.map(x => x.name).join(", ")}`);
       const note = parts.length ? "\n\n" + parts.join("\n") : "";
       setMsgs(m => [...m, { role: "assistant", content: (d.reply || "Đã xong!") + note }]);
     } catch {
@@ -2089,6 +2108,13 @@ export default function Home() {
     });
     fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => {});
   };
+  // Quick priority toggle (🔥 button on a task row): must ⇄ optional
+  const togglePriorityFor = (id) => {
+    const willMust = taskTier[id] !== "must";
+    haptic(willMust ? 14 : 8);
+    if (willMust) playDing(); else playClick("soft");
+    setTierFor(id, willMust ? "must" : "optional");
+  };
   // Plan Day drag: move a task into a buổi group at an index → set session + order
   const planMove = (id, toSession, toIndex) => {
     const moved = tasks.find(t => t.id === id); if (!moved) return;
@@ -2410,7 +2436,7 @@ export default function Home() {
     <TaskRow task={t} tier={taskTier[t.id]} onToggle={toggle} onEdit={setEditTask}
       justDone={justDone === t.id} justUndone={justUndone === t.id}
       removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))}
-      onMove={moveTaskByDays} />
+      onMove={moveTaskByDays} onTogglePriority={togglePriorityFor} />
   );
 
   // Make sure selectedDate stays within visible week
@@ -3205,7 +3231,7 @@ export default function Home() {
               {noDateTasks.length > 0 && selIsToday && (
                 <div style={{ marginTop: 18, borderTop: "1px dashed var(--c-border)", paddingTop: 14 }}>
                   <div style={{ fontSize: ".68rem", fontWeight: 700, letterSpacing: ".1em", color: "var(--c-muted)", textTransform: "uppercase", marginBottom: 8 }}>📌 Chưa có ngày</div>
-                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} />)}
+                  {noDateTasks.map(t => <TaskRow key={t.id} task={t} tier={taskTier[t.id]} onToggle={toggle} onEdit={setEditTask} justDone={justDone === t.id} justUndone={justUndone === t.id} removing={removingId === t.id} onDelete={(id) => removeWithShrink(id, () => deleteTask(id))} onTogglePriority={togglePriorityFor} />)}
                 </div>
               )}
               </div>{/* end slide container */}
@@ -3374,6 +3400,8 @@ export default function Home() {
             onClose={() => setShowChat(false)}
             onCreateTasks={(tasks) => tasks.forEach(createTask)}
             onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}
+            onSetDone={(items) => items.forEach(x => { const cur = tasks.find(t => t.id === x.id); if (cur && cur.done === x.done) return; toggle(x.id, x.done); })}
+            onSetTier={(items) => items.forEach(x => { if ((taskTier[x.id] || "optional") === x.tier) return; setTierFor(x.id, x.tier); })}
             today={TODAY}
             weekDays={weekDays}
             tasks={tasks}
