@@ -740,19 +740,10 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 3 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
             {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
-            {onTogglePriority && (
-              <button onClick={guardBtn(() => onTogglePriority(task.id))} title={isMust ? "Bỏ ưu tiên" : "Đánh ưu tiên"} style={{
-                marginLeft: "auto", flexShrink: 0, width: 30, height: 24, borderRadius: 7, border: "none",
-                background: isMust ? "color-mix(in srgb, var(--c2) 22%, transparent)" : "transparent",
-                cursor: "pointer", fontSize: ".95rem", lineHeight: 1, opacity: isMust ? 1 : .32,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                transform: isMust ? "scale(1.05)" : "scale(1)", transition: "opacity .2s, background .2s, transform .2s",
-              }}>🔥</button>
-            )}
           </div>
         </div>
         {onMove && task.date && (
@@ -766,6 +757,16 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
         }} title="Sửa">⋯</button>
+        {onTogglePriority && (
+          <button onClick={guardBtn(() => onTogglePriority(task.id))} title={isMust ? "Bỏ ưu tiên" : "Đánh ưu tiên"} style={{
+            position: "absolute", bottom: 5, right: 7, zIndex: 3,
+            width: 30, height: 24, borderRadius: 7, border: "none",
+            background: isMust ? "color-mix(in srgb, var(--c2) 24%, transparent)" : "transparent",
+            cursor: "pointer", fontSize: ".95rem", lineHeight: 1, opacity: isMust ? 1 : .3,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transform: isMust ? "scale(1.05)" : "scale(1)", transition: "opacity .2s, background .2s, transform .2s",
+          }}>🔥</button>
+        )}
       </div>
       {(celebrating || settling) && (
         <Particles width={dims.w} height={dims.h} onDone={() => setPhase(p => (p === "celebrating" ? (reduceMotion ? "done" : "settling") : p))} />
