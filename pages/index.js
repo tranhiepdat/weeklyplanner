@@ -100,6 +100,7 @@ const wine = "var(--c1)", gold = "var(--c2)";
 // Cover art pool — cycles every load (sacred + cozy art; add more files to /public/img to expand)
 const COVERS = ["/img/red-sea.gif","/img/moses-staff.gif","/img/jesus-water.jpg","/img/jesus-boat.jpg","/img/jesus-oil.jpg"];
 // Style options for the picker (key + label + icon + 3-color swatch)
+const VOL_LEVELS = [1, 0.55, 0.25, 0]; // master volume steps the volume button cycles through
 const THEMES = [
   { key: "light",  name: "Sacred",  icon: "✝️", sw: ["#7a4a4a", "#c9a84c", "#fdf8f2"] },
   { key: "dark",   name: "Cyber",   icon: "🕹️", sw: ["#00ff9c", "#00d0ff", "#04080a"] },
@@ -278,7 +279,15 @@ function Ring({ pct, label, sub, color, loading }) {
 }
 
 // ===== High-quality Web Audio sound engine =====
-let _audioCtx = null, _master = null, _reverb = null;
+let _audioCtx = null, _master = null, _reverb = null, _masterGain = null;
+let _volume = 1; // 0..1 master volume, user-controlled via the volume button
+function applyVolume(v) {
+  _volume = Math.max(0, Math.min(1, v));
+  if (_masterGain && _audioCtx) {
+    try { _masterGain.gain.setTargetAtTime(_volume, _audioCtx.currentTime, 0.015); }
+    catch { try { _masterGain.gain.value = _volume; } catch {} }
+  }
+}
 function actx() {
   if (typeof window === "undefined") return null;
   try {
@@ -289,7 +298,11 @@ function actx() {
       _master = _audioCtx.createDynamicsCompressor();
       _master.threshold.value = -16; _master.knee.value = 26; _master.ratio.value = 3.2;
       _master.attack.value = 0.003; _master.release.value = 0.2;
-      _master.connect(_audioCtx.destination);
+      // user-controllable master volume (everything, incl. reverb send, flows through here)
+      _masterGain = _audioCtx.createGain();
+      _masterGain.gain.value = _volume;
+      _master.connect(_masterGain);
+      _masterGain.connect(_audioCtx.destination);
       // lightweight algorithmic reverb (generated impulse) on a send bus
       _reverb = _audioCtx.createConvolver();
       const len = Math.floor(_audioCtx.sampleRate * 0.8);
@@ -2049,6 +2062,22 @@ export default function Home() {
   const [theme, setTheme] = useState("light");
   const [themeFlipping, setThemeFlipping] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  // Master volume (persisted). Button cycles 🔊→🔉→🔈→🔇→🔊.
+  const [volume, setVolume] = useState(1);
+  useEffect(() => {
+    let v = 1;
+    try { const s = parseFloat(localStorage.getItem("dat-volume")); if (!isNaN(s)) v = s; } catch {}
+    v = VOL_LEVELS.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a, VOL_LEVELS[0]); // snap to a step
+    setVolume(v); applyVolume(v);
+  }, []);
+  const cycleVolume = () => {
+    const next = VOL_LEVELS[(VOL_LEVELS.indexOf(volume) + 1) % VOL_LEVELS.length];
+    setVolume(next); applyVolume(next);
+    try { localStorage.setItem("dat-volume", String(next)); } catch {}
+    haptic(8);
+    if (next > 0) playClick("pop"); // preview the new level (silent when muting)
+  };
+  const volIcon = volume <= 0.001 ? "🔇" : volume <= 0.3 ? "🔈" : volume <= 0.7 ? "🔉" : "🔊";
   const [pushups, setPushups] = useState({}); // date -> count
   const [coverIdx, setCoverIdx] = useState(0);
   useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
@@ -3046,6 +3075,18 @@ export default function Home() {
       <div className={"main-pad tab-" + tab}>
 
         {/* THEME SWITCH — floating top-right, opens style picker */}
+        {/* VOLUME — cycles 🔊→🔉→🔈→🔇→🔊 */}
+        <button onClick={cycleVolume} title={`Âm lượng: ${Math.round(volume * 100)}%`} style={{
+          position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 66, zIndex: 95,
+          width: 44, height: 44, borderRadius: theme === "dark" ? 0 : 22,
+          border: `1.5px solid ${theme === "dark" ? "rgba(0,255,156,.5)" : "var(--c-border)"}`,
+          background: theme === "dark" ? "rgba(8,18,14,.9)" : "rgba(255,255,255,.85)",
+          backdropFilter: "blur(6px)", cursor: "pointer", fontSize: "1.2rem",
+          boxShadow: theme === "dark" ? "0 0 14px rgba(0,255,156,.35)" : "0 3px 12px rgba(122,74,74,.18)",
+          color: volume <= 0.001 ? "var(--c-muted2)" : undefined, opacity: volume <= 0.001 ? .7 : 1,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>{volIcon}</button>
+
         <button data-sfx="swoosh" onClick={() => setShowThemePicker(v => !v)} title="Đổi giao diện" style={{
           position: "fixed", top: "calc(12px + env(safe-area-inset-top))", right: 14, zIndex: 95,
           width: 44, height: 44, borderRadius: theme === "dark" ? 0 : 22,
