@@ -2261,8 +2261,9 @@ export default function Home() {
     const canHover = typeof window.matchMedia === "function" && window.matchMedia("(hover:hover) and (pointer:fine)").matches;
     const onOver = (e) => {
       if (e.pointerType === "touch") return;
-      const el = e.target.closest && e.target.closest("button, .check, .task-row, .bar-hit");
+      const el = e.target.closest && e.target.closest("button, .bar-hit");
       if (!el || el.disabled) return;
+      if (el.closest(".task-row, .day-tabs, .day-nav")) return; // no hover sound on tasks & date pickers
       if (e.relatedTarget && el.contains(e.relatedTarget)) return; // di chuyển bên trong cùng một control
       playHover();
     };
