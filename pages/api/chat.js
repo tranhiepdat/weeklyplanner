@@ -97,6 +97,7 @@ QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI C
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
 - "project" mỗi phần tử ∈ ${JSON.stringify(PROJECTS)}. CHỈ đặt khi user nhắc tên dự án. KUNVANDONG = phim cá nhân; VP91 = studio (tool UE/sequencer); Nacon = công ty/khách; AOV26 = dự án công ty (công việc ở cty); Nội Bộ = dự án nội bộ công ty. Không rõ thì để [].
 - "priority" ∈ ${JSON.stringify(PRIORITIES)}. Chỉ đặt khi user nói gấp/khẩn (🔴 Urgent) hoặc quan trọng (🟡 Important). Bình thường để [].
+- "tier": mức ƯU TIÊN TRONG NGÀY — KHÁC HẲN "priority" ở trên (đây là 🔥 đánh dấu việc cần làm trước trong ngày, không phải tag Urgent/Important). Đặt "must" khi user nói HOẶC NGỤ Ý việc đó cần ưu tiên trong ngày: phải xong hôm đó, cần làm trước/làm ngay, gấp, deadline trong ngày, quan trọng — KỂ CẢ khi họ không dùng chữ "ưu tiên". Việc lặt vặt/thong thả thì để "". Nếu đã đặt "priority" là 🔴 Urgent hoặc 🟡 Important thì "tier" thường cũng là "must".
 - "icon": 1 emoji hợp ngữ cảnh.
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
 - Nhiều việc trong 1 câu → tách thành nhiều task.
@@ -111,7 +112,7 @@ KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - Nếu chỉ trò chuyện/hỏi han, không yêu cầu thêm việc → "tasks": [], trả lời ấm áp.
 
 CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ nào ngoài JSON):
-{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}],"dones":[{"ref":<số #n>,"done":true}],"tiers":[{"ref":<số #n>,"tier":"must"}]}
+{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD","tier":"must|"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}],"dones":[{"ref":<số #n>,"done":true}],"tiers":[{"ref":<số #n>,"tier":"must"}]}
 - Khi tạo task: "reply" xác nhận ngắn gọn đã thêm việc gì + ngày/thứ (vd "đã thêm 'đi chợ' vào Thứ Ba ${addDays(today, 1)}"), giọng khích lệ.
 - Khi dời việc: "reply" xác nhận đã dời việc gì sang ngày/thứ nào.
 - Khi tick xong / đặt ưu tiên: "reply" xác nhận đã tick việc gì, hoặc đã đặt ưu tiên (🔥) / hạ ưu tiên (💤) việc gì.
@@ -144,7 +145,9 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
     if (obj) {
       const outTasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
         // keep only tasks that at least have a name + a date
-        .filter(t => t && t.name && t.date);
+        .filter(t => t && t.name && t.date)
+        // normalize the day-priority tier: only "must" is meaningful (else default/low)
+        .map(t => ({ ...t, tier: t.tier === "must" ? "must" : undefined }));
       // resolve #ref → real task id from `movable`, for reschedule / done / priority
       const moves = [], dones = [], tiers = [];
       if (!obj.needsClarification) {

@@ -1761,7 +1761,7 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
       if (doneItems.length && onSetDone) onSetDone(doneItems);
       if (tierItems.length && onSetTier) onSetTier(tierItems);
       const parts = [];
-      if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => t.name).join(", ")}`);
+      if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => (t.tier === "must" ? "🔥 " : "") + t.name).join(", ")}`);
       if (moved.length) parts.push(`🔀 Đã dời ${moved.length} việc: ${moved.map(m => m.name).join(", ")}`);
       const ticked = doneItems.filter(x => x.done !== false), unticked = doneItems.filter(x => x.done === false);
       if (ticked.length) parts.push(`☑️ Đã tick xong: ${ticked.map(x => x.name).join(", ")}`);
@@ -2189,8 +2189,10 @@ export default function Home() {
       if (!r.ok) throw new Error("create failed");
       const d = await r.json();
       setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: d.id } : t));
+      return d.id; // caller may need the real id (e.g. to set the day tier right after)
     } catch {
       setTasks(prev => prev.filter(t => t.id !== tempId)); // roll back
+      return null;
     }
   };
 
@@ -3441,7 +3443,11 @@ export default function Home() {
         {showChat && (
           <ChatSheet
             onClose={() => setShowChat(false)}
-            onCreateTasks={(tasks) => tasks.forEach(createTask)}
+            onCreateTasks={(items) => items.forEach(async (draft) => {
+              const newId = await createTask(draft);
+              // bot marked it as a must-do for that day → light the 🔥 right away
+              if (newId && draft.tier === "must") setTierFor(newId, "must");
+            })}
             onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}
             onSetDone={(items) => items.forEach(x => { const cur = tasks.find(t => t.id === x.id); if (cur && cur.done === x.done) return; toggle(x.id, x.done); })}
             onSetTier={(items) => items.forEach(x => { if ((taskTier[x.id] || "optional") === x.tier) return; setTierFor(x.id, x.tier); })}
