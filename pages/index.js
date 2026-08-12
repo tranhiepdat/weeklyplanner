@@ -3443,11 +3443,15 @@ export default function Home() {
         {showChat && (
           <ChatSheet
             onClose={() => setShowChat(false)}
-            onCreateTasks={(items) => items.forEach(async (draft) => {
-              const newId = await createTask(draft);
-              // bot marked it as a must-do for that day → light the 🔥 right away
-              if (newId && draft.tier === "must") setTierFor(newId, "must");
-            })}
+            onCreateTasks={(items) => { (async () => {
+              // sequential: each task costs a create POST (+ a plan POST when 🔥),
+              // and Notion rate-limits ~3 req/s — a parallel burst would drop some 🔥 silently
+              for (const draft of items) {
+                const newId = await createTask(draft);
+                // bot marked it as a must-do for that day → light the 🔥 right away
+                if (newId && draft.tier === "must") setTierFor(newId, "must");
+              }
+            })(); }}
             onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}
             onSetDone={(items) => items.forEach(x => { const cur = tasks.find(t => t.id === x.id); if (cur && cur.done === x.done) return; toggle(x.id, x.done); })}
             onSetTier={(items) => items.forEach(x => { if ((taskTier[x.id] || "optional") === x.tier) return; setTierFor(x.id, x.tier); })}
