@@ -1728,7 +1728,7 @@ function PushupChart({ weekDays, pushups, selectedDate, onSelectDay }) {
 }
 
 // ---- AI chat sheet: talk to the assistant to create tasks by message ----
-function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, today, weekDays, tasks }) {
+function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, today, weekDays, tasks, taskTier }) {
   const [closing, setClosing] = useState(false);
   const [msgs, setMsgs] = useState([{ role: "assistant", content: "Chào Dat! 👋 Mình giúp bạn thêm việc nè. Cứ nói tự nhiên, ví dụ: \"Mai sáng đi chợ, chiều office làm FX KUN, tối gọi bà ngoại\". Mình còn dời việc, tick xong (\"xong đi chợ rồi\") và đặt ưu tiên (\"ưu tiên việc họp\") giúp bạn nữa nha ✝️" }]);
   const [input, setInput] = useState("");
@@ -1748,7 +1748,7 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
         body: JSON.stringify({
           messages: next, today, weekDays,
           // send existing tasks so the AI learns tag patterns + can reschedule by reference
-          tasks: (tasks || []).map(t => ({ id: t.id, name: t.name, date: t.date, taskType: t.taskType, project: t.project, done: t.done })),
+          tasks: (tasks || []).map(t => ({ id: t.id, name: t.name, date: t.date, taskType: t.taskType, project: t.project, done: t.done, tier: (taskTier || {})[t.id] === "must" ? "must" : undefined })),
         }),
       });
       const d = await r.json();
@@ -3458,6 +3458,7 @@ export default function Home() {
             today={TODAY}
             weekDays={weekDays}
             tasks={tasks}
+            taskTier={taskTier}
           />
         )}
 

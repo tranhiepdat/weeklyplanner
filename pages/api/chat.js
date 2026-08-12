@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     .filter(t => t && t.id && t.name && t.date && t.date >= lo && t.date <= hi)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     .slice(0, 40);
-  const refList = movable.map((t, i) => `  #${i + 1} ${t.name} — ${t.date}${t.done ? " (đã xong)" : ""}`).join("\n");
+  const refList = movable.map((t, i) => `  #${i + 1} ${t.name} — ${t.date}${t.tier === "must" ? " 🔥đang ưu tiên" : ""}${t.done ? " (đã xong)" : ""}`).join("\n");
 
   const sys = `Bạn là trợ lý lập kế hoạch thân thiện, tích cực, đồng hành theo tinh thần Công giáo, trò chuyện tiếng Việt với Dat (Matthew) — một người làm VFX/animation.
 
@@ -96,14 +96,21 @@ QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI C
 - "taskType" ∈ ${JSON.stringify(TASK_TYPES)} — suy luận hợp lý, nếu không chắc để "".
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
 - "project" mỗi phần tử ∈ ${JSON.stringify(PROJECTS)}. CHỈ đặt khi user nhắc tên dự án. KUNVANDONG = phim cá nhân; VP91 = studio (tool UE/sequencer); Nacon = công ty/khách; AOV26 = dự án công ty (công việc ở cty); Nội Bộ = dự án nội bộ công ty. Không rõ thì để [].
-- "priority" ∈ ${JSON.stringify(PRIORITIES)}. Chỉ đặt khi user nói gấp/khẩn (🔴 Urgent) hoặc quan trọng (🟡 Important). Bình thường để [].
-- "tier": mức ƯU TIÊN TRONG NGÀY — KHÁC HẲN "priority" ở trên (đây là 🔥 đánh dấu việc cần làm trước trong ngày, không phải tag Urgent/Important). Đặt "must" khi user nói HOẶC NGỤ Ý việc đó cần ưu tiên trong ngày: phải xong hôm đó, cần làm trước/làm ngay, gấp, deadline trong ngày, quan trọng — KỂ CẢ khi họ không dùng chữ "ưu tiên". Việc lặt vặt/thong thả thì để "". Nếu đã đặt "priority" là 🔴 Urgent hoặc 🟡 Important thì "tier" thường cũng là "must". TIẾT CHẾ: 🔥 chỉ có ý nghĩa khi nó HIẾM — việc không 🔥 sẽ bị làm mờ đi trên giao diện, nên nếu đánh "must" cho mọi việc thì mất tác dụng. Thường chỉ 1–3 việc quan trọng nhất trong ngày mới là "must"; còn lại để "".
+- "priority" ∈ ${JSON.stringify(PRIORITIES)} — TAG mức độ. CHỈ đặt 🔴 Urgent khi Dat nói "KHẨN CẤP" (hoặc "khẩn"); đặt 🟡 Important khi Dat nói "quan trọng". Bình thường để [].
+- "tier": mức ƯU TIÊN TRONG NGÀY (🔥) — KHÁC HẲN "priority" ở trên. Đặt "must" khi Dat nói "ƯU TIÊN" / "cần ưu tiên" / "làm trước" / "phải xong hôm nay", hoặc ngụ ý rõ việc đó phải xong trong ngày (deadline trong ngày). Còn lại để "". TIẾT CHẾ: 🔥 chỉ có nghĩa khi HIẾM — việc không 🔥 bị làm mờ trên giao diện, nên đánh "must" cho mọi việc là mất tác dụng; thường chỉ 1–3 việc/ngày.
+
+⚠️ TỪ NGỮ CỦA DAT — ĐỪNG LẪN 2 THỨ NÀY:
+- "ưu tiên" / "cần ưu tiên" / "làm trước" → CHỈ đặt "tier":"must" (🔥 ưu tiên ngày). KHÔNG thêm tag "priority".
+- "khẩn cấp" / "khẩn" → CHỈ đặt "priority":["🔴 Urgent"]. KHÔNG tự bật "tier".
+- "quan trọng" → CHỈ đặt "priority":["🟡 Important"].
+- Chỉ đặt CẢ HAI khi Dat nói cả hai ý (vd "việc này khẩn cấp, ưu tiên làm trước").
+- Câu kiểu "hôm nay có mấy task này cần ưu tiên: A, B, C" → đặt "must" cho A, B, C: việc nào ĐÃ CÓ trong VIỆC HIỆN CÓ thì dùng "tiers" (theo #n), việc nào CHƯA CÓ thì tạo mới trong "tasks" với "tier":"must".
 - "icon": 1 emoji hợp ngữ cảnh.
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
 - Nhiều việc trong 1 câu → tách thành nhiều task.
 - DỜI/ĐỔI NGÀY việc ĐÃ CÓ: nếu user muốn chuyển một việc đang có sang ngày khác (vd "dời đi bán qua mai", "chuyển họp sang thứ 5", "đẩy mấy việc hôm nay sang mai") → KHÔNG tạo task mới. Thêm vào "moves": mỗi phần tử {"ref": <số #n trong VIỆC HIỆN CÓ>, "date": "<ngày mới trong bảng>"}. Nếu không tìm thấy việc khớp trong danh sách thì hỏi lại cho rõ.
 - TICK XONG việc ĐÃ CÓ: nếu user báo đã làm/đã xong một việc (vd "xong đi chợ rồi", "tick giúp việc X", "làm xong họp rồi") → thêm vào "dones": mỗi phần tử {"ref": <số #n>, "done": true}. Nếu user muốn BỎ tick (đánh dấu chưa xong lại) → "done": false.
-- ĐẶT ƯU TIÊN việc ĐÃ CÓ: nếu user muốn ưu tiên / bỏ ưu tiên một việc (vd "ưu tiên việc X", "đánh dấu X quan trọng, làm trước", "hạ ưu tiên Y", "để dành Z") → thêm vào "tiers": mỗi phần tử {"ref": <số #n>, "tier": "must"|"optional"}. must = 🔥 Ưu tiên (làm ngay, nổi bật); optional = 💤 Ưu tiên thấp (để dành). Đây là mức ưu tiên trong ngày, KHÁC với trường "priority" (Urgent/Important) khi tạo việc mới.
+- ĐẶT ƯU TIÊN việc ĐÃ CÓ: khi Dat nói "ưu tiên" / "cần ưu tiên" / "làm trước" cho việc đang có (vd "hôm nay ưu tiên việc X với Y", "hạ ưu tiên Y", "để dành Z") → thêm vào "tiers": mỗi phần tử {"ref": <số #n>, "tier": "must"|"optional"}. must = 🔥 Ưu tiên ngày (nổi bật); optional = 💤 Ưu tiên thấp (để dành). Nhiều việc trong 1 câu → nhiều phần tử. Đây là mức ưu tiên trong NGÀY, KHÁC tag "priority" (🔴 Urgent = "khẩn cấp" / 🟡 Important = "quan trọng").
 
 KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - User muốn thêm việc nhưng KHÔNG rõ NGÀY và không ngụ ý "hôm nay" → hỏi gọn ngày nào.
