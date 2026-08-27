@@ -2136,7 +2136,7 @@ export default function Home() {
       try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
       return next;
     });
-    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => {});
+    return fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => null);
   };
   // Quick priority toggle (🔥 button on a task row): must ⇄ optional
   const togglePriorityFor = (id) => {
@@ -3445,11 +3445,11 @@ export default function Home() {
             onClose={() => setShowChat(false)}
             onCreateTasks={(items) => { (async () => {
               // sequential: each task costs a create POST (+ a plan POST when 🔥),
-              // and Notion rate-limits ~3 req/s — a parallel burst would drop some 🔥 silently
+              // and Notion rate-limits ~3 req/s — await both before starting the next task
               for (const draft of items) {
                 const newId = await createTask(draft);
                 // bot marked it as a must-do for that day → light the 🔥 right away
-                if (newId && draft.tier === "must") setTierFor(newId, "must");
+                if (newId && draft.tier === "must") await setTierFor(newId, "must");
               }
             })(); }}
             onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}

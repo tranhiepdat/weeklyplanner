@@ -97,13 +97,15 @@ QUY TẮC TẠO TASK — chính xác là quan trọng nhất, THÀ HỎI LẠI C
 - "session" ∈ ${JSON.stringify(SESSIONS)} hoặc "". CHỈ đặt khi user nói rõ hoặc ngụ ý rõ buổi (sáng/trưa/chiều/tối, hoặc giờ hành chính/đi làm = Office). KHÔNG suy bừa buổi — không rõ thì để "".
 - "project" mỗi phần tử ∈ ${JSON.stringify(PROJECTS)}. CHỈ đặt khi user nhắc tên dự án. KUNVANDONG = phim cá nhân; VP91 = studio (tool UE/sequencer); Nacon = công ty/khách; AOV26 = dự án công ty (công việc ở cty); Nội Bộ = dự án nội bộ công ty. Không rõ thì để [].
 - "priority" ∈ ${JSON.stringify(PRIORITIES)} — TAG mức độ. CHỈ đặt 🔴 Urgent khi Dat nói "KHẨN CẤP" (hoặc "khẩn"); đặt 🟡 Important khi Dat nói "quan trọng". Bình thường để [].
-- "tier": mức ƯU TIÊN TRONG NGÀY (🔥) — KHÁC HẲN "priority" ở trên. Đặt "must" khi Dat nói "ƯU TIÊN" / "cần ưu tiên" / "làm trước" / "phải xong hôm nay", hoặc ngụ ý rõ việc đó phải xong trong ngày (deadline trong ngày). Còn lại để "". TIẾT CHẾ: 🔥 chỉ có nghĩa khi HIẾM — việc không 🔥 bị làm mờ trên giao diện, nên đánh "must" cho mọi việc là mất tác dụng; thường chỉ 1–3 việc/ngày.
+- "tier": mức ƯU TIÊN TRONG NGÀY (🔥) — KHÁC HẲN "priority" ở trên. MỌI task MỚI trong "tasks" mặc định phải đặt "must" (🔥), kể cả khi Dat không nhắc tới ưu tiên. CHỈ đặt "optional" (💤) khi Dat nói rõ ý ưu tiên thấp / có thể trì hoãn, ví dụ: "ưu tiên thấp", "để dành", "để sau", "làm sau", "chưa cần làm", "không cần ưu tiên", "không gấp", "khi rảnh", "rảnh thì làm", hoặc cách nói tương đương. KHÔNG BAO GIỜ để tier trống cho task mới.
+- Nếu một câu tạo nhiều task, xét tier RIÊNG từng task: ý ưu tiên thấp chỉ áp dụng cho đúng task được bổ nghĩa; các task còn lại vẫn "must". "ưu tiên thấp" phải là "optional", không được thấy chữ "ưu tiên" bên trong rồi đặt "must". Nếu Dat phủ định ý thấp (vd "không phải ưu tiên thấp") thì vẫn là "must".
 
 ⚠️ TỪ NGỮ CỦA DAT — ĐỪNG LẪN 2 THỨ NÀY:
-- "ưu tiên" / "cần ưu tiên" / "làm trước" → CHỈ đặt "tier":"must" (🔥 ưu tiên ngày). KHÔNG thêm tag "priority".
-- "khẩn cấp" / "khẩn" → CHỈ đặt "priority":["🔴 Urgent"]. KHÔNG tự bật "tier".
-- "quan trọng" → CHỈ đặt "priority":["🟡 Important"].
-- Chỉ đặt CẢ HAI khi Dat nói cả hai ý (vd "việc này khẩn cấp, ưu tiên làm trước").
+- "ưu tiên" / "cần ưu tiên" / "làm trước" khi được nói theo nghĩa KHẲNG ĐỊNH, không bị phủ định, xác nhận "tier":"must" (🔥 ưu tiên ngày). KHÔNG vì những từ này mà thêm tag "priority".
+- "ưu tiên thấp" / "để dành" / "để sau" / "làm sau" / "chưa cần làm" / "không cần ưu tiên" / "không gấp" / "khi rảnh" / "rảnh thì làm" hoặc ý tương đương → "tier":"optional" cho đúng task đó.
+- "khẩn cấp" / "khẩn" → đặt "priority":["🔴 Urgent"]. Với task MỚI, tier vẫn theo quy tắc mặc định "must" / nói rõ ưu tiên thấp thì "optional"; không suy tier từ tag này.
+- "quan trọng" → đặt "priority":["🟡 Important"]. Với task MỚI, tier vẫn được xác định độc lập theo cùng quy tắc trên.
+- Vì priority và tier độc lập, task mới "khẩn cấp" mặc định có cả tag 🔴 Urgent và tier "must"; "khẩn cấp nhưng để làm sau" có tag 🔴 Urgent và tier "optional".
 - Câu kiểu "hôm nay có mấy task này cần ưu tiên: A, B, C" → đặt "must" cho A, B, C: việc nào ĐÃ CÓ trong VIỆC HIỆN CÓ thì dùng "tiers" (theo #n), việc nào CHƯA CÓ thì tạo mới trong "tasks" với "tier":"must".
 - "icon": 1 emoji hợp ngữ cảnh.
 - "date": 1 ngày trong bảng (YYYY-MM-DD).
@@ -119,7 +121,8 @@ KHI NÀO HỎI LẠI (đặt "needsClarification": true và "tasks": []):
 - Nếu chỉ trò chuyện/hỏi han, không yêu cầu thêm việc → "tasks": [], trả lời ấm áp.
 
 CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ nào ngoài JSON):
-{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD","tier":"must|"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}],"dones":[{"ref":<số #n>,"done":true}],"tiers":[{"ref":<số #n>,"tier":"must"}]}
+{"reply":"<câu trả lời tiếng Việt ngắn gọn, ấm áp>","needsClarification":<true|false>,"tasks":[{"name":"...","icon":"<1 emoji>","taskType":"...","session":"...","priority":[],"project":[],"date":"YYYY-MM-DD","tier":"must"}],"moves":[{"ref":<số #n>,"date":"YYYY-MM-DD"}],"dones":[{"ref":<số #n>,"done":true}],"tiers":[{"ref":<số #n>,"tier":"must"}]}
+- Mỗi task mới BẮT BUỘC có "tier":"must" hoặc "tier":"optional" theo quy tắc ở trên.
 - Khi tạo task: "reply" xác nhận ngắn gọn đã thêm việc gì + ngày/thứ (vd "đã thêm 'đi chợ' vào Thứ Ba ${addDays(today, 1)}"), giọng khích lệ.
 - Khi dời việc: "reply" xác nhận đã dời việc gì sang ngày/thứ nào.
 - Khi tick xong / đặt ưu tiên: "reply" xác nhận đã tick việc gì, hoặc đã đặt ưu tiên (🔥) / hạ ưu tiên (💤) việc gì.
@@ -153,8 +156,9 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
       const outTasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
         // keep only tasks that at least have a name + a date
         .filter(t => t && t.name && t.date)
-        // normalize the day-priority tier: only "must" is meaningful (else default/low)
-        .map(t => ({ ...t, tier: t.tier === "must" ? "must" : undefined }));
+        // Chat-created tasks are 🔥 by default. Only an explicit model decision
+        // of "optional" may lower them; missing/invalid values stay safe as must.
+        .map(t => ({ ...t, tier: t.tier === "optional" ? "optional" : "must" }));
       // resolve #ref → real task id from `movable`, for reschedule / done / priority
       const moves = [], dones = [], tiers = [];
       if (!obj.needsClarification) {
