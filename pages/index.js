@@ -57,7 +57,7 @@ function tagStyle(type = "") {
   if (t.includes("health"))        return { background: "#fce7f3", color: "#9d174d" };
   if (t.includes("entertainment")) return { background: "#cffafe", color: "#0e7490" };
   if (t.includes("family"))        return { background: "#ffedd5", color: "#9a3412" };
-  if (t.includes("vacation"))      return { background: "#fee2e2", color: "#991b1b" };
+  if (t.includes("vacation"))      return { background: "var(--type-vacation-tag-bg)", color: "var(--type-vacation-tag-text)" };
   return { background: "#e0f2fe", color: "#0369a1" };
 }
 
@@ -70,7 +70,7 @@ function typeColor(type = "") {
   if (t.includes("health"))        return "#db2777";
   if (t.includes("entertainment")) return "#0891b2";
   if (t.includes("family"))        return "#ea580c";
-  if (t.includes("vacation"))      return "#dc2626";
+  if (t.includes("vacation"))      return "var(--type-vacation-accent)";
   return "#9aa0a6";
 }
 
@@ -167,9 +167,12 @@ function priorityEmoji(task) {
 }
 // Stable display order for "sort by type"
 const TYPE_SORT_ORDER = ["work", "personal", "health", "chore", "family", "entertainment", "vacation"];
-function typeRank(task) {
+function taskTypeKey(task) {
   const t = (task.taskType || "").toLowerCase();
-  const i = TYPE_SORT_ORDER.findIndex(k => t.includes(k));
+  return TYPE_SORT_ORDER.find(k => t.includes(k)) || "untyped";
+}
+function typeRank(task) {
+  const i = TYPE_SORT_ORDER.indexOf(taskTypeKey(task));
   return i < 0 ? TYPE_SORT_ORDER.length : i;
 }
 // Combined priority for the "Ưu tiên" sort: Plan 🔥 must → 🔴 Urgent → 🟡 Important → normal → 💤 optional
@@ -181,6 +184,28 @@ function planPriorityRank(task, tierMap = {}) {
   if (pr === 1) return 2;   // important
   return 0;                 // ưu tiên thấp = mặc định (optional hoặc chưa đặt)
 }
+// Semantic bucket used by both Priority sorting and drag/drop. Must tasks are
+// grouped by type; every other task stays in its Urgent / Important / low lane.
+function priorityGroupKey(task, tierMap = {}) {
+  if (tierMap[task.id] === "must") return `must:${taskTypeKey(task)}`;
+  const pr = priorityRank(task);
+  return pr === 2 ? "urgent" : pr === 1 ? "important" : "low";
+}
+function placeTaskInPriorityGroup(manualTasks, moved, placement, tierMap = {}) {
+  const members = manualTasks.map(t => t.id);
+  const byId = new Map(manualTasks.map(t => [t.id, t]));
+  const bucket = priorityGroupKey(moved, tierMap);
+  const validAnchor = (anchorId) => anchorId && byId.has(anchorId) && priorityGroupKey(byId.get(anchorId), tierMap) === bucket;
+  let insertAt;
+  if (validAnchor(placement.beforeId)) insertAt = members.indexOf(placement.beforeId);
+  else if (validAnchor(placement.afterId)) insertAt = members.indexOf(placement.afterId) + 1;
+  else {
+    const peers = manualTasks.filter(t => priorityGroupKey(t, tierMap) === bucket);
+    insertAt = peers.length ? members.indexOf(peers[peers.length - 1].id) + 1 : members.length;
+  }
+  members.splice(Math.max(0, Math.min(insertAt, members.length)), 0, moved.id);
+  return members;
+}
 // Sort a task list by the chosen mode. `order` is a {id:number} manual-order map.
 // Returns a NEW array; ties fall back to the list's original order (stable).
 function sortTasks(list, mode, order = {}, tierMap = {}) {
@@ -190,7 +215,15 @@ function sortTasks(list, mode, order = {}, tierMap = {}) {
   if (mode === "manual") {
     arr.sort((a, b) => manual(a) - manual(b));
   } else if (mode === "priority") {
-    arr.sort((a, b) => (planPriorityRank(b, tierMap) - planPriorityRank(a, tierMap)) || (manual(a) - manual(b)));
+    arr.sort((a, b) => {
+      const priorityDiff = planPriorityRank(b, tierMap) - planPriorityRank(a, tierMap);
+      if (priorityDiff) return priorityDiff;
+      if (tierMap[a.id] === "must" && tierMap[b.id] === "must") {
+        const typeDiff = typeRank(a) - typeRank(b);
+        if (typeDiff) return typeDiff;
+      }
+      return manual(a) - manual(b);
+    });
   } else if (mode === "type") {
     arr.sort((a, b) => (typeRank(a) - typeRank(b)) || (priorityRank(b) - priorityRank(a)) || (idx.get(a.id) - idx.get(b.id)));
   }
@@ -739,7 +772,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             !isDoneSettled ? `inset 3px 0 0 ${accent}` : "",
             isMust ? "0 0 0 2px var(--c2)" : "",
           ].filter(Boolean).join(", ") || undefined),
-          background: (!isDoneSettled && !celebrating && !reversing) ? `${accent}26` : undefined,
+          background: (!isDoneSettled && !celebrating && !reversing) ? `color-mix(in srgb, ${accent} 15%, transparent)` : undefined,
           transform: `translateX(${swipeX}px)`,
           transition: dragRef.current.active ? "none" : `transform .26s cubic-bezier(.22,1,.36,1), opacity ${settling ? "1s cubic-bezier(.16,1,.3,1)" : ".5s cubic-bezier(.22,1,.36,1)"}, background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)`,
           touchAction: "pan-y",
@@ -905,10 +938,10 @@ function SortableTaskList({ items, draggable, onReorder, renderRow }) {
 
 // ---- Cross-session drag board (main plan view) ----
 // Drag the ⠿ handle to reorder WITHIN a buổi or move a task ACROSS buổi (and to
-// "chưa xếp buổi"). Reuses renderRow (the full TaskRow) for rows and onMove(id,
-// session, index) — the same handler the Plan sheet uses — to set session + order.
+// "chưa xếp buổi"). Session mode sends a visual index; Priority mode sends
+// same-bucket anchors so grouped display order never leaks into manual order.
 function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove, renderRow }) {
-  const dragRef = useRef(null);          // { id, w, overSession, overIndex }
+  const dragRef = useRef(null);          // { id, task, w, overSession, overIndex, placement }
   const groupRefs = useRef(new Map());   // session -> group container el
   const rowRefs = useRef(new Map());     // taskId -> row wrapper el
   const [drag, setDrag] = useState(null); // { id, name, icon, w, ptrX, ptrY }
@@ -930,25 +963,49 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
     });
     const session = over != null ? over : near;
     const g = groups.find(gr => gr.session === session);
-    let idx = 0;
+    let idx = 0, placement = 0;
     if (g) {
       const others = sorted(g.items).filter(t => t.id !== d.id);
-      for (let i = 0; i < others.length; i++) {
-        const el = rowRefs.current.get(others[i].id); if (!el) continue;
-        const r = el.getBoundingClientRect();
-        if (y > r.top + r.height / 2) idx = i + 1;
+      if (sortMode === "priority") {
+        const bucket = priorityGroupKey(d.task, taskTier || {});
+        const peers = others.filter(t => priorityGroupKey(t, taskTier || {}) === bucket);
+        let localIndex = 0;
+        for (let i = 0; i < peers.length; i++) {
+          const el = rowRefs.current.get(peers[i].id); if (!el) continue;
+          const r = el.getBoundingClientRect();
+          if (y > r.top + r.height / 2) localIndex = i + 1;
+        }
+        const beforeId = peers[localIndex]?.id || null;
+        const afterId = localIndex > 0 ? peers[localIndex - 1].id : null;
+        placement = { mode: "priority", beforeId, afterId };
+        if (beforeId) idx = others.findIndex(t => t.id === beforeId);
+        else if (afterId) idx = others.findIndex(t => t.id === afterId) + 1;
+        else {
+          // No matching bucket in this session: preview the task at the canonical
+          // Priority position (its persisted manual position is irrelevant here).
+          const preview = sortTasks([...others, { ...d.task, session }], "priority", taskOrder || {}, taskTier || {});
+          idx = Math.max(0, preview.findIndex(t => t.id === d.id));
+        }
+      } else {
+        for (let i = 0; i < others.length; i++) {
+          const el = rowRefs.current.get(others[i].id); if (!el) continue;
+          const r = el.getBoundingClientRect();
+          if (y > r.top + r.height / 2) idx = i + 1;
+        }
+        placement = idx;
       }
     }
-    d.overSession = session; d.overIndex = idx;
+    d.overSession = session; d.overIndex = idx; d.placement = placement;
   };
 
   const onUp = () => {
     const d = dragRef.current; if (!d) return;
-    const dropId = d.id, sess = d.overSession, idx = d.overIndex;
+    const dropId = d.id, sess = d.overSession;
+    const placement = sortMode === "priority" ? d.placement : d.overIndex;
     dragRef.current = null;
     setDrag(null);
     playDrop(); haptic(15);
-    onMove(dropId, sess, idx);
+    onMove(dropId, sess, placement);
     requestAnimationFrame(() => {
       const node = rowRefs.current.get(dropId);
       if (node) { node.classList.remove("task-drop-pop"); void node.offsetWidth; node.classList.add("task-drop-pop"); node.addEventListener("animationend", () => node.classList.remove("task-drop-pop"), { once: true }); }
@@ -963,7 +1020,7 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
     e.preventDefault(); e.stopPropagation();
     const rowEl = rowRefs.current.get(t.id);
     const w = rowEl ? rowEl.getBoundingClientRect().width : 280;
-    dragRef.current = { id: t.id, w, overSession: t.session || "", overIndex: 0 };
+    dragRef.current = { id: t.id, task: t, w, overSession: t.session || "", overIndex: 0, placement: 0 };
     playLift(); haptic(10);
     computeTarget(e.clientX, e.clientY);
     setDrag({ id: t.id, name: t.name, icon: t.icon, w, ptrX: e.clientX, ptrY: e.clientY });
@@ -972,11 +1029,14 @@ function SessionBoard({ groups, draggable, sortMode, taskOrder, taskTier, onMove
       computeTarget(ev.clientX, ev.clientY);
       setDrag(s => s && { ...s, ptrX: ev.clientX, ptrY: ev.clientY });
     };
-    const end = () => {
+    const end = (ev) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
-      onUp();
+      if (ev.type === "pointercancel") {
+        dragRef.current = null;
+        setDrag(null);
+      } else onUp();
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
@@ -1372,7 +1432,7 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   const chip = (sel, c) => ({
     padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
     border: sel ? `2px solid ${c}` : "1px solid var(--c-border)",
-    background: sel ? `${typeof c === "string" && c.startsWith("#") ? c + "1a" : "rgba(0,0,0,.04)"}` : "var(--c-surface)",
+    background: sel ? `color-mix(in srgb, ${c} 10%, transparent)` : "var(--c-surface)",
     color: sel ? c : "var(--c-muted)",
   });
 
@@ -2145,13 +2205,28 @@ export default function Home() {
     if (willMust) playDing(); else playClick("soft");
     setTierFor(id, willMust ? "must" : "optional");
   };
-  // Plan Day drag: move a task into a buổi group at an index → set session + order
-  const planMove = (id, toSession, toIndex) => {
+  // Plan Day drag: Session mode uses a visual index. Priority mode uses anchors
+  // from the dragged task's semantic bucket so other groups keep their order.
+  const planMove = (id, toSession, placement) => {
     const moved = tasks.find(t => t.id === id); if (!moved) return;
-    const members = sortTasks(tasks.filter(t => t.date === selectedDate && (t.session || "") === toSession && t.id !== id), "manual", taskOrder).map(t => t.id);
-    members.splice(Math.max(0, Math.min(toIndex, members.length)), 0, id);
-    reorderTasks(members);
-    if ((moved.session || "") !== toSession) updateTask(id, { session: toSession });
+    const fromSession = moved.session || "";
+    const destination = tasks.filter(t => t.date === selectedDate && (t.session || "") === toSession && t.id !== id);
+    const manualTasks = sortTasks(destination, "manual", taskOrder);
+    let members;
+
+    if (placement && typeof placement === "object" && placement.mode === "priority") {
+      members = placeTaskInPriorityGroup(manualTasks, moved, placement, taskTier);
+    } else {
+      members = manualTasks.map(t => t.id);
+      const toIndex = Number.isFinite(placement) ? placement : members.length;
+      members.splice(Math.max(0, Math.min(toIndex, members.length)), 0, id);
+    }
+    const current = fromSession === toSession
+      ? sortTasks(tasks.filter(t => t.date === selectedDate && (t.session || "") === toSession), "manual", taskOrder).map(t => t.id)
+      : [];
+    const unchanged = current.length === members.length && current.every((taskId, i) => taskId === members[i]);
+    if (!unchanged) reorderTasks(members);
+    if (fromSession !== toSession) updateTask(id, { session: toSession });
   };
 
   // Theme: load saved choice, keep sound engine in sync
@@ -2574,12 +2649,14 @@ export default function Home() {
           --c-bg:#fdf8f2; --c-surface:#ffffff; --c-on-accent:#ffffff;
           --c-ink:#4a3030; --c-muted:#8a6a6a; --c-muted2:#c9a0a0;
           --c-border:#e8c4b8; --c-track:#efe2d4;
+          --type-vacation-accent:#047857; --type-vacation-tag-bg:#d1fae5; --type-vacation-tag-text:#065f46;
         }
         .theme-dark{
           --c1:#00ff9c; --c2:#00d0ff; --c-mood:#ff4df0;
           --c-bg:#04080a; --c-surface:#0b1512; --c-on-accent:#03140d;
           --c-ink:#d6ffe9; --c-muted:#5fae8c; --c-muted2:#3a7a60;
           --c-border:#11402f; --c-track:#0d241b;
+          --type-vacation-accent:#34d399; --type-vacation-tag-bg:#052e2b; --type-vacation-tag-text:#a7f3d0;
         }
         /* native-app feel: no pinch-zoom, no horizontal scroll, no overscroll bounce/pull-refresh */
         html{overflow-x:clip;overscroll-behavior:none;-webkit-text-size-adjust:100%;}
@@ -3260,12 +3337,12 @@ export default function Home() {
                 <>
                   <div style={{ fontSize: ".66rem", color: "var(--c-muted2)", marginBottom: 8, fontStyle: "italic" }}>
                     {sortMode === "session" ? <>✋ Kéo <span style={{ fontWeight: 700 }}>⠿</span> để xếp thứ tự & <b>chuyển việc qua buổi khác</b></>
-                      : sortMode === "priority" ? "🔥 Ưu tiên (bắt buộc → khẩn → quan trọng) lên đầu mỗi buổi"
+                      : sortMode === "priority" ? <>🔥 Task ưu tiên được nhóm theo loại · Kéo <span style={{ fontWeight: 700 }}>⠿</span> để xếp trong nhóm & <b>chuyển qua buổi khác</b></>
                       : "🏷️ Sắp theo loại việc trong mỗi buổi"}
                   </div>
                   <SessionBoard
                     groups={[...sessionGroups.map(sg => ({ session: sg.key, label: sg.label, items: sg.items })), { session: "", label: "📋 Chưa xếp buổi", items: noSession }]}
-                    draggable={sortMode === "session"}
+                    draggable={sortMode === "session" || sortMode === "priority"}
                     sortMode={sortMode} taskOrder={taskOrder} taskTier={taskTier}
                     onMove={planMove} renderRow={renderTaskRow}
                   />
@@ -3587,7 +3664,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
                 <button key={tt} data-sfx="pop" data-anim="chip" onClick={() => setTaskType(sel ? "" : tt)} style={{
                   padding: "7px 12px", borderRadius: 10, cursor: "pointer", fontSize: ".8rem", fontWeight: 600,
                   border: sel ? `2px solid ${c}` : "1px solid var(--c-border)",
-                  background: sel ? `${c}1a` : "var(--c-surface)", color: sel ? c : "var(--c-muted)",
+                  background: sel ? `color-mix(in srgb, ${c} 10%, transparent)` : "var(--c-surface)", color: sel ? c : "var(--c-muted)",
                 }}>{tt}</button>
               );
             })}
