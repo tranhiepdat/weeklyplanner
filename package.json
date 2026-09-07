@@ -4,11 +4,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "NODE_ENV=test node --test tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "setup:notion": "node scripts/setup-notion.mjs"
   },
   "dependencies": {
     "next": "16.2.7",
     "react": "19.1.7",
     "react-dom": "19.1.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

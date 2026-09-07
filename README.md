@@ -1,93 +1,72 @@
 # WeeklyPlanner
 
+Personal weekly planner built with Next.js and Notion. Tasks, daily priorities/order, goals, milestones, and task–goal links are shared across devices.
 
+## Run locally
 
-## Getting started
+Use Node.js 22 or newer and npm:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/tranhiepdat/weeklyplanner.git
-git branch -M main
-git push -uf origin main
+```sh
+npm ci
+cp .env.example .env.local
+# Fill in the server-side credentials for your Notion integration.
+npm run dev
 ```
 
-## Integrate with your tools
+The task integration must have read, insert, and update access to the planner databases. AI features additionally use `ANTHROPIC_API_KEY`. Credentials never belong in client-side `NEXT_PUBLIC_` variables.
 
-* [Set up project integrations](https://gitlab.com/tranhiepdat/weeklyplanner/-/settings/integrations)
+## Configure shared goals
 
-## Collaborate with your team
+Use the **same Notion integration** as the deployed planner. The setup command creates or reuses a `WeeklyPlanner Goals` database beside the tasks database, adds the task `Goal` relation and missing planning properties, and prints the goals database ID. Existing task values are preserved. Re-running setup reuses the database.
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```sh
+node --env-file=.env.local scripts/setup-notion.mjs
+# If the tasks database has no page parent:
+node --env-file=.env.local scripts/setup-notion.mjs --parent-page=YOUR_SHARED_PAGE_ID
+```
 
-## Test and Deploy
+Set the returned `NOTION_GOALS_DB_ID` in `.env.local` and in the relevant Vercel Preview/Production environments. If a goals database already exists, configure its ID before running setup. Its title column is renamed to `Goal`; property type/relationship mismatches are reported rather than silently replaced. `NOTION_TASKS_DB_ID` is optional and defaults to the existing database.
 
-Use the built-in continuous integration in GitLab.
+Without goals configuration, the UI reports the missing setting and retains legacy backups; it does not pretend goals were saved. Keep `Notion-Version: 2022-06-28` for this release.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Device synchronization
 
-***
+- The app reads a full task snapshot initially, then polls changes every 15 seconds while visible and online. Notion latency is additional.
+- Delta reads overlap by two minutes to account for rounded Notion timestamps. All pages are read; incomplete responses are errors, not successful truncated snapshots.
+- Focus, reconnect, manual refresh, and every five minutes trigger a complete reconciliation, including tasks trashed in Notion. Direct Notion edits are included.
+- Local writes are optimistic and ordered. A stale response cannot revert a newer write, pending edits survive polling, and open editor drafts are not replaced.
+- Failed operations show a retry action. Plan batches contain at most 25 tasks, return per-task results, and retry only failed items. Notion requests are paced within each worker; `429` responses respect `Retry-After` across workers.
+- Automatic overdue rollover runs on initial successful hydration or a new local day, separately from periodic reads. Failed rollover writes use the same visible retry flow.
 
-# Editing this README
+Click/tap a task name to open its details. Use the checkbox for done/undo. Select an active goal or **Không liên kết** in the editor; archived goal links remain visible for history. Milestone progress and completed-task counts are independent.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### API additions
 
-## Suggestions for a good README
+`GET /api/tasks?since=<ISO timestamp>` returns `{ tasks, mode: "snapshot" | "delta", syncedAt }`. Omit `since` for a full snapshot. Only snapshots remove missing tasks. Each task includes `goalId` (stable goal UID or `null`), `goalPageId`, and `lastEditedTime`.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Task create/update accept `goalId`; explicit `null` clears the Notion relation. Create uses a client-generated `clientRequestId` for retry deduplication. Update additionally accepts `planTier`/`planOrder`; `null` clears them. Successful writes return the saved task. `POST /api/plan` retains `tiers`/`orders`, combines fields per task, and returns `{ ok, results: [{ id, ok, patch?, error? }] }`; partial success uses HTTP 207.
 
-## Name
-Choose a self-explaining name for your project.
+Goals use `GET/POST/PATCH /api/goals`. New goals have a stable client-generated `uid`; repeated creates reuse it. Goal PATCH sends only changed fields; `{ milestone: { id, done } }` updates one milestone checkbox. Milestones occupy five independent text/ID/checkbox property groups in Notion.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Import existing devices
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Each device must open the new version once. Before importing, it saves an immutable snapshot of `dat-goals-cache`, `dat-goal-links`, cached task links, and the legacy HTTP-only goals cookies to `dat-goals-import-v1`. The same payload is backed up on a `Kind=import` row in the goals database, with resumable progress stored there. The UI's new cache uses `dat-planner-v2`; original legacy keys are retained.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Imports merge goals by UID (never title), keep the newest `updatedAt`, and archive overflow beyond the three newest active goals. Links only fill empty server relations. Conflicts keep the server relation and appear in the import report; unavailable goals/tasks are recorded as skipped. Imports proceed in small verified batches and can be retried after a failure. Cookies are cleared and the local completion marker written only after confirmation. A corrupt cookie is preserved verbatim in the backup; intact local goal data can still be imported.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+For recovery, inspect the Notion import row's paragraph blocks (concatenate them to recover the original JSON), or export the local `dat-goals-import-v1` value. Backups contain personal planner data and should stay in the same private Notion workspace. Do not clear browser storage before that device has imported.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## Verification and release
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```sh
+npm test
+npm run build
+npx playwright install chrome
+npm run test:e2e
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Unit/API tests use a memory Notion fixture. Browser tests run a production build with intercepted fixture APIs in independent mobile/desktop contexts; they never mutate production data. `PLAYWRIGHT_BASE_URL` can point the same browser tests at a deployed preview. The fixture routes still intercept data calls.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Configure separate test task/goal databases in Vercel Preview, run setup with that test integration, and validate real Notion writes there before production release. Then configure production goals, deploy, and open both existing devices to import. Check for sync/import errors, test done/undo and link/unlink from both devices, and verify a direct Notion edit appears after polling.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+If rollout needs to be reversed, retain the new Notion databases and device backups. The previous release uses device cookies and cannot provide shared goal synchronization; restore any needed device data from its backup rather than deleting the shared data.
