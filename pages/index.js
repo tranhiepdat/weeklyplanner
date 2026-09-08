@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
+import { usePlanner, PlannerSyncNotice } from "../components/PlannerProvider";
 
 const DAYS = ["Chủ Nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"];
 const DAYS_SHORT = ["CN","T2","T3","T4","T5","T6","T7"];
@@ -690,6 +691,9 @@ function Particles({ width, height, onDone }) {
 }
 
 function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove, onTogglePriority }) {
+  const { goals } = usePlanner();
+  const linkedGoal = goals.find(g => g.uid === task.goalId);
+  const temporary = task.id.startsWith("temp-");
   const [phase, setPhase] = useState("idle"); // idle | celebrating | settling | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
   const [swipeX, setSwipeX] = useState(0);
@@ -747,7 +751,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
   const guardTap = (fn) => () => {
     if (dragRef.current.moved) { dragRef.current.moved = false; return; }
     if (swipeX < 0) { setSwipeX(0); return; } // tap closes the swipe first
-    fn();
+    if (!temporary) fn();
   };
 
   return (
@@ -777,16 +781,20 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           transition: dragRef.current.active ? "none" : `transform .26s cubic-bezier(.22,1,.36,1), opacity ${settling ? "1s cubic-bezier(.16,1,.3,1)" : ".5s cubic-bezier(.22,1,.36,1)"}, background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)`,
           touchAction: "pan-y",
         }}>
-        <div className={`check ${task.done ? "on" : ""}`}
+        <div role="checkbox" aria-checked={task.done} aria-label={`Hoàn thành ${task.name}`} tabIndex={temporary ? -1 : 0}
+          onKeyDown={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!temporary) onToggle(task.id, !task.done); } }}
+          className={`check ${task.done ? "on" : ""}`}
           onClick={guardTap(() => onToggle(task.id, !task.done))}
           style={!task.done ? { borderColor: accent } : undefined}>
           {task.done ? "✓" : ""}
         </div>
-        <div style={{ flex: 1 }} onClick={guardTap(() => onToggle(task.id, !task.done))}>
+        <div role="button" aria-label={`Chi tiết ${task.name}`} tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onEdit(task))}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!temporary) onEdit(task); } }}>
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
+            {task.goalId && <span className="tag" data-testid="task-goal">{linkedGoal?.emoji || "🎯"} {linkedGoal?.title || "Goal không còn khả dụng"}{linkedGoal && linkedGoal.status !== "active" ? " · History" : ""}</span>}
             {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
@@ -798,7 +806,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             <button onClick={guardBtn(() => onMove(task, 1))} style={moveBtn} title="Dời sang hôm sau">›</button>
           </>
         )}
-        <button onClick={guardBtn(() => onEdit(task))} style={{
+        <button disabled={temporary} onClick={guardBtn(() => onEdit(task))} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -1812,14 +1820,15 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
         }),
       });
       const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Chat failed");
       const created = Array.isArray(d.tasks) ? d.tasks : [];
       const moved = Array.isArray(d.moves) ? d.moves : [];
       const doneItems = Array.isArray(d.dones) ? d.dones : [];
       const tierItems = Array.isArray(d.tiers) ? d.tiers : [];
-      if (created.length) onCreateTasks(created);
-      if (moved.length && onMoveTasks) onMoveTasks(moved);
-      if (doneItems.length && onSetDone) onSetDone(doneItems);
-      if (tierItems.length && onSetTier) onSetTier(tierItems);
+      if (created.length) await onCreateTasks(created);
+      if (moved.length && onMoveTasks && !await onMoveTasks(moved)) throw new Error("Một số việc chưa dời được. Dùng nút Thử lưu lại bên dưới.");
+      if (doneItems.length && onSetDone && !await onSetDone(doneItems)) throw new Error("Một số checkbox chưa lưu được. Dùng nút Thử lưu lại bên dưới.");
+      if (tierItems.length && onSetTier && !await onSetTier(tierItems)) throw new Error("Một số ưu tiên chưa lưu được. Dùng nút Thử lưu lại bên dưới.");
       const parts = [];
       if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => (t.tier === "must" ? "🔥 " : "") + t.name).join(", ")}`);
       if (moved.length) parts.push(`🔀 Đã dời ${moved.length} việc: ${moved.map(m => m.name).join(", ")}`);
@@ -1831,8 +1840,8 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
       if (lows.length) parts.push(`💤 Đã hạ ưu tiên: ${lows.map(x => x.name).join(", ")}`);
       const note = parts.length ? "\n\n" + parts.join("\n") : "";
       setMsgs(m => [...m, { role: "assistant", content: (d.reply || "Đã xong!") + note }]);
-    } catch {
-      setMsgs(m => [...m, { role: "assistant", content: "Có lỗi kết nối, thử lại nhé!" }]);
+    } catch (e) {
+      setMsgs(m => [...m, { role: "assistant", content: e.message || "Có lỗi kết nối, thử lại nhé!" }]);
     }
     setBusy(false);
   };
@@ -1851,6 +1860,7 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
             </div>
           ))}
           {busy && <div style={{ alignSelf: "flex-start", color: "var(--c-muted)", fontSize: ".85rem", fontStyle: "italic" }}>đang soạn…</div>}
+          <PlannerSyncNotice />
         </div>
         <div style={{ padding: "12px 14px", borderTop: "1px solid var(--c-border)", display: "flex", gap: 8 }}>
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") send(); }} placeholder="Nói việc cần thêm…" disabled={busy}
@@ -2001,6 +2011,7 @@ function PlanBoard({ groups, mustIds, onToggleMust, onMove }) {
 function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit }) {
   const [closing, setClosing] = useState(false);
   const [mustIds, setMustIds] = useState(() => new Set(tasks.filter(t => taskTier[t.id] === "must").map(t => t.id)));
+  const [saving, setSaving] = useState(false);
   const requestClose = (fn) => { if (closing) return; setClosing(true); setTimeout(fn, 270); };
   const dObj = new Date(date + "T00:00:00");
   const label = date === TODAY ? "Hôm nay" : `${DAYS[dObj.getDay()]} ${fmt(dObj)}`;
@@ -2034,7 +2045,8 @@ function PlanSheet({ date, tasks, taskTier, taskOrder, onMove, onClose, onCommit
 
         <div style={{ padding: "10px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid var(--c-border)" }}>
           <div style={{ fontSize: ".7rem", color: "var(--c-muted2)", textAlign: "center", marginBottom: 8 }}>🔥 {mustN} ưu tiên · 💤 {tasks.length - mustN} ưu tiên thấp · {tasks.length} việc</div>
-          <button data-sfx="confirm" onClick={() => requestClose(() => onCommit([...mustIds]))} disabled={tasks.length === 0} style={{
+          <PlannerSyncNotice />
+          <button data-sfx="confirm" onClick={async () => { setSaving(true); await onCommit([...mustIds]); setSaving(false); }} disabled={saving || tasks.length === 0} style={{
             width: "100%", padding: "13px", borderRadius: 14, border: "none",
             background: tasks.length ? wine : "var(--c-muted2)", color: "var(--c-on-accent)",
             cursor: tasks.length ? "pointer" : "not-allowed", fontWeight: 800, fontSize: ".95rem",
@@ -2103,9 +2115,7 @@ function ReviewPanel({ tasks }) {
 }
 
 export default function Home() {
-  const [tasks, setTasks]   = useState([]);
-  const [status, setStatus] = useState("loading");
-  const [error, setError]   = useState("");
+  const { tasks, goals, status, syncError: error, goalsError, migration, sync, createTask: saveNewTask, updateTask: saveTask, deleteTask: archiveTask, toggleTask: saveDone, planBatch } = usePlanner();
   const [weekMonday, setWeekMonday] = useState(mondayOf(new Date()));
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [slideDir, setSlideDir] = useState(1); // +1 = slide from right, -1 = from left
@@ -2142,11 +2152,10 @@ export default function Home() {
   const [coverIdx, setCoverIdx] = useState(0);
   useEffect(() => { setCoverIdx(Math.floor(Math.random() * COVERS.length)); }, []);
 
-  // Task sorting: mode + manual drag order (both persisted per-device)
+  // Sorting preference is local; manual order and tiers are shared in Notion.
   const [sortMode, setSortMode] = useState("session"); // session | priority | type (all grouped by buổi)
-  const [taskOrder, setTaskOrder] = useState({});       // { taskId: orderIndex }
-  const [taskTier, setTaskTier] = useState({});         // { taskId: "must" | "optional" }  (Plan Day)
-  const [plannedDays, setPlannedDays] = useState({});   // { "YYYY-MM-DD": true }
+  const taskOrder = useMemo(() => Object.fromEntries(tasks.filter(t => t.planOrder != null).map(t => [t.id, t.planOrder])), [tasks]);
+  const taskTier = useMemo(() => Object.fromEntries(tasks.filter(t => t.planTier != null).map(t => [t.id, t.planTier])), [tasks]);
   const [planning, setPlanning] = useState(false);      // Plan Day sheet open
   const [tab, setTab] = useState("plan");               // plan | stats | habit | word
   const changeTab = (t) => { setTab(t); try { localStorage.setItem("dat-tab", t); } catch {} };
@@ -2156,48 +2165,12 @@ export default function Home() {
       if (["plan", "stats", "habit", "word"].includes(tb)) setTab(tb);
       const m = localStorage.getItem("dat-sortmode");
       if (["session", "priority", "type"].includes(m)) setSortMode(m);
-      const o = localStorage.getItem("dat-task-order");
-      if (o) setTaskOrder(JSON.parse(o));
-      const tr = localStorage.getItem("dat-task-tier");
-      if (tr) setTaskTier(JSON.parse(tr));
-      const pd = localStorage.getItem("dat-planned-days");
-      if (pd) setPlannedDays(JSON.parse(pd));
     } catch {}
   }, []);
   const changeSortMode = (m) => { setSortMode(m); try { localStorage.setItem("dat-sortmode", m); } catch {} };
-  const markPlanned = (date) => {
-    setPlannedDays(prev => { const next = { ...prev, [date]: true }; try { localStorage.setItem("dat-planned-days", JSON.stringify(next)); } catch {} return next; });
-  };
-  const reorderTasks = (ids) => {
-    setTaskOrder(prev => {
-      const next = { ...prev };
-      ids.forEach((id, i) => { next[id] = i; });
-      try { localStorage.setItem("dat-task-order", JSON.stringify(next)); } catch {}
-      return next;
-    });
-    // sync order to Notion (shared across devices), best effort
-    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orders: ids.map((id, i) => ({ id, order: i })) }) }).catch(() => {});
-  };
-  // Commit a whole day's plan: each task → "must" or "optional" (one synced batch)
-  const applyTiers = (pairs) => {
-    setTaskTier(prev => {
-      const next = { ...prev };
-      pairs.forEach(({ id, tier }) => { if (!tier || tier === "normal") delete next[id]; else next[id] = tier; });
-      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
-      return next;
-    });
-    fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tiers: pairs }) }).catch(() => {});
-  };
-  // Set one task's tier (from Edit sheet) — "must" | "optional" | "normal"/null
-  const setTierFor = (id, tier) => {
-    setTaskTier(prev => {
-      const next = { ...prev };
-      if (!tier || tier === "normal") delete next[id]; else next[id] = tier;
-      try { localStorage.setItem("dat-task-tier", JSON.stringify(next)); } catch {}
-      return next;
-    });
-    return fetch("/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, tier: tier === "normal" ? null : tier }) }).catch(() => null);
-  };
+  const reorderTasks = ids => planBatch(ids.map((id, planOrder) => ({ id, planOrder })));
+  const applyTiers = pairs => planBatch(pairs.map(({ id, tier }) => ({ id, planTier: tier === "normal" ? null : tier })));
+  const setTierFor = (id, tier) => planBatch([{ id, planTier: tier === "normal" ? null : tier }]);
   // Quick priority toggle (🔥 button on a task row): must ⇄ optional
   const togglePriorityFor = (id) => {
     const willMust = taskTier[id] !== "must";
@@ -2247,28 +2220,9 @@ export default function Home() {
   };
 
   // Create a task: optimistic insert, then swap temp id for the real Notion id
-  const createTask = async (draft) => {
-    const tempId = "temp-" + Date.now();
-    const optimistic = {
-      id: tempId, name: draft.name, icon: draft.icon || "", done: false,
-      date: draft.date || null, session: draft.session || "",
-      taskType: draft.taskType || "", priority: draft.priority || [], project: draft.project || [],
-    };
-    setTasks(prev => [...prev, optimistic]);
+  const createTask = async draft => {
     playClick("confirm");
-    try {
-      const r = await fetch("/api/create", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
-      });
-      if (!r.ok) throw new Error("create failed");
-      const d = await r.json();
-      setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: d.id } : t));
-      return d.id; // caller may need the real id (e.g. to set the day tier right after)
-    } catch {
-      setTasks(prev => prev.filter(t => t.id !== tempId)); // roll back
-      return null;
-    }
+    return saveNewTask(draft);
   };
 
   // Push-ups: local cache + Notion sync (synced across devices). Ref keeps the
@@ -2380,46 +2334,10 @@ export default function Home() {
     };
   }, []);
 
-  const load = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const r = await fetch("/api/tasks");
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      // Auto roll-over: unfinished tasks from past days are moved forward to today
-      const overdue = d.tasks.filter(t => t.date && t.date < TODAY && !t.done);
-      const rolled = overdue.length
-        ? d.tasks.map(t => (t.date && t.date < TODAY && !t.done) ? { ...t, date: TODAY } : t)
-        : d.tasks;
-      setTasks(rolled); // reflect the roll-over locally right away
-      // Persist the roll-over to Notion in small throttled batches (~3 req/s) so a big
-      // backlog doesn't blow Notion's rate limit → 429 → silent fail → re-roll forever.
-      if (overdue.length) {
-        (async () => {
-          for (let i = 0; i < overdue.length; i += 3) {
-            await Promise.all(overdue.slice(i, i + 3).map(t =>
-              fetch("/api/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, date: TODAY }) }).catch(() => {})
-            ));
-            if (i + 3 < overdue.length) await new Promise(r => setTimeout(r, 900));
-          }
-        })();
-      }
-      // hydrate Plan Day tier/order from Notion (cross-device), merged over local cache
-      const tFromN = {}, oFromN = {};
-      rolled.forEach(t => { if (t.planTier) tFromN[t.id] = t.planTier; if (typeof t.planOrder === "number") oFromN[t.id] = t.planOrder; });
-      if (Object.keys(tFromN).length) setTaskTier(prev => { const m = { ...prev, ...tFromN }; try { localStorage.setItem("dat-task-tier", JSON.stringify(m)); } catch {} return m; });
-      if (Object.keys(oFromN).length) setTaskOrder(prev => { const m = { ...prev, ...oFromN }; try { localStorage.setItem("dat-task-order", JSON.stringify(m)); } catch {} return m; });
-      setStatus("ok");
-    } catch (e) {
-      setError(e.message);
-      setStatus("error");
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const load = useCallback(() => sync({ full: true }), [sync]);
 
   const toggle = async (id, newDone) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: newDone } : t));
+    const saved = saveDone(id, newDone);
     if (newDone) {
       playDing(); haptic(18);
       setJustDone(id);
@@ -2429,41 +2347,10 @@ export default function Home() {
       setJustUndone(id);
       setTimeout(() => setJustUndone(j => j === id ? null : j), 650);
     }
-    try {
-      const r = await fetch("/api/toggle", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, done: newDone }),
-      });
-      if (!r.ok) throw new Error("failed");
-    } catch {
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !newDone } : t));
-    }
+    return saved;
   };
 
-  // Generic update (session / date / name / taskType) with optimistic UI + revert
-  const updateTask = async (id, patch) => {
-    const prevTask = tasks.find(t => t.id === id);
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
-    try {
-      const body = { id };
-      if (patch.session !== undefined) body.session = patch.session;
-      if (patch.date !== undefined) body.date = patch.date;
-      if (patch.name !== undefined) body.name = patch.name;
-      if (patch.taskType !== undefined) body.taskType = patch.taskType;
-      if (patch.priority !== undefined) body.priority = patch.priority;
-      if (patch.project !== undefined) body.project = patch.project;
-      const r = await fetch("/api/update", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) throw new Error("failed");
-    } catch {
-      // revert
-      setTasks(prev => prev.map(t => t.id === id ? prevTask : t));
-    }
-  };
+  const updateTask = (id, patch) => saveTask(id, patch);
 
   // Shrink-out animation, then run the action (delete or move-day)
   const [removingId, setRemovingId] = useState(null);
@@ -2482,21 +2369,7 @@ export default function Home() {
     removeWithShrink(task.id, () => updateTask(task.id, { date: newDate }));
   };
 
-  // Delete (archive) a task with optimistic removal + revert on failure
-  const deleteTask = async (id) => {
-    const prevTasks = tasks;
-    setTasks(prev => prev.filter(t => t.id !== id));
-    try {
-      const r = await fetch("/api/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!r.ok) throw new Error("failed");
-    } catch {
-      setTasks(prevTasks); // restore
-    }
-  };
+  const deleteTask = id => archiveTask(id);
 
   // Set mood for a date (localStorage cache + state + Notion sync)
   const setMoodFor = (date, score) => {
@@ -2598,7 +2471,7 @@ export default function Home() {
     (byDate[k] = byDate[k] || []).push(t);
   });
   // a day counts as "planned" if marked locally or any of its tasks has a tier (synced)
-  const isPlanned = (date) => !!plannedDays[date] || (byDate[date] || []).some(t => taskTier[t.id]);
+  const isPlanned = date => (byDate[date] || []).some(t => t.planTier != null);
 
   // Progress — week (selected week) & selected day
   const weekTasks = tasks.filter(t => t.date && weekSet.has(t.date));
@@ -3265,6 +3138,7 @@ export default function Home() {
             </div>
           </div>
 
+          <PlannerSyncNotice />
           {status === "loading" && (
             <div style={{ textAlign: "center", padding: 28, color: "var(--c-muted)" }}>
               <div style={{ width: 26, height: 26, border: "2px solid var(--c-border)", borderTopColor: wine, borderRadius: "50%", animation: "spin .8s linear infinite", margin: "0 auto 10px" }} />
@@ -3428,14 +3302,15 @@ export default function Home() {
         {editTask && (
           <EditModal
             task={editTask}
-            currentTier={taskTier[editTask.id]}
-            onSetTier={setTierFor}
+            currentTier={editTask.planTier}
+            goals={goals}
+            goalsUnavailable={!!goalsError || migration.running || !!migration.error}
             weekDays={weekDays}
             onClose={() => setEditTask(null)}
-            onSave={(patch) => {
-              const id = editTask.id; setEditTask(null);
-              if (patch.date !== undefined) { playClick("swoosh"); removeWithShrink(id, () => updateTask(id, patch)); }
-              else updateTask(id, patch);
+            onSave={async patch => {
+              const ok = await updateTask(editTask.id, patch);
+              if (ok) setEditTask(null);
+              return ok;
             }}
             onDelete={() => { const id = editTask.id; setEditTask(null); removeWithShrink(id, () => deleteTask(id)); }}
           />
@@ -3520,18 +3395,24 @@ export default function Home() {
         {showChat && (
           <ChatSheet
             onClose={() => setShowChat(false)}
-            onCreateTasks={(items) => { (async () => {
-              // sequential: each task costs a create POST (+ a plan POST when 🔥),
-              // and Notion rate-limits ~3 req/s — await both before starting the next task
-              for (const draft of items) {
-                const newId = await createTask(draft);
-                // bot marked it as a must-do for that day → light the 🔥 right away
-                if (newId && draft.tier === "must") await setTierFor(newId, "must");
+            onCreateTasks={async items => {
+              let matches = [];
+              const activeGoals = goals.filter(g => g.status === "active");
+              if (activeGoals.length) {
+                try {
+                  const response = await fetch("/api/goal-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tasks: items, goals: activeGoals }) });
+                  if (response.ok) matches = (await response.json()).matches || [];
+                } catch {}
               }
-            })(); }}
-            onMoveTasks={(moves) => moves.forEach(m => updateTask(m.id, { date: m.date }))}
-            onSetDone={(items) => items.forEach(x => { const cur = tasks.find(t => t.id === x.id); if (cur && cur.done === x.done) return; toggle(x.id, x.done); })}
-            onSetTier={(items) => items.forEach(x => { if ((taskTier[x.id] || "optional") === x.tier) return; setTierFor(x.id, x.tier); })}
+              for (const [i, draft] of items.entries()) {
+                const goalId = matches[i]?.goalId;
+                const id = await createTask({ ...draft, ...(goalId ? { goalId } : {}), ...(draft.tier ? { planTier: draft.tier } : {}) });
+                if (!id) throw new Error("Chưa lưu được task. Hãy dùng nút thử lưu lại.");
+              }
+            }}
+            onMoveTasks={async moves => (await Promise.all(moves.map(m => updateTask(m.id, { date: m.date })))).every(Boolean)}
+            onSetDone={async items => (await Promise.all(items.map(x => toggle(x.id, x.done !== false)))).every(Boolean)}
+            onSetTier={items => applyTiers(items)}
             today={TODAY}
             weekDays={weekDays}
             tasks={tasks}
@@ -3547,13 +3428,14 @@ export default function Home() {
             taskOrder={taskOrder}
             onMove={planMove}
             onClose={() => setPlanning(false)}
-            onCommit={(mustIds) => {
+            onCommit={async mustIds => {
               const mustSet = new Set(mustIds);
-              applyTiers(dayTasks.map(t => ({ id: t.id, tier: mustSet.has(t.id) ? "must" : "optional" })));
-              markPlanned(selectedDate);
+              const changed = dayTasks.map(t => ({ id: t.id, tier: mustSet.has(t.id) ? "must" : "optional" })).filter(p => taskTier[p.id] !== p.tier);
+              if (!await applyTiers(changed)) return false;
               changeSortMode("session");
               setPlanning(false);
               haptic(20);
+              return true;
             }}
           />
         )}
@@ -3564,7 +3446,10 @@ export default function Home() {
   );
 }
 
-function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onSetTier }) {
+function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, goals, goalsUnavailable }) {
+  const [goalId, setGoalId] = useState(task.goalId || "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [name, setName] = useState(task.name);
   const [editingName, setEditingName] = useState(false);
   const [session, setSession] = useState(task.session || "");
@@ -3602,9 +3487,9 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
   if (taskType !== (task.taskType || "")) patch.taskType = taskType || null;
   if (!sameArr(priority, task.priority)) patch.priority = priority;
   if (!sameArr(project, task.project)) patch.project = project;
-  const hasChange = Object.keys(patch).length > 0;
-  const tierChanged = tier !== (currentTier || "optional");
-  const dirty = hasChange || tierChanged;
+  if (goalId !== (task.goalId || "")) patch.goalId = goalId || null;
+  if (tier !== (currentTier || "optional")) patch.planTier = tier;
+  const dirty = Object.keys(patch).length > 0;
   const togglePriority = (p) => setPriority(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
   const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
 
@@ -3753,19 +3638,32 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, onS
           </div>}
         </div>
 
+        <div style={{ marginBottom: 20 }}>
+          <label htmlFor="task-goal-select" style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Liên kết goal</label>
+          <select id="task-goal-select" value={goalId} onChange={e => setGoalId(e.target.value)} disabled={goalsUnavailable || saving}
+            style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-ink)" }}>
+            <option value="">Không liên kết</option>
+            {goals.filter(g => g.status === "active" || g.uid === task.goalId).map(g => <option key={g.uid} value={g.uid}>{g.emoji} {g.title}{g.status !== "active" ? " · History" : ""}</option>)}
+            {task.goalId && !goals.some(g => g.uid === task.goalId) && <option value={task.goalId}>Goal không còn khả dụng</option>}
+          </select>
+          {goalsUnavailable && <small>Chờ đồng bộ/import goals xong để chọn liên kết.</small>}
+        </div>
+        {saveError && <div role="alert" style={{ color: "#b45309", marginBottom: 12 }}>{saveError}</div>}
         {/* Actions */}
         <div style={{ display: "flex", gap: 10 }}>
           <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
             flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
             background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
-          <button data-sfx="confirm" onClick={() => requestClose(() => {
-            if (tierChanged) onSetTier(task.id, tier);
-            if (hasChange) onSave(patch); else onClose();
-          })} style={{
+          <button disabled={saving} data-sfx="confirm" onClick={async () => {
+            if (!dirty) { requestClose(onClose); return; }
+            setSaving(true); setSaveError("");
+            const ok = await onSave(patch);
+            if (!ok) { setSaveError("Chưa lưu được. Dữ liệu đang sửa vẫn được giữ; hãy thử lại."); setSaving(false); }
+          }} style={{
             flex: 2, padding: "12px", borderRadius: 12, border: "none",
             background: dirty ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
-          }}>{dirty ? "Lưu thay đổi" : "Đóng"}</button>
+          }}>{saving ? "Đang lưu…" : dirty ? "Lưu thay đổi" : "Đóng"}</button>
         </div>
 
         {/* Delete */}

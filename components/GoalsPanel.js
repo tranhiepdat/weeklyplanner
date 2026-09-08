@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePlanner, PlannerSyncNotice } from "./PlannerProvider";
 
 const ACTIVE_LIMIT = 3;
-const CACHE_KEY = "dat-goals-cache";
-const LINKS_KEY = "dat-goal-links";
-const TASKS_KEY = "dat-tasks-cache";
-
 function localIso(date = new Date()) {
   const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -15,18 +12,6 @@ function plusDaysIso(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return localIso(d);
-}
-function readLocal(key, fallback) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function writeLocal(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 function weekBounds() {
   const d = new Date();
@@ -66,6 +51,7 @@ function freshMilestone(i, text = "") {
 function blankGoal(seed = {}) {
   return {
     ...seed,
+    uid: seed.uid || crypto.randomUUID(),
     title: seed.title || "",
     emoji: seed.emoji || "🎯",
     deadline: seed.deadline || plusDaysIso(90),
@@ -290,7 +276,7 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
                     type="checkbox"
                     checked={!!m.done}
                     onChange={() => onPatch(g, {
-                      milestones: g.milestones.map(x => x.id === m.id ? { ...x, done: !x.done } : x),
+                      milestone: { id: m.id, done: !m.done },
                     })}
                   />
                   <span>{m.text}</span>
@@ -334,22 +320,17 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
 export default function GoalsPanel() {
   const [host, setHost] = useState(null);
   const [theme, setTheme] = useState("light");
-  const [goals, setGoals] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [links, setLinks] = useState({});
+  const { goals, tasks, saveGoal, status, goalsError, migration, errors } = usePlanner();
   const [manager, setManager] = useState(false);
   const [editor, setEditor] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [syncErr, setSyncErr] = useState(false);
+  const loading = status === "loading" || migration.running;
+  const syncErr = !!goalsError || !!migration.error;
   const [toast, setToast] = useState("");
 
   const active = useMemo(() => goals.filter(g => g.status === "active").slice(0, ACTIVE_LIMIT), [goals]);
   const [weekStart, weekEnd] = weekBounds();
 
-  const allTasksForGoal = useCallback(goal => tasks.filter(t => {
-    const gid = t.goalId || links[t.id];
-    return gid === goal.uid;
-  }), [tasks, links]);
+  const allTasksForGoal = useCallback(goal => tasks.filter(t => t.goalId === goal.uid), [tasks]);
 
   const statsForGoal = useCallback(goal => {
     const linked = allTasksForGoal(goal);
@@ -416,66 +397,26 @@ export default function GoalsPanel() {
     return () => observer?.disconnect();
   }, []);
 
-  const loadGoals = useCallback(async () => {
-    try {
-      const r = await fetch("/api/goals", { cache: "no-store" });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "load failed");
-      const next = Array.isArray(data.goals) ? data.goals : [];
-      setGoals(next);
-      writeLocal(CACHE_KEY, next);
-      setSyncErr(false);
-    } catch {
-      setGoals(readLocal(CACHE_KEY, []));
-      setSyncErr(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    setTasks(readLocal(TASKS_KEY, []));
-    setLinks(readLocal(LINKS_KEY, {}));
-    loadGoals();
-
-    const onTasks = e => setTasks(e.detail?.tasks || readLocal(TASKS_KEY, []));
-    const onLinks = () => setLinks(readLocal(LINKS_KEY, {}));
-
-    window.addEventListener("wp-tasks-updated", onTasks);
-    window.addEventListener("wp-goal-links-changed", onLinks);
-    return () => {
-      window.removeEventListener("wp-tasks-updated", onTasks);
-      window.removeEventListener("wp-goal-links-changed", onLinks);
-    };
-  }, [loadGoals]);
-
   const persist = async (goal, closeEditor = false) => {
-    try {
-      const editing = !!goal.id;
-      const r = await fetch("/api/goals", {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editing ? { id: goal.id, goal } : goal),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "save failed");
-      const next = Array.isArray(data.goals) ? data.goals : [];
-      setGoals(next);
-      writeLocal(CACHE_KEY, next);
-      setSyncErr(false);
-      if (closeEditor) setEditor(null);
-      setToast(editing ? "Goal updated" : "Goal created ✨");
-      setTimeout(() => setToast(""), 1600);
-      return true;
-    } catch {
-      setSyncErr(true);
-      return false;
+    let input = goal;
+    if (goal.id && closeEditor && editor?.id === goal.id) {
+      input = { id: goal.id };
+      for (const field of ["title", "emoji", "deadline", "weeklyOutcome", "milestones", "status", "achievedAt", "archivedAt"])
+        if (JSON.stringify(goal[field]) !== JSON.stringify(editor[field])) input[field] = goal[field];
+      if (input.milestones) input.milestoneBase = editor.milestones;
     }
+    const ok = await saveGoal(input);
+    if (ok) {
+      if (closeEditor) setEditor(null);
+      setToast(goal.id ? "Goal updated" : "Goal created ✨");
+      setTimeout(() => setToast(""), 1600);
+    }
+    return ok;
   };
-
-  const patch = (goal, changes) => persist({ ...goal, ...changes, updatedAt: new Date().toISOString() });
+  const patch = (goal, changes) => persist({ id: goal.id, ...changes });
 
   const openCreate = seed => {
+    if (loading || syncErr) return;
     if (!seed?.id && active.length >= ACTIVE_LIMIT) return;
     if (seed?.status === "achieved") {
       setEditor(blankGoal({
@@ -515,12 +456,13 @@ export default function GoalsPanel() {
         </div>
       </div>
       <div className="wp-goal-board-actions">
-        {syncErr && <span className="sync" title="Goal sync đang dùng cache local"/>}
+        {syncErr && <span className="sync" title="Chưa đồng bộ được goals với Notion"/>}
         <button onClick={() => setManager(true)}>Manage</button>
         <button className="add" disabled={active.length >= ACTIVE_LIMIT} onClick={() => openCreate()}>＋</button>
       </div>
     </div>
 
+    {(syncErr || migration.running || errors.length > 0) && <PlannerSyncNotice />}
     {!!active.length && <div className="wp-goal-table-head">
       <span>Goal</span><span>Milestone hiện tại</span><span>Tasks</span><span>Progress</span>
     </div>}
@@ -615,8 +557,8 @@ export default function GoalsPanel() {
       .wp-goal-board-head{min-height:48px;padding:8px 10px 7px 12px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;justify-content:space-between;gap:10px}
       .wp-goal-board-title{display:flex;align-items:center;gap:9px;min-width:0}.wp-goal-board-title .mark{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--c1);display:grid;place-items:center;color:var(--c1);font-size:1rem;flex:0 0 auto}.wp-goal-board-title b{display:block;font-size:.67rem;letter-spacing:.12em}.wp-goal-board-title small{display:block;font-size:.58rem;color:var(--c-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:520px}
       .wp-goal-board-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.wp-goal-board-actions button{height:29px;border:1px solid var(--c-border);border-radius:9px;background:var(--c-surface);color:var(--c-muted);padding:0 9px;font:800 .61rem 'Nunito',sans-serif;cursor:pointer}.wp-goal-board-actions .add{width:30px;padding:0;background:var(--c1);border-color:var(--c1);color:var(--c-on-accent);font-size:.9rem}.wp-goal-board-actions button:disabled{opacity:.35;cursor:not-allowed}.wp-goal-board-actions .sync{width:6px;height:6px;border-radius:50%;background:#d98e4a;box-shadow:0 0 0 3px rgba(217,142,74,.13)}
-      .wp-goal-table-head{display:grid;grid-template-columns:minmax(180px,1.35fr) minmax(190px,1.5fr) minmax(110px,.65fr) minmax(130px,.8fr);gap:12px;padding:7px 12px 5px;color:var(--c-muted2);font-size:.52rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
-      .wp-goal-table{padding:0 8px 8px}.wp-goal-row{width:100%;border:1px solid transparent;border-top-color:color-mix(in srgb,var(--c-border) 68%,transparent);background:transparent;color:var(--c-ink);display:grid;grid-template-columns:minmax(180px,1.35fr) minmax(190px,1.5fr) minmax(110px,.65fr) minmax(130px,.8fr);gap:12px;align-items:center;padding:9px 4px;text-align:left;cursor:pointer;animation:wpGoalRowIn .42s cubic-bezier(.16,1,.3,1) both;animation-delay:var(--delay);transition:background .2s ease,border-color .2s ease,transform .2s ease}.wp-goal-row:first-child{border-top-color:transparent}.wp-goal-row:hover{background:color-mix(in srgb,var(--c1) 4%,var(--c-surface));border-color:color-mix(in srgb,var(--c1) 18%,var(--c-border));border-radius:11px;transform:translateY(-1px)}
+      .wp-goal-table-head{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.5fr) minmax(75px,.85fr) minmax(90px,.9fr);gap:12px;padding:7px 12px 5px;color:var(--c-muted2);font-size:.52rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+      .wp-goal-table{padding:0 8px 8px}.wp-goal-row{width:100%;border:1px solid transparent;border-top-color:color-mix(in srgb,var(--c-border) 68%,transparent);background:transparent;color:var(--c-ink);display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.5fr) minmax(75px,.85fr) minmax(90px,.9fr);gap:12px;align-items:center;padding:9px 4px;text-align:left;cursor:pointer;animation:wpGoalRowIn .42s cubic-bezier(.16,1,.3,1) both;animation-delay:var(--delay);transition:background .2s ease,border-color .2s ease,transform .2s ease}.wp-goal-row:first-child{border-top-color:transparent}.wp-goal-row:hover{background:color-mix(in srgb,var(--c1) 4%,var(--c-surface));border-color:color-mix(in srgb,var(--c1) 18%,var(--c-border));border-radius:11px;transform:translateY(-1px)}
       .wp-goal-cell{min-width:0}.wp-goal-cell.goal,.wp-goal-cell.milestone,.wp-goal-cell.tasks{display:flex;align-items:center;gap:8px}.wp-goal-cell .emoji{font-size:1.05rem;flex:0 0 auto}.wp-goal-cell .copy{min-width:0}.wp-goal-cell .copy b,.wp-goal-cell .copy small{display:block}.wp-goal-cell .copy b{font-size:.68rem;line-height:1.25}.wp-goal-cell .copy small{font-size:.56rem;color:var(--c-muted);line-height:1.3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ms-badge{min-width:31px;height:24px;padding:0 7px;border-radius:999px;background:var(--c-track);display:grid;place-items:center;color:var(--c1);font-size:.57rem;font-weight:900;flex:0 0 auto}.ms-badge.done{background:color-mix(in srgb,#48a26b 14%,var(--c-surface));color:#3f8759}.task-number{font-size:.9rem;font-weight:900;min-width:34px;color:var(--c1)}.wp-goal-cell.progress{display:block}.progress-top{display:flex;justify-content:space-between;align-items:baseline;gap:7px}.progress-top b{font-size:.68rem}.progress-top small{font-size:.53rem;color:var(--c-muted);white-space:nowrap}.progress-track{display:block;height:6px;border-radius:99px;background:var(--c-track);overflow:hidden;margin-top:5px}.progress-track i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--c1),var(--c2));transition:width .6s cubic-bezier(.2,.9,.3,1)}
       .wp-goal-empty{display:flex;align-items:center;gap:10px;padding:16px 12px}.wp-goal-empty>span{font-size:1.5rem}.wp-goal-empty>div{min-width:0;flex:1}.wp-goal-empty b,.wp-goal-empty small{display:block}.wp-goal-empty b{font-size:.72rem}.wp-goal-empty small{font-size:.59rem;color:var(--c-muted);margin-top:2px;line-height:1.4}.wp-goal-empty button{border:1px solid var(--c1);background:var(--c1);color:var(--c-on-accent);border-radius:10px;padding:8px 10px;font:800 .62rem 'Nunito';cursor:pointer;white-space:nowrap}
 
