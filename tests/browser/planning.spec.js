@@ -52,10 +52,10 @@ async function device(browser,server,mobile=false,legacy=null){
   await context.route('**/api/**',server.route);
   await page.addInitScript(data=>{localStorage.setItem('dat-volume','0');if(data){localStorage.setItem('dat-goals-cache',JSON.stringify(data.goals));localStorage.setItem('dat-goal-links',JSON.stringify(data.links));}},legacy);
   await page.goto('/');
-  await expect(page.getByRole('button',{name:'Chi tiết Review proposal',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Hoàn thành Review proposal',exact:true})).toBeVisible();
   return {context,page,errors};
 }
-async function detail(page){await page.getByRole('button',{name:'Chi tiết Review proposal',exact:true}).click();await expect(page.getByLabel('Liên kết goal',{exact:true})).toBeVisible();}
+async function detail(page){await page.getByRole('button',{name:'Sửa Review proposal',exact:true}).click();await expect(page.getByLabel('Liên kết goal',{exact:true})).toBeVisible();}
 
 async function choose(page,id){
   await page.getByLabel('Liên kết goal',{exact:true}).click();
@@ -91,9 +91,13 @@ test('mobile and desktop sync done, goal links, nulls and direct Notion edits wi
   await desktop.context.close();await mobile.context.close();
 });
 
-test('failed save keeps the editor draft and retry succeeds; tapping the name never toggles done',async({browser})=>{
+test('failed save keeps the editor draft and retry succeeds; only ellipsis opens settings',async({browser})=>{
   const server=fixture(),d=await device(browser,server,true);
-  await detail(d.page);expect(server.tasks[0].done).toBe(false);
+  await d.page.getByRole('button',{name:'Hoàn thành Review proposal',exact:true}).click();
+  await expect(d.page.getByRole('button',{name:'Bỏ hoàn thành Review proposal',exact:true})).toBeVisible();
+  await d.page.getByRole('button',{name:'Bỏ hoàn thành Review proposal',exact:true}).click();
+  await expect(d.page.getByRole('dialog')).toHaveCount(0);expect(server.tasks[0].done).toBe(false);
+  await detail(d.page);
   await choose(d.page,'g1');server.failWrite=true;
   await d.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   await expect(d.page.getByText('Chưa lưu được. Dữ liệu đang sửa vẫn được giữ; hãy thử lại.',{exact:true})).toBeVisible();
@@ -112,7 +116,7 @@ test('returning online/focus reconciles deletion and chat auto-link persists in 
   expect(server.requests.find(r=>r.path==='/api/create').body.planTier).toBe('must');
   server.tasks.splice(0,1);
   await d.page.evaluate(()=>window.dispatchEvent(new Event('online')));
-  await expect(d.page.getByRole('button',{name:'Chi tiết Review proposal',exact:true})).toHaveCount(0);
+  await expect(d.page.getByRole('button',{name:/Review proposal/,exact:true})).toHaveCount(0);
   expect(d.errors).toEqual([]);await d.context.close();
 });
 
@@ -139,9 +143,9 @@ test('goal detail follows selected week, includes current done state, and all da
  const dialog=p.getByRole('dialog',{name:'🎯 Learn',exact:true});
  await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
  await expect(dialog.getByText('Tổng liên kết: 24',{exact:true})).toBeVisible();
- await expect(dialog.getByRole('button',{name:'Past 00',exact:true})).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:/Past 00/,exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'Tất cả',exact:true}).click();
- await expect(dialog.getByRole('button',{name:'No date',exact:true})).toBeVisible();
+ await expect(dialog.getByRole('button',{name:'Hoàn thành No date',exact:true})).toBeVisible();
  await expect(dialog.locator('.goal-task-item')).toHaveCount(22);
  await dialog.getByRole('button',{name:'Xem thêm',exact:true}).click();
  await expect(dialog.locator('.goal-task-item')).toHaveCount(24);
@@ -150,7 +154,7 @@ test('goal detail follows selected week, includes current done state, and all da
  await expect(p.locator('.wp-goal-row').first()).toContainText('2026-08-31 – 2026-09-06: 22/22');
  await p.locator('.wp-goal-row').first().click();
  await expect(dialog.getByRole('heading',{name:'Đã xong · 22',exact:true})).toBeVisible();
- await expect(dialog.getByRole('button',{name:'No date',exact:true})).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:/No date/,exact:true})).toHaveCount(0);
  await dialog.getByRole('checkbox',{name:'Hoàn thành Past 00',exact:true}).uncheck();
  await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
  await expect(dialog.getByRole('heading',{name:'Đã xong · 21',exact:true})).toBeVisible();
@@ -176,11 +180,11 @@ test('row picker saves immediately with contextual retry, History is read-only, 
  await p.getByRole('button',{name:'📊 Biểu đồ',exact:true}).click();
  await p.locator('.wp-goal-row').first().click();
  const goal=p.getByRole('dialog',{name:'🎯 Learn',exact:true});
- await goal.getByRole('button',{name:'Review proposal',exact:true}).click();
+ await goal.getByRole('button',{name:'Sửa Review proposal',exact:true}).click();
  await expect(p.getByRole('dialog')).toHaveCount(1);
  await choose(p,'');expect(s.tasks[0].goalId).toBe('g0');
  await p.getByRole('button',{name:'Hủy',exact:true}).click();await p.clock.fastForward(300);
- await expect(goal).toBeVisible();await expect(goal.getByRole('button',{name:'Review proposal',exact:true})).toBeFocused();
+ await expect(goal).toBeVisible();await expect(goal.getByRole('button',{name:'Sửa Review proposal',exact:true})).toBeFocused();
  await goal.getByLabel('Liên kết goal cho Review proposal',{exact:true}).click();
  await picker.getByRole('button',{name:/Không liên kết/}).click();
  await expect(goal.getByRole('heading',{name:'Chưa xong · 0',exact:true})).toBeVisible();
