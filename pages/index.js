@@ -1413,7 +1413,7 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   const [modalMonday, setModalMonday] = useState(mondayOf(new Date((defaultDate || TODAY) + "T00:00:00")));
 
   const requestClose = (action) => {
-    if (closing || saving) return;
+    if (closing) return;
     setClosing(true);
     setTimeout(() => action(), 270);
   };
@@ -1444,11 +1444,11 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   });
 
   return (
-    <div hidden={!active} onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
+    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", backdropFilter: "blur(3px)",
-      display: active ? "flex" : "none", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
     }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Chi tiết task" tabIndex={-1} onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
+      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
         background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
         width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(0,0,0,.25)",
         maxHeight: "88vh", overflowY: "auto",
@@ -3466,7 +3466,7 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
 
   // Animate the sheet out before running the actual action (close/save/delete)
   const requestClose = (action) => {
-    if (closing) return;
+    if (closing || saving) return;
     setClosing(true);
     setTimeout(() => action(), 270);
   };
@@ -3495,11 +3495,11 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
   const toggleProject = (p) => setProject(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
 
   return (
-    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
+    <div hidden={!active} onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
       position: "fixed", inset: 0, background: "rgba(74,48,48,.4)", backdropFilter: "blur(3px)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
+      display: active ? "flex" : "none", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
     }}>
-      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Chi tiết task" tabIndex={-1} onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
         background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
         width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
         maxHeight: "85vh", overflowY: "auto",
