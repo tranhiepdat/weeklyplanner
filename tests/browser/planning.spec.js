@@ -57,6 +57,11 @@ async function device(browser,server,mobile=false,legacy=null){
 }
 async function detail(page){await page.getByRole('button',{name:'Chi tiết Review proposal',exact:true}).click();await expect(page.getByLabel('Liên kết goal',{exact:true})).toBeVisible();}
 
+async function choose(page,id){
+  await page.getByLabel('Liên kết goal',{exact:true}).click();
+  await page.getByRole('dialog',{name:'Liên kết goal',exact:true}).getByRole('button',{name:id==='g0'?/Learn/:id==='g1'?/Build/:/Không liên kết/}).click();
+}
+
 test('mobile and desktop sync done, goal links, nulls and direct Notion edits without losing an open draft',async({browser})=>{
   const server=fixture();const desktop=await device(browser,server),mobile=await device(browser,server,true);
   const check=p=>p.getByRole('checkbox',{name:'Hoàn thành Review proposal',exact:true});
@@ -64,21 +69,21 @@ test('mobile and desktop sync done, goal links, nulls and direct Notion edits wi
   await expect(desktop.page.locator('.wp-goal-row').first().locator('.task-number')).toHaveText('1/1');
   await mobile.page.clock.fastForward(15001);
   await expect(check(mobile.page)).toHaveAttribute('aria-checked','true');
-  await detail(mobile.page);await mobile.page.getByLabel('Liên kết goal',{exact:true}).selectOption('g1');
+  await detail(mobile.page);await choose(mobile.page,'g1');
   await mobile.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   await expect(mobile.page.getByLabel('Liên kết goal',{exact:true})).not.toBeVisible();
   await desktop.page.clock.fastForward(15001);
   await expect(desktop.page.locator('[data-testid="task-goal"]').first()).toContainText('Build');
   await expect(desktop.page.locator('.wp-goal-row').nth(1).locator('.task-number')).toHaveText('1/1');
   // A remote edit arrives while an unsaved goal choice is open.
-  await detail(mobile.page);await mobile.page.getByLabel('Liên kết goal',{exact:true}).selectOption('g0');
+  await detail(mobile.page);await choose(mobile.page,'g0');
   Object.assign(server.tasks[0],{done:false,planTier:null,planOrder:null});
   await mobile.page.clock.fastForward(15001);
-  await expect(mobile.page.getByLabel('Liên kết goal',{exact:true})).toHaveValue('g0');
+  await expect(mobile.page.getByLabel('Liên kết goal',{exact:true})).toContainText('Learn');
   await mobile.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   expect(server.tasks[0].done).toBe(false);
   await desktop.page.clock.fastForward(15001);await expect(check(desktop.page)).toHaveAttribute('aria-checked','false');
-  await detail(desktop.page);await desktop.page.getByLabel('Liên kết goal',{exact:true}).selectOption('');
+  await detail(desktop.page);await choose(desktop.page,'');
   await desktop.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   await mobile.page.clock.fastForward(15001);await expect(mobile.page.locator('[data-testid="task-goal"]')).toHaveCount(0);
   expect(server.requests.some(r=>r.path==='/api/tasks'&&r.url.includes('since='))).toBe(true);
@@ -89,10 +94,10 @@ test('mobile and desktop sync done, goal links, nulls and direct Notion edits wi
 test('failed save keeps the editor draft and retry succeeds; tapping the name never toggles done',async({browser})=>{
   const server=fixture(),d=await device(browser,server,true);
   await detail(d.page);expect(server.tasks[0].done).toBe(false);
-  await d.page.getByLabel('Liên kết goal',{exact:true}).selectOption('g1');server.failWrite=true;
+  await choose(d.page,'g1');server.failWrite=true;
   await d.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   await expect(d.page.getByText('Chưa lưu được. Dữ liệu đang sửa vẫn được giữ; hãy thử lại.',{exact:true})).toBeVisible();
-  await expect(d.page.getByLabel('Liên kết goal',{exact:true})).toHaveValue('g1');
+  await expect(d.page.getByLabel('Liên kết goal',{exact:true})).toContainText('Build');
   server.failWrite=false;await d.page.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
   await expect(d.page.getByLabel('Liên kết goal',{exact:true})).not.toBeVisible();expect(server.tasks[0].goalId).toBe('g1');
   await d.context.close();
@@ -124,4 +129,74 @@ test('legacy backup survives a failed import and resumes with the same import ID
   expect(imports[0].body.importId).toBe(imports[1].body.importId);
   expect(await d.page.evaluate(()=>JSON.parse(localStorage.getItem('dat-goals-cache')))).toEqual(legacy.goals);
   await d.context.close();
+});
+
+test('goal detail follows selected week, includes current done state, and all dates paginates',async({browser})=>{
+ const s=fixture();
+ s.tasks.push(...Array.from({length:22},(_,i)=>({...s.tasks[0],id:`old-${i}`,name:`Past ${String(i).padStart(2,'0')}`,date:'2026-09-06',done:true,planOrder:i})),{...s.tasks[0],id:'undated',name:'No date',date:null});
+ const d=await device(browser,s);const p=d.page;
+ await p.locator('.wp-goal-row').first().click();
+ const dialog=p.getByRole('dialog',{name:'🎯 Learn',exact:true});
+ await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
+ await expect(dialog.getByText('Tổng liên kết: 24',{exact:true})).toBeVisible();
+ await expect(dialog.getByRole('button',{name:'Past 00',exact:true})).toHaveCount(0);
+ await dialog.getByRole('button',{name:'Tất cả',exact:true}).click();
+ await expect(dialog.getByRole('button',{name:'No date',exact:true})).toBeVisible();
+ await expect(dialog.locator('.goal-task-item')).toHaveCount(22);
+ await dialog.getByRole('button',{name:'Xem thêm',exact:true}).click();
+ await expect(dialog.locator('.goal-task-item')).toHaveCount(24);
+ await dialog.getByRole('button',{name:'Đóng',exact:true}).click();
+ await p.getByTitle('Tuần trước',{exact:true}).first().click();
+ await expect(p.locator('.wp-goal-row').first()).toContainText('2026-08-31 – 2026-09-06: 22/22');
+ await p.locator('.wp-goal-row').first().click();
+ await expect(dialog.getByRole('heading',{name:'Đã xong · 22',exact:true})).toBeVisible();
+ await expect(dialog.getByRole('button',{name:'No date',exact:true})).toHaveCount(0);
+ await dialog.getByRole('checkbox',{name:'Hoàn thành Past 00',exact:true}).uncheck();
+ await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
+ await expect(dialog.getByRole('heading',{name:'Đã xong · 21',exact:true})).toBeVisible();
+ expect(d.errors).toEqual([]);await d.context.close();
+});
+
+test('row picker saves immediately with contextual retry, History is read-only, editor returns to goal detail',async({browser})=>{
+ const s=fixture(),d=await device(browser,s,true),p=d.page;
+ const rowButton=p.getByLabel('Liên kết goal cho Review proposal',{exact:true});
+ await rowButton.click();s.failWrite=true;
+ const picker=p.getByRole('dialog',{name:'Liên kết goal',exact:true});
+ await picker.getByRole('button',{name:/Build/}).click();
+ await expect(picker.getByRole('alert')).toContainText('Chưa lưu được liên kết');
+ expect(s.tasks[0].done).toBe(false);s.failWrite=false;
+ await picker.getByRole('button',{name:'Thử lại',exact:true}).click();
+ await expect(picker).toHaveCount(0);await expect(rowButton).toContainText('Build');
+ await expect(rowButton).toBeFocused();
+ s.goals[1].status='archived';await p.clock.fastForward(15001);
+ await rowButton.click();await expect(picker.getByText('History · Liên kết hiện tại')).toBeVisible();
+ await expect(picker.getByRole('button',{name:/Build/})).toHaveCount(0);
+ await picker.getByRole('button',{name:/Không liên kết/}).click();await expect(rowButton).toHaveText('＋ Liên kết goal');
+ await rowButton.click();await picker.getByRole('button',{name:/Learn/}).click();
+ await p.locator('.wp-goal-row').first().click();
+ const goal=p.getByRole('dialog',{name:'🎯 Learn',exact:true});
+ await goal.getByRole('button',{name:'Review proposal',exact:true}).click();
+ await expect(p.getByRole('dialog')).toHaveCount(1);
+ await choose(p,'');expect(s.tasks[0].goalId).toBe('g0');
+ await p.getByRole('button',{name:'Hủy',exact:true}).click();await p.clock.fastForward(300);
+ await expect(goal).toBeVisible();await expect(goal.getByRole('button',{name:'Review proposal',exact:true})).toBeFocused();
+ await goal.getByLabel('Liên kết goal cho Review proposal',{exact:true}).click();
+ await picker.getByRole('button',{name:/Không liên kết/}).click();
+ await expect(goal.getByRole('heading',{name:'Chưa xong · 0',exact:true})).toBeVisible();
+ expect(d.errors).toEqual([]);await d.context.close();
+});
+
+test('deleted task cannot be saved from an open draft and keyboard focus stays in picker',async({browser})=>{
+ const s=fixture(),d=await device(browser,s),p=d.page;
+ await detail(p);await choose(p,'g1');
+ await p.getByLabel('Liên kết goal',{exact:true}).click();
+ const picker=p.getByRole('dialog',{name:'Liên kết goal',exact:true});
+ await picker.getByRole('button').last().focus();await p.keyboard.press('Tab');
+ await expect(picker.getByRole('button').first()).toBeFocused();
+ await p.keyboard.press('Escape');await expect(p.getByLabel('Liên kết goal',{exact:true})).toBeFocused();
+ s.tasks.splice(0);await p.evaluate(()=>window.dispatchEvent(new Event('online')));
+ await expect(p.getByText('Task đã bị xóa từ thiết bị khác. Đóng form để cập nhật danh sách.',{exact:true})).toBeVisible();
+ await expect(p.getByRole('button',{name:'Lưu thay đổi',exact:true})).toBeDisabled();
+ expect(s.requests.filter(r=>r.path==='/api/update')).toHaveLength(0);
+ expect(d.errors).toEqual([]);await d.context.close();
 });

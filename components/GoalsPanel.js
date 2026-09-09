@@ -1,3 +1,5 @@
+import { GoalDetail, GoalPicker, GoalDialogStyles, useDialogFocus } from "./GoalDialogs";
+import { selectedWeekBounds } from "../lib/goal-view.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePlanner, PlannerSyncNotice } from "./PlannerProvider";
@@ -12,16 +14,6 @@ function plusDaysIso(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return localIso(d);
-}
-function weekBounds() {
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  const dow = d.getDay();
-  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-  const s = new Date(d);
-  const e = new Date(d);
-  e.setDate(e.getDate() + 6);
-  return [localIso(s), localIso(e)];
 }
 function daysLeft(deadline) {
   if (!deadline) return null;
@@ -64,6 +56,7 @@ function blankGoal(seed = {}) {
 }
 
 function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
+  const dialogRef = useDialogFocus(true, onClose);
   const editing = !!initial?.id;
   const [mode, setMode] = useState(editing ? "manual" : "ai");
   const [draft, setDraft] = useState(() => blankGoal(initial || {}));
@@ -138,7 +131,7 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
   };
 
   return <div className="wp-goal-overlay" onMouseDown={e => e.currentTarget === e.target && onClose()}>
-    <div className="wp-goal-sheet wp-goal-editor" role="dialog" aria-modal="true">
+    <div ref={dialogRef} tabIndex={-1} aria-label="Sửa Goal" className="wp-goal-sheet wp-goal-editor" role="dialog" aria-modal="true">
       <div className="wp-goal-sheet-head">
         <div>
           <span className="eyebrow">{editing ? "EDIT GOAL" : "NEW 90-DAY GOAL"}</span>
@@ -215,7 +208,8 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
   </div>;
 }
 
-function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
+function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch, onDetail }) {
+  const dialogRef = useDialogFocus(true, onClose);
   const [tab, setTab] = useState("active");
   const active = goals.filter(g => g.status === "active");
   const history = goals
@@ -224,7 +218,7 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
       .localeCompare(String(a.achievedAt || a.archivedAt || a.updatedAt || "")));
 
   return <div className="wp-goal-overlay" onMouseDown={e => e.currentTarget === e.target && onClose()}>
-    <div className="wp-goal-sheet wp-goal-manager" role="dialog" aria-modal="true">
+    <div ref={dialogRef} tabIndex={-1} aria-label="Manage Goals" className="wp-goal-sheet wp-goal-manager" role="dialog" aria-modal="true">
       <div className="wp-goal-sheet-head manager-head">
         <div>
           <span className="eyebrow">NEXT 90 DAYS</span>
@@ -250,7 +244,7 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
                   {s.days == null ? "No date" : s.days < 0 ? `${Math.abs(s.days)}d overdue` : `${s.days}d left`}
                 </span>
               </div>
-              <h3>{g.title}</h3>
+              <h3><button onClick={() => onDetail(g)}>{g.title}</button></h3>
 
               <div className="wp-goal-manager-metrics">
                 <div><b>{s.tasksDone}/{s.tasksTotal}</b><span>tasks done</span></div>
@@ -301,7 +295,7 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
             <div>
               <span>{g.emoji || "🎯"}</span>
               <p>
-                <b>{g.title}</b>
+                <b><button onClick={() => onDetail(g)}>{g.title}</button></b>
                 <small>{g.status === "achieved" ? `Achieved ${g.achievedAt || ""}` : `Archived ${g.archivedAt || ""}`}</small>
               </p>
             </div>
@@ -320,15 +314,19 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch }) {
 export default function GoalsPanel() {
   const [host, setHost] = useState(null);
   const [theme, setTheme] = useState("light");
-  const { goals, tasks, saveGoal, status, goalsError, migration, errors } = usePlanner();
-  const [manager, setManager] = useState(false);
-  const [editor, setEditor] = useState(null);
+  const { goals, tasks, saveGoal, status, goalsError, migration, errors, weekMonday, dialogs, openDialog, closeDialog } = usePlanner();
+  const top = dialogs.at(-1);
+  const manager = top?.kind === "manage";
+  const editorEntry = dialogs.find(d => d.kind === "goalEditor" || d.kind === "createGoal");
+  const editor = editorEntry ? editorEntry.goal || {} : null;
+  const setManager = value => value ? openDialog({kind:"manage"}) : closeDialog();
+  const setEditor = goal => goal ? openDialog({kind:"goalEditor",goal}) : closeDialog();
   const loading = status === "loading" || migration.running;
   const syncErr = !!goalsError || !!migration.error;
   const [toast, setToast] = useState("");
 
   const active = useMemo(() => goals.filter(g => g.status === "active").slice(0, ACTIVE_LIMIT), [goals]);
-  const [weekStart, weekEnd] = weekBounds();
+  const [weekStart, weekEnd] = selectedWeekBounds(weekMonday);
 
   const allTasksForGoal = useCallback(goal => tasks.filter(t => t.goalId === goal.uid), [tasks]);
 
@@ -450,7 +448,7 @@ export default function GoalsPanel() {
             {loading
               ? "Loading progress…"
               : active.length
-                ? `${totals.moving}/${active.length} moving this week · ${totals.done}/${totals.total || 0} linked tasks done`
+                ? `${totals.moving}/${active.length} có task trong tuần đang xem · ${totals.done}/${totals.total || 0} linked tasks done`
                 : "Chọn tối đa 3 điều quan trọng cho 90 ngày tới"}
           </small>
         </div>
@@ -470,7 +468,7 @@ export default function GoalsPanel() {
     <div className="wp-goal-table">
       {active.map((g, i) => {
         const s = statsForGoal(g);
-        return <button className="wp-goal-row" key={g.id} style={{ "--delay": `${i * 55}ms` }} onClick={() => setManager(true)}>
+        return <button className="wp-goal-row" key={g.id} style={{ "--delay": `${i * 55}ms` }} onClick={() => openDialog({kind:"goal",goalId:g.uid})}>
           <span className="wp-goal-cell goal">
             <span className="emoji">{g.emoji || "🎯"}</span>
             <span className="copy">
@@ -492,8 +490,8 @@ export default function GoalsPanel() {
           <span className="wp-goal-cell tasks">
             <b className="task-number">{s.tasksDone}/{s.tasksTotal}</b>
             <span className="copy">
-              <b>tasks done</b>
-              <small>Tuần này {s.weekDone}/{s.weekTotal}</small>
+              <b>Tổng liên kết · đã xong</b>
+              <small>Tuần đang xem · {weekStart} – {weekEnd}: {s.weekDone}/{s.weekTotal}</small>
             </span>
           </span>
 
@@ -515,6 +513,11 @@ export default function GoalsPanel() {
   const modalClass = `wp-goals-modal-root theme-${theme}`;
 
   return <>
+    <GoalDialogStyles />
+    {typeof document !== "undefined" && createPortal(<div className={modalClass}>
+      {dialogs.filter(d => d.kind === "goal").map(d => <GoalDetail key={d.goalId} entry={d} active={top === d} />)}
+      {top?.kind === "picker" && <GoalPicker entry={top} />}
+    </div>, document.body)}
     {host && createPortal(board, host)}
 
     {manager && typeof document !== "undefined" && createPortal(
@@ -523,6 +526,7 @@ export default function GoalsPanel() {
           goals={goals}
           statsForGoal={statsForGoal}
           onClose={() => setManager(false)}
+          onDetail={g => openDialog({kind:"goal",goalId:g.uid})}
           onEdit={g => setEditor(g)}
           onCreate={g => openCreate(g)}
           onPatch={patch}
@@ -531,7 +535,7 @@ export default function GoalsPanel() {
       document.body
     )}
 
-    {editor && typeof document !== "undefined" && createPortal(
+    {editor && (top?.kind === "goalEditor" || top?.kind === "createGoal") && typeof document !== "undefined" && createPortal(
       <div className={modalClass}>
         <Editor
           initial={editor?.id ? editor : null}
@@ -550,6 +554,7 @@ export default function GoalsPanel() {
     )}
 
     <style jsx global>{`
+      .wp-goals-modal-root{--c-bg:var(--g-bg);--c-surface:var(--g-surface);--c-ink:var(--g-ink);--c-border:var(--g-border);--c-wine:var(--g-a)}
       .wp-goal-review-replaced{padding:0!important;overflow:hidden}
       .wp-goal-review-replaced>*:not(#wp-goal-review-slot){display:none!important}
       #wp-goal-review-slot{display:block!important}
@@ -569,7 +574,7 @@ export default function GoalsPanel() {
       .wp-goal-editor{width:min(700px,100%)}.wp-goal-mode-tabs{display:flex;gap:5px;padding:12px 18px 0}.wp-goal-mode-tabs button{border:1px solid var(--g-border);background:var(--g-surface);color:var(--g-muted);border-radius:9px;padding:7px 10px;font-weight:800;font-size:.62rem;cursor:pointer}.wp-goal-mode-tabs button.on{color:var(--g-a);border-color:color-mix(in srgb,var(--g-a) 42%,var(--g-border));background:color-mix(in srgb,var(--g-a) 7%,var(--g-surface))}.wp-goal-ai-box,.wp-goal-form{padding:15px 18px 18px}.wp-goal-ai-box .label,.wp-goal-form label>span,.wp-goal-ms-head>span{display:block;font-size:.58rem;font-weight:900;letter-spacing:.06em;color:var(--g-muted);margin-bottom:6px}.wp-goal-ai-box textarea{width:100%;min-height:125px;resize:vertical;border:1px solid var(--g-border);border-radius:13px;background:color-mix(in srgb,var(--g-track) 25%,var(--g-surface));color:var(--g-ink);padding:12px;font:600 .78rem/1.5 'Nunito',sans-serif;outline:none}.wp-goal-ai-box textarea:focus,.wp-goal-form input:focus{border-color:var(--g-a);box-shadow:0 0 0 3px color-mix(in srgb,var(--g-a) 10%,transparent)}.wp-goal-ai-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:9px}.wp-goal-ai-foot small{font-size:.57rem;line-height:1.45;color:var(--g-muted);max-width:420px}.wp-goal-ai-foot button,.wp-goal-actions .primary{border:1px solid var(--g-a);background:var(--g-a);color:var(--g-on);border-radius:10px;padding:8px 12px;font-weight:900;font-size:.63rem;cursor:pointer;white-space:nowrap}.wp-goal-ai-foot button:disabled,.wp-goal-actions button:disabled{opacity:.35;cursor:not-allowed}.wp-goal-form label{display:block;margin-bottom:12px}.wp-goal-form input{width:100%;border:1px solid var(--g-border);border-radius:10px;background:var(--g-surface);color:var(--g-ink);padding:9px 10px;font:600 .75rem 'Nunito',sans-serif;outline:none}.wp-goal-title-line{display:grid;grid-template-columns:52px 1fr;gap:6px}.wp-goal-title-line .emoji{text-align:center;font-size:1rem}.wp-goal-form-grid{display:grid;grid-template-columns:160px 1fr;gap:8px}.wp-goal-ms-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.wp-goal-ms-head button{border:0;background:transparent;color:var(--g-a);font-weight:900;font-size:.61rem;cursor:pointer}.wp-goal-ms-edit{display:grid;gap:6px}.wp-goal-ms-edit>div{display:grid;grid-template-columns:23px 1fr 25px;gap:5px;align-items:center}.wp-goal-ms-edit b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--g-track);color:var(--g-muted);font-size:.55rem}.wp-goal-ms-edit button{border:0;background:transparent;color:var(--g-muted);font-size:1rem;cursor:pointer}.wp-goal-ai-ready{padding:7px 9px;border-radius:9px;background:color-mix(in srgb,var(--g-a2) 10%,var(--g-surface));border:1px solid color-mix(in srgb,var(--g-a2) 28%,var(--g-border));color:var(--g-muted);font-size:.61rem;margin-bottom:11px}.wp-goal-warning{padding:7px 9px;border-radius:9px;background:#fff3de;border:1px solid #edca97;color:#9b5d20;font-size:.61rem;margin-top:9px}.wp-goal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}.wp-goal-actions .secondary{border:1px solid var(--g-border);background:var(--g-surface);color:var(--g-muted);border-radius:10px;padding:8px 12px;font-weight:800;font-size:.63rem;cursor:pointer}.wp-goal-toast{position:fixed;z-index:10000;left:50%;bottom:26px;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:var(--g-ink);color:var(--g-surface);font:800 .64rem 'Nunito',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.25);animation:wpGoalToast .28s cubic-bezier(.16,1,.3,1) both;pointer-events:none}
 
       @media(max-width:900px){.wp-goal-table-head{display:none}.wp-goal-row{grid-template-columns:1fr 1fr;gap:8px 12px;padding:10px 4px}.wp-goal-cell.progress{align-self:center}.wp-goal-manager-grid{grid-template-columns:1fr}.wp-goal-manager-empty{min-height:120px}}
-      @media(max-width:600px){.wp-goal-board-head{align-items:flex-start}.wp-goal-board-title small{max-width:220px}.wp-goal-board-actions button:first-of-type{display:none}.wp-goal-row{grid-template-columns:1fr;padding:10px 5px}.wp-goal-cell.milestone,.wp-goal-cell.tasks,.wp-goal-cell.progress{padding-left:31px}.wp-goal-cell.tasks{justify-content:flex-start}.wp-goal-cell.progress{padding-right:4px}.wp-goal-empty{align-items:flex-start;flex-wrap:wrap}.wp-goal-empty button{margin-left:34px}.wp-goal-overlay{align-items:flex-end;padding:0}.wp-goal-sheet{border-radius:20px 20px 0 0;max-height:92vh}.wp-goal-sheet-head{padding:15px}.wp-goal-head-actions .seg{display:none}.wp-goal-form-grid{grid-template-columns:1fr}.wp-goal-ai-foot{align-items:flex-start;flex-direction:column}.wp-goal-ai-foot button{width:100%}.wp-goal-manager-metrics{grid-template-columns:repeat(3,1fr)}}
+      @media(max-width:600px){.wp-goal-board-head{align-items:flex-start}.wp-goal-board-title small{max-width:220px}.wp-goal-board-actions button:first-of-type{display:inline-flex}.wp-goal-row{grid-template-columns:1fr;padding:10px 5px}.wp-goal-cell.milestone,.wp-goal-cell.tasks,.wp-goal-cell.progress{padding-left:31px}.wp-goal-cell.tasks{justify-content:flex-start}.wp-goal-cell.progress{padding-right:4px}.wp-goal-empty{align-items:flex-start;flex-wrap:wrap}.wp-goal-empty button{margin-left:34px}.wp-goal-overlay{align-items:flex-end;padding:0}.wp-goal-sheet{border-radius:20px 20px 0 0;max-height:92vh}.wp-goal-sheet-head{padding:15px}.wp-goal-head-actions .seg{display:none}.wp-goal-form-grid{grid-template-columns:1fr}.wp-goal-ai-foot{align-items:flex-start;flex-direction:column}.wp-goal-ai-foot button{width:100%}.wp-goal-manager-metrics{grid-template-columns:repeat(3,1fr)}}
       @media(prefers-reduced-motion:reduce){.wp-goal-board,.wp-goal-row,.wp-goal-sheet,.wp-goal-toast{animation:none!important}.wp-goal-row,.progress-track i{transition:none!important}}
       @keyframes wpGoalBoardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}@keyframes wpGoalRowIn{from{opacity:0;transform:translateY(7px) scale(.99)}to{opacity:1;transform:none}}@keyframes wpGoalBackdrop{from{opacity:0}to{opacity:1}}@keyframes wpGoalSheetIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}@keyframes wpGoalToast{from{opacity:0;transform:translate(-50%,8px) scale(.95)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
     `}</style>

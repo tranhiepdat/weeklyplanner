@@ -1,3 +1,4 @@
+import { GoalLinkButton, useDialogFocus } from "../components/GoalDialogs";
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { usePlanner, PlannerSyncNotice } from "../components/PlannerProvider";
@@ -691,8 +692,6 @@ function Particles({ width, height, onDone }) {
 }
 
 function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, justUndone, onMove, onTogglePriority }) {
-  const { goals } = usePlanner();
-  const linkedGoal = goals.find(g => g.uid === task.goalId);
   const temporary = task.id.startsWith("temp-");
   const [phase, setPhase] = useState("idle"); // idle | celebrating | settling | reversing | done
   const [dims, setDims] = useState({ w: 280, h: 48 });
@@ -788,18 +787,18 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           style={!task.done ? { borderColor: accent } : undefined}>
           {task.done ? "✓" : ""}
         </div>
-        <div role="button" aria-label={`Chi tiết ${task.name}`} tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onEdit(task))}
+        <div style={{flex:1,minWidth:0}}><div role="button" aria-label={`Chi tiết ${task.name}`}  tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onEdit(task))}
           onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!temporary) onEdit(task); } }}>
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 3 }}>
-            {task.goalId && <span className="tag" data-testid="task-goal">{linkedGoal?.emoji || "🎯"} {linkedGoal?.title || "Goal không còn khả dụng"}{linkedGoal && linkedGoal.status !== "active" ? " · History" : ""}</span>}
             {task.taskType && <span className="tag" style={tagStyle(task.taskType)}>{task.taskType}</span>}
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
           </div>
         </div>
+        <GoalLinkButton task={task} /></div>
         {onMove && task.date && (
           <>
             <button onClick={guardBtn(() => onMove(task, -1))} style={moveBtn} title="Dời sang hôm trước">‹</button>
@@ -1445,11 +1444,11 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   });
 
   return (
-    <div onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
+    <div hidden={!active} onClick={() => requestClose(onClose)} className={`sheet-backdrop ${closing ? "closing" : ""}`} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", backdropFilter: "blur(3px)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
+      display: active ? "flex" : "none", alignItems: "flex-end", justifyContent: "center", zIndex: 100,
     }}>
-      <div onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Chi tiết task" tabIndex={-1} onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
         background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
         width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(0,0,0,.25)",
         maxHeight: "88vh", overflowY: "auto",
@@ -2115,12 +2114,10 @@ function ReviewPanel({ tasks }) {
 }
 
 export default function Home() {
-  const { tasks, goals, status, syncError: error, goalsError, migration, sync, createTask: saveNewTask, updateTask: saveTask, deleteTask: archiveTask, toggleTask: saveDone, planBatch } = usePlanner();
-  const [weekMonday, setWeekMonday] = useState(mondayOf(new Date()));
+  const { tasks, goals, status, syncError: error, goalsError, migration, sync, createTask: saveNewTask, updateTask: saveTask, deleteTask: archiveTask, toggleTask: saveDone, planBatch, weekMonday, setWeekMonday, editTask, setEditTask, dialogs } = usePlanner();
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [slideDir, setSlideDir] = useState(1); // +1 = slide from right, -1 = from left
   const goToDate = (d) => { setSlideDir(d >= selectedDate ? 1 : -1); setSelectedDate(d); };
-  const [editTask, setEditTask] = useState(null);
   const [justDone, setJustDone] = useState(null);
   const [justUndone, setJustUndone] = useState(null);
   const [verse, setVerse] = useState(VERSES[0]);
@@ -3301,6 +3298,7 @@ export default function Home() {
 
         {editTask && (
           <EditModal
+            active={dialogs.at(-1)?.kind === "task"}
             task={editTask}
             currentTier={editTask.planTier}
             goals={goals}
@@ -3446,7 +3444,10 @@ export default function Home() {
   );
 }
 
-function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, goals, goalsUnavailable }) {
+function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDelete, goals, goalsUnavailable }) {
+  const planner = usePlanner();
+  const deleted = planner.serverLoaded && !planner.tasks.some(t => t.id === task.id);
+  const dialogRef = useDialogFocus(active, onClose);
   const [goalId, setGoalId] = useState(task.goalId || "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -3639,15 +3640,11 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, goa
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="task-goal-select" style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Liên kết goal</label>
-          <select id="task-goal-select" value={goalId} onChange={e => setGoalId(e.target.value)} disabled={goalsUnavailable || saving}
-            style={{ width: "100%", padding: 12, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface)", color: "var(--c-ink)" }}>
-            <option value="">Không liên kết</option>
-            {goals.filter(g => g.status === "active" || g.uid === task.goalId).map(g => <option key={g.uid} value={g.uid}>{g.emoji} {g.title}{g.status !== "active" ? " · History" : ""}</option>)}
-            {task.goalId && !goals.some(g => g.uid === task.goalId) && <option value={task.goalId}>Goal không còn khả dụng</option>}
-          </select>
-          {goalsUnavailable && <small>Chờ đồng bộ/import goals xong để chọn liên kết.</small>}
+          <label style={{ display: "block", fontWeight: 700, marginBottom: 8 }}>Liên kết goal</label>
+          <GoalLinkButton task={{...task, goalId: goalId || null}} onSelect={id => setGoalId(id || "")} disabled={saving || deleted} editor />
+          <small>Liên kết được lưu cùng “Lưu thay đổi”.</small>
         </div>
+        {deleted && <p role="alert">Task đã bị xóa từ thiết bị khác. Đóng form để cập nhật danh sách.</p>}
         {saveError && <div role="alert" style={{ color: "#b45309", marginBottom: 12 }}>{saveError}</div>}
         {/* Actions */}
         <div style={{ display: "flex", gap: 10 }}>
@@ -3655,7 +3652,7 @@ function EditModal({ task, currentTier, weekDays, onClose, onSave, onDelete, goa
             flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
             background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
           }}>Hủy</button>
-          <button disabled={saving} data-sfx="confirm" onClick={async () => {
+          <button disabled={saving || deleted} data-sfx="confirm" onClick={async () => {
             if (!dirty) { requestClose(onClose); return; }
             setSaving(true); setSaveError("");
             const ok = await onSave(patch);
