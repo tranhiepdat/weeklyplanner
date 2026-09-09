@@ -3,15 +3,13 @@ const clone = value => JSON.parse(JSON.stringify(value));
 function fixture() {
   const goals = ['Learn','Build'].map((title,i)=>({id:`goal-${i}`,uid:`g${i}`,title,emoji:'🎯',status:'active',deadline:'2026-12-01',weeklyOutcome:'Weekly outcome',createdAt:'2026-08-01',updatedAt:'2026-09-01',milestones:[{id:`m${i}`,text:'First milestone',done:false}]}));
   const tasks = [{id:'task-a',name:'Review proposal',done:false,date:'2026-09-07',session:'🌅 Sáng',taskType:null,icon:'',priority:[],project:[],planTier:'must',planOrder:0,goalId:'g0'}];
-  let failGoals=false, failWrite=false, failImport=false, importAttempts=0, delayedWrite=null;
+  let failGoals=false, failWrite=false, delayedWrite=null;
   const requests=[];
   async function route(route) {
     const req=route.request(),path=new URL(req.url()).pathname,body=req.postDataJSON(),method=req.method();
     requests.push({path,url:req.url(),method,body});
     let data={},status=200;
-    if(path==='/api/goals/legacy')data={goals:[],raw:'',corrupt:false};
-    else if(path==='/api/goals/import') {importAttempts++; if(failImport){status=503;data={error:'Import temporarily unavailable'};}else data={complete:true,report:{conflicts:[],skipped:[],archivedGoals:[]}};}
-    else if(path==='/api/tasks')data={tasks:clone(tasks),mode:new URL(req.url()).searchParams.has('since')?'delta':'snapshot',syncedAt:'2026-09-07T03:00:00Z'};
+    if(path==='/api/tasks')data={tasks:clone(tasks),mode:new URL(req.url()).searchParams.has('since')?'delta':'snapshot',syncedAt:'2026-09-07T03:00:00Z'};
     else if(path==='/api/goals'&&method==='GET'){if(failGoals){status=503;data={error:'Goals temporarily unavailable'};}else data={goals:clone(goals)};}
     else if(path==='/api/goals'&&method==='PATCH') {
       const g=goals.find(g=>g.id===body.id),patch=body.goal;
@@ -42,7 +40,7 @@ function fixture() {
     else if(path==='/api/verse')data={};
     await route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
   }
-  return {tasks,goals,requests,route,set failGoals(v){failGoals=v;},set failWrite(v){failWrite=v;},set failImport(v){failImport=v;},get importAttempts(){return importAttempts;},set delayedWrite(v){delayedWrite=v;}};
+  return {tasks,goals,requests,route,set failGoals(v){failGoals=v;},set failWrite(v){failWrite=v;},set delayedWrite(v){delayedWrite=v;}};
 }
 async function device(browser,server,mobile=false,legacy=null){
   const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1440,height:1000},isMobile:mobile,hasTouch:mobile});
@@ -120,18 +118,15 @@ test('returning online/focus reconciles deletion and chat auto-link persists in 
   expect(d.errors).toEqual([]);await d.context.close();
 });
 
-test('legacy backup survives a failed import and resumes with the same import ID',async({browser})=>{
-  const server=fixture();server.failImport=true;
+test('legacy local goals and links are ignored in favor of the Notion snapshot',async({browser})=>{
+  const server=fixture();
   const legacy={goals:[{id:'old',uid:'old-g',title:'Legacy goal'}],links:{'task-a':'old-g'}};
   const d=await device(browser,server,false,legacy);
-  await expect(d.page.getByRole('button',{name:'Thử import lại',exact:true}).first()).toBeVisible();
-  const before=await d.page.evaluate(()=>JSON.parse(localStorage.getItem('dat-goals-import-v1')));
-  expect(before.goals).toEqual(legacy.goals);expect(before.completed).toBe(false);
-  server.failImport=false;await d.page.getByRole('button',{name:'Thử import lại',exact:true}).first().click();
-  await expect.poll(()=>d.page.evaluate(()=>JSON.parse(localStorage.getItem('dat-goals-import-v1')).completed)).toBe(true);
-  const imports=server.requests.filter(r=>r.path==='/api/goals/import');
-  expect(imports[0].body.importId).toBe(imports[1].body.importId);
-  expect(await d.page.evaluate(()=>JSON.parse(localStorage.getItem('dat-goals-cache')))).toEqual(legacy.goals);
+  await expect(d.page.locator('.wp-goal-row')).toHaveCount(2);
+  await expect(d.page.locator('.wp-goal-board')).toContainText('Learn');
+  await expect(d.page.locator('.wp-goal-board')).not.toContainText('Legacy goal');
+  expect(server.requests.some(r=>r.path==='/api/goals/legacy'||r.path==='/api/goals/import')).toBe(false);
+  expect(await d.page.evaluate(()=>localStorage.getItem('dat-goals-import-v1'))).toBeNull();
   await d.context.close();
 });
 

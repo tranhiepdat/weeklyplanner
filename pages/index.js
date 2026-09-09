@@ -2114,7 +2114,7 @@ function ReviewPanel({ tasks }) {
 }
 
 export default function Home() {
-  const { tasks, goals, status, syncError: error, goalsError, migration, sync, createTask: saveNewTask, updateTask: saveTask, deleteTask: archiveTask, toggleTask: saveDone, planBatch, weekMonday, setWeekMonday, editTask, setEditTask, dialogs } = usePlanner();
+  const { tasks, goals, status, syncError: error, goalsError, sync, createTask: saveNewTask, updateTask: saveTask, deleteTask: archiveTask, toggleTask: saveDone, planBatch, weekMonday, setWeekMonday, editTask, setEditTask, dialogs } = usePlanner();
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [slideDir, setSlideDir] = useState(1); // +1 = slide from right, -1 = from left
   const goToDate = (d) => { setSlideDir(d >= selectedDate ? 1 : -1); setSelectedDate(d); };
@@ -3302,7 +3302,7 @@ export default function Home() {
             task={editTask}
             currentTier={editTask.planTier}
             goals={goals}
-            goalsUnavailable={!!goalsError || migration.running || !!migration.error}
+            goalsUnavailable={!!goalsError}
             weekDays={weekDays}
             onClose={() => setEditTask(null)}
             onSave={async patch => {

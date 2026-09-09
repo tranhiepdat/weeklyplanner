@@ -43,7 +43,7 @@ export function GoalLinkButton({task,onSelect,disabled=false,editor=false}) {
 export function GoalPicker({entry}) {
   const p=usePlanner(),[saving,setSaving]=useState(false),[failure,setFailure]=useState(null);
   const task=p.tasks.find(t=>t.id===entry.taskId), selected=entry.onSelect?entry.goalId:task?.goalId;
-  const unavailable=!!p.goalsError||!!p.migration.error,loading=!p.serverLoaded||p.migration.running;
+  const unavailable=!!p.goalsError,loading=!p.serverLoaded;
   const active=p.goals.filter(g=>g.status==='active'), current=p.goals.find(g=>g.uid===selected);
   const choose=async id=>{
     if(!task || saving) return;
@@ -55,7 +55,7 @@ export function GoalPicker({entry}) {
   return <Dialog title="Liên kết goal" onClose={()=>{if(!saving)p.closeDialog();}}>
     <p>Chọn mục tiêu cho task này</p>
     {!task?<p role="alert">Task đã bị xóa từ thiết bị khác.</p>:<>
-      {loading?<p role="status">Đang tải goals…</p>:unavailable?<p role="alert">{p.goalsError||p.migration.error} <button onClick={()=>p.migration.error?p.retryMigration():p.sync({full:true})}>Thử lại</button></p>:<>
+      {loading?<p role="status">Đang tải goals từ Notion…</p>:unavailable?<p role="alert">{p.goalsError} <button onClick={()=>p.sync({full:true})}>Thử lại</button></p>:<>
         <button className="goal-option" disabled={saving} aria-pressed={!selected} onClick={()=>choose(null)}><span>∅</span><span><b>Không liên kết</b><small>Gỡ liên kết hiện tại</small></span><span>{!selected?'✓':''}</span></button>
         {selected && (!current || current.status!=='active') && <div className="goal-option history"><span>{current?.emoji||'🎯'}</span><span><b>{current?.title||'Goal không còn khả dụng'}</b><small>History · Liên kết hiện tại</small></span><span>✓</span></div>}
         {active.map(g=><button key={g.uid} className="goal-option" disabled={saving} aria-pressed={selected===g.uid} onClick={()=>choose(g.uid)}><span>{g.emoji||'🎯'}</span><span><b>{g.title}</b><small>{g.milestones?.find(m=>!m.done)?.text||'Milestones hoàn tất'}</small></span><span>{selected===g.uid?'✓':''}</span></button>)}
