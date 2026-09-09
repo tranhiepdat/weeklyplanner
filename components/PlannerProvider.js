@@ -10,6 +10,8 @@ function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)
 function localDay() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
 
 export function PlannerProvider({ children }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [weekMonday, setWeekMonday] = useState(() => startOfWeek());
   const [dialogs, setDialogs] = useState([]);
   const openDialog = useCallback(dialog => {
@@ -96,7 +98,7 @@ export function PlannerProvider({ children }) {
   }, [state.tasks, state.goals, state.serverLoaded, store]);
 
   const value = useMemo(() => ({ ...state, ...store, weekMonday, setWeekMonday, dialogs, openDialog, closeDialog, editTask: dialogs.find(d => d.kind === "task")?.task || null, setEditTask, retryMigration: () => retryMigrationRef.current?.() }), [state, store, weekMonday, dialogs, openDialog, closeDialog, setEditTask]);
-  return <PlannerContext.Provider value={value}>{children}</PlannerContext.Provider>;
+  return <PlannerContext.Provider value={value}>{mounted ? children : <p role="status">Đang mở planning…</p>}</PlannerContext.Provider>;
 }
 export function usePlanner() {
   const planner = useContext(PlannerContext);

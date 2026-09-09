@@ -208,8 +208,8 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
   </div>;
 }
 
-function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch, onDetail }) {
-  const dialogRef = useDialogFocus(true, onClose);
+function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch, onDetail, active: isActive }) {
+  const dialogRef = useDialogFocus(isActive, onClose);
   const [tab, setTab] = useState("active");
   const active = goals.filter(g => g.status === "active");
   const history = goals
@@ -316,7 +316,7 @@ export default function GoalsPanel() {
   const [theme, setTheme] = useState("light");
   const { goals, tasks, saveGoal, status, goalsError, migration, errors, weekMonday, dialogs, openDialog, closeDialog } = usePlanner();
   const top = dialogs.at(-1);
-  const manager = top?.kind === "manage";
+  const manager = dialogs.some(d => d.kind === "manage");
   const editorEntry = dialogs.find(d => d.kind === "goalEditor" || d.kind === "createGoal");
   const editor = editorEntry ? editorEntry.goal || {} : null;
   const setManager = value => value ? openDialog({kind:"manage"}) : closeDialog();
@@ -521,8 +521,8 @@ export default function GoalsPanel() {
     {host && createPortal(board, host)}
 
     {manager && typeof document !== "undefined" && createPortal(
-      <div className={modalClass}>
-        <Manager
+      <div className={modalClass} style={{display: top?.kind === "manage" ? "contents" : "none"}}>
+        <Manager active={top?.kind === "manage"}
           goals={goals}
           statsForGoal={statsForGoal}
           onClose={() => setManager(false)}

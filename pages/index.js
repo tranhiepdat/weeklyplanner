@@ -1413,7 +1413,7 @@ function CreateModal({ defaultDate, onClose, onCreate }) {
   const [modalMonday, setModalMonday] = useState(mondayOf(new Date((defaultDate || TODAY) + "T00:00:00")));
 
   const requestClose = (action) => {
-    if (closing) return;
+    if (closing || saving) return;
     setClosing(true);
     setTimeout(() => action(), 270);
   };
@@ -3447,9 +3447,9 @@ export default function Home() {
 function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDelete, goals, goalsUnavailable }) {
   const planner = usePlanner();
   const deleted = planner.serverLoaded && !planner.tasks.some(t => t.id === task.id);
-  const dialogRef = useDialogFocus(active, onClose);
   const [goalId, setGoalId] = useState(task.goalId || "");
   const [saving, setSaving] = useState(false);
+  const dialogRef = useDialogFocus(active, () => { if (!saving) onClose(); });
   const [saveError, setSaveError] = useState("");
   const [name, setName] = useState(task.name);
   const [editingName, setEditingName] = useState(false);

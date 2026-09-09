@@ -3,7 +3,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 function fixture() {
   const goals = ['Learn','Build'].map((title,i)=>({id:`goal-${i}`,uid:`g${i}`,title,emoji:'🎯',status:'active',deadline:'2026-12-01',weeklyOutcome:'Weekly outcome',createdAt:'2026-08-01',updatedAt:'2026-09-01',milestones:[{id:`m${i}`,text:'First milestone',done:false}]}));
   const tasks = [{id:'task-a',name:'Review proposal',done:false,date:'2026-09-07',session:'🌅 Sáng',taskType:null,icon:'',priority:[],project:[],planTier:'must',planOrder:0,goalId:'g0'}];
-  let failWrite=false, failImport=false, importAttempts=0, delayedWrite=null;
+  let failGoals=false, failWrite=false, failImport=false, importAttempts=0, delayedWrite=null;
   const requests=[];
   async function route(route) {
     const req=route.request(),path=new URL(req.url()).pathname,body=req.postDataJSON(),method=req.method();
@@ -12,7 +12,7 @@ function fixture() {
     if(path==='/api/goals/legacy')data={goals:[],raw:'',corrupt:false};
     else if(path==='/api/goals/import') {importAttempts++; if(failImport){status=503;data={error:'Import temporarily unavailable'};}else data={complete:true,report:{conflicts:[],skipped:[],archivedGoals:[]}};}
     else if(path==='/api/tasks')data={tasks:clone(tasks),mode:new URL(req.url()).searchParams.has('since')?'delta':'snapshot',syncedAt:'2026-09-07T03:00:00Z'};
-    else if(path==='/api/goals'&&method==='GET')data={goals:clone(goals)};
+    else if(path==='/api/goals'&&method==='GET'){if(failGoals){status=503;data={error:'Goals temporarily unavailable'};}else data={goals:clone(goals)};}
     else if(path==='/api/goals'&&method==='PATCH') {
       const g=goals.find(g=>g.id===body.id),patch=body.goal;
       if(patch.milestone)g.milestones=g.milestones.map(m=>m.id===patch.milestone.id?{...m,done:patch.milestone.done}:m);
@@ -42,7 +42,7 @@ function fixture() {
     else if(path==='/api/verse')data={};
     await route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
   }
-  return {tasks,goals,requests,route,set failWrite(v){failWrite=v;},set failImport(v){failImport=v;},get importAttempts(){return importAttempts;},set delayedWrite(v){delayedWrite=v;}};
+  return {tasks,goals,requests,route,set failGoals(v){failGoals=v;},set failWrite(v){failWrite=v;},set failImport(v){failImport=v;},get importAttempts(){return importAttempts;},set delayedWrite(v){delayedWrite=v;}};
 }
 async function device(browser,server,mobile=false,legacy=null){
   const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1440,height:1000},isMobile:mobile,hasTouch:mobile});
@@ -173,6 +173,7 @@ test('row picker saves immediately with contextual retry, History is read-only, 
  await expect(picker.getByRole('button',{name:/Build/})).toHaveCount(0);
  await picker.getByRole('button',{name:/Không liên kết/}).click();await expect(rowButton).toHaveText('＋ Liên kết goal');
  await rowButton.click();await picker.getByRole('button',{name:/Learn/}).click();
+ await p.getByRole('button',{name:'📊 Biểu đồ',exact:true}).click();
  await p.locator('.wp-goal-row').first().click();
  const goal=p.getByRole('dialog',{name:'🎯 Learn',exact:true});
  await goal.getByRole('button',{name:'Review proposal',exact:true}).click();
@@ -198,5 +199,27 @@ test('deleted task cannot be saved from an open draft and keyboard focus stays i
  await expect(p.getByText('Task đã bị xóa từ thiết bị khác. Đóng form để cập nhật danh sách.',{exact:true})).toBeVisible();
  await expect(p.getByRole('button',{name:'Lưu thay đổi',exact:true})).toBeDisabled();
  expect(s.requests.filter(r=>r.path==='/api/update')).toHaveLength(0);
+ expect(d.errors).toEqual([]);await d.context.close();
+});
+
+test('goals loading failure retries, empty active state opens creation, and picker follows dark theme',async({browser})=>{
+ const s=fixture();s.failGoals=true;const d=await device(browser,s,true),p=d.page;
+ await p.getByLabel('Liên kết goal cho Review proposal',{exact:true}).click();
+ const picker=p.getByRole('dialog',{name:'Liên kết goal',exact:true});
+ await expect(picker.getByRole('alert')).toContainText('Goals temporarily unavailable');
+ s.failGoals=false;await picker.getByRole('button',{name:'Thử lại',exact:true}).click();
+ await expect(picker.getByRole('button',{name:/Learn/})).toBeVisible();
+ await picker.getByRole('button',{name:'Đóng',exact:true}).click();
+ await p.getByTitle('Đổi giao diện',{exact:true}).click();await p.getByRole('button',{name:'🕹️ Cyber',exact:true}).click();
+ await p.clock.fastForward(1000);
+ await p.getByLabel('Liên kết goal cho Review proposal',{exact:true}).click();
+ await expect(picker).toHaveCSS('background-color','rgb(4, 8, 10)');
+ const box=await picker.boundingBox();expect(box.width).toBeLessThanOrEqual(390);expect(box.y+box.height).toBeCloseTo(844,0);
+ await picker.getByRole('button',{name:'Đóng',exact:true}).click();
+ s.goals.forEach(g=>g.status='archived');await p.clock.fastForward(15001);
+ await p.getByLabel('Liên kết goal cho Review proposal',{exact:true}).click();
+ await picker.getByRole('button',{name:'＋ Tạo Goal',exact:true}).click();
+ await expect(p.getByRole('dialog',{name:'Sửa Goal',exact:true})).toBeVisible();
+ await expect(p.getByRole('dialog')).toHaveCount(1);
  expect(d.errors).toEqual([]);await d.context.close();
 });
