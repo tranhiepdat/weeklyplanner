@@ -153,3 +153,26 @@ test('a stale editor cannot modify trashed or unrelated Notion pages',async()=>{
   assert.equal(n.requests.filter(r=>r.method==='PATCH'&&r.path.startsWith('/pages/')).length,0);
  } finally {globalThis.fetch=original;}
 });
+
+
+test("task saves avoid full Goals scans and reuse newly validated links", async () => {
+  const n = memoryNotion(); global.fetch = n.fetcher;
+  const task = n.task(), goal = n.goal("stable-fast");
+  let start = n.requests.length;
+  let result = await call(updateHandler, { id: task.id, session: "Morning" }, "PATCH");
+  assert.equal(result.status, 200);
+  assert.equal(n.requests.slice(start).filter(r => r.path.endsWith("/query")).length, 0);
+  start = n.requests.length;
+  result = await call(updateHandler, { id: task.id, goalId: "stable-fast" }, "PATCH");
+  assert.equal(result.data.task.goalId, "stable-fast");
+  assert.equal(n.requests.slice(start).filter(r => r.path.endsWith("/query")).length, 1);
+  start = n.requests.length;
+  result = await call(updateHandler, { id: task.id, done: true }, "PATCH");
+  assert.equal(result.data.task.goalId, "stable-fast");
+  assert.equal(n.requests.slice(start).filter(r => r.path.endsWith("/query")).length, 0);
+  assert.equal(n.requests.slice(start).filter(r => r.path === `/pages/${goal.id}`).length, 1);
+  start = n.requests.length;
+  result = await call(updateHandler, { id: task.id, goalId: null }, "PATCH");
+  assert.equal(result.data.task.goalId, null);
+  assert.equal(n.requests.slice(start).filter(r => r.path.endsWith("/query")).length, 0);
+});
