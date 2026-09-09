@@ -314,15 +314,15 @@ function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch, onDe
 export default function GoalsPanel() {
   const [host, setHost] = useState(null);
   const [theme, setTheme] = useState("light");
-  const { goals, tasks, saveGoal, status, goalsError, migration, errors, weekMonday, dialogs, openDialog, closeDialog } = usePlanner();
+  const { goals, tasks, saveGoal, status, goalsError, errors, weekMonday, dialogs, openDialog, closeDialog } = usePlanner();
   const top = dialogs.at(-1);
   const manager = dialogs.some(d => d.kind === "manage");
   const editorEntry = dialogs.find(d => d.kind === "goalEditor" || d.kind === "createGoal");
   const editor = editorEntry ? editorEntry.goal || {} : null;
   const setManager = value => value ? openDialog({kind:"manage"}) : closeDialog();
   const setEditor = goal => goal ? openDialog({kind:"goalEditor",goal}) : closeDialog();
-  const loading = status === "loading" || migration.running;
-  const syncErr = !!goalsError || !!migration.error;
+  const loading = status === "loading";
+  const syncErr = !!goalsError;
   const [toast, setToast] = useState("");
 
   const active = useMemo(() => goals.filter(g => g.status === "active").slice(0, ACTIVE_LIMIT), [goals]);
@@ -460,7 +460,7 @@ export default function GoalsPanel() {
       </div>
     </div>
 
-    {(syncErr || migration.running || errors.length > 0) && <PlannerSyncNotice />}
+    {(syncErr || errors.length > 0) && <PlannerSyncNotice />}
     {!!active.length && <div className="wp-goal-table-head">
       <span>Goal</span><span>Milestone hiện tại</span><span>Tasks</span><span>Progress</span>
     </div>}
