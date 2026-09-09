@@ -787,8 +787,8 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           style={!task.done ? { borderColor: accent } : undefined}>
           {task.done ? "✓" : ""}
         </div>
-        <div style={{flex:1,minWidth:0}}><div role="button" aria-label={`Chi tiết ${task.name}`}  tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onEdit(task))}
-          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!temporary) onEdit(task); } }}>
+        <div style={{flex:1,minWidth:0}}><div role="button" aria-label={`${task.done ? "Bỏ hoàn thành" : "Hoàn thành"} ${task.name}`} tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onToggle(task.id, !task.done))}
+          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!temporary) onToggle(task.id, !task.done); } }}>
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
             {task.icon} {task.name}
           </div>
@@ -805,7 +805,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             <button onClick={guardBtn(() => onMove(task, 1))} style={moveBtn} title="Dời sang hôm sau">›</button>
           </>
         )}
-        <button disabled={temporary} onClick={guardBtn(() => onEdit(task))} style={{
+        <button aria-label={`Sửa ${task.name}`} disabled={temporary} onClick={guardBtn(() => onEdit(task))} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
           display: "flex", alignItems: "center", justifyContent: "center",
