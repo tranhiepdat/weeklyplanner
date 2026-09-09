@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPlannerStore, requestJson } from "../lib/planner-store.js";
+
+import { startOfWeek } from "../lib/goal-view.js";
 
 const PlannerContext = createContext(null);
 const CACHE_KEY = "dat-planner-v2";
@@ -8,6 +10,22 @@ function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key)
 function localDay() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
 
 export function PlannerProvider({ children }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const [weekMonday, setWeekMonday] = useState(() => startOfWeek());
+  const [dialogs, setDialogs] = useState([]);
+  const openDialog = useCallback(dialog => {
+    const trigger = document.activeElement;
+    setDialogs(stack => [...stack, { ...dialog, trigger }]);
+  }, []);
+  const closeDialog = useCallback(() => {
+    setDialogs(stack => {
+      const closing = stack.at(-1);
+      requestAnimationFrame(() => { if (closing?.trigger?.isConnected) closing.trigger.focus(); });
+      return stack.slice(0,-1);
+    });
+  }, []);
+  const setEditTask = useCallback(task => task ? openDialog({kind: "task", task}) : closeDialog(), [openDialog,closeDialog]);
   const [store] = useState(() => createPlannerStore());
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const initialized = useRef(false), importing = useRef(false), rolledDay = useRef("");
@@ -79,8 +97,8 @@ export function PlannerProvider({ children }) {
     if (rolledDay.current !== today) { rolledDay.current = today; void store.rollover(today); }
   }, [state.tasks, state.goals, state.serverLoaded, store]);
 
-  const value = useMemo(() => ({ ...state, ...store, retryMigration: () => retryMigrationRef.current?.() }), [state, store]);
-  return <PlannerContext.Provider value={value}>{children}</PlannerContext.Provider>;
+  const value = useMemo(() => ({ ...state, ...store, weekMonday, setWeekMonday, dialogs, openDialog, closeDialog, editTask: dialogs.find(d => d.kind === "task")?.task || null, setEditTask, retryMigration: () => retryMigrationRef.current?.() }), [state, store, weekMonday, dialogs, openDialog, closeDialog, setEditTask]);
+  return <PlannerContext.Provider value={value}>{mounted ? children : <p role="status">Đang mở planning…</p>}</PlannerContext.Provider>;
 }
 export function usePlanner() {
   const planner = useContext(PlannerContext);

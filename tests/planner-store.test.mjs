@@ -161,3 +161,12 @@ test("periodic reads do not trigger overdue task writes",async()=>{
   await store.sync(); await store.sync(); await store.sync({full:true});
   assert.ok(requests.every(r=>!r.method));
 });
+
+test('updating a task removed by a full reconciliation never recreates an optimistic row',async()=>{
+ let removed=false;
+ const {store,requests}=fixture({handle:url=>url.startsWith('/api/tasks')?snapshot(removed?[]:[task()]):undefined});
+ await store.sync();removed=true;await store.sync({full:true});
+ assert.equal(await store.updateTask('a',{goalId:'new'}),false);
+ assert.deepEqual(store.getSnapshot().tasks,[]);
+ assert.ok(requests.every(r=>!r.method));
+});

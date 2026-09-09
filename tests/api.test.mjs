@@ -142,3 +142,14 @@ test("missing goals configuration returns an actionable error without overwritin
   try {const result=await call(goalsHandler,{},"GET");assert.equal(result.status,503);assert.match(result.data.error,/NOTION_GOALS_DB_ID/);assert.equal(result.headers['Set-Cookie'],undefined);}
   finally {process.env.NOTION_GOALS_DB_ID=original;}
 });
+
+test('a stale editor cannot modify trashed or unrelated Notion pages',async()=>{
+ const n=memoryNotion(),original=globalThis.fetch;globalThis.fetch=n.fetcher;
+ try {
+  const t=n.task();t.archived=true;
+  assert.equal((await call(updateHandler,{id:t.id,name:'Stale draft'},'PATCH')).status,410);
+  const g=n.goal('unrelated');
+  assert.equal((await call(updateHandler,{id:g.id,name:'Wrong database'},'PATCH')).status,404);
+  assert.equal(n.requests.filter(r=>r.method==='PATCH'&&r.path.startsWith('/pages/')).length,0);
+ } finally {globalThis.fetch=original;}
+});

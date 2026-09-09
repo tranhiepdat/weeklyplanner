@@ -38,7 +38,9 @@ Without goals configuration, the UI reports the missing setting and retains lega
 - Failed operations show a retry action. Plan batches contain at most 25 tasks, return per-task results, and retry only failed items. Notion requests are paced within each worker; `429` responses respect `Retry-After` across workers.
 - Automatic overdue rollover runs on initial successful hydration or a new local day, separately from periodic reads. Failed rollover writes use the same visible retry flow.
 
-Click/tap a task name to open its details. Use the checkbox for done/undo. Select an active goal or **Không liên kết** in the editor; archived goal links remain visible for history. Milestone progress and completed-task counts are independent.
+Click/tap a task name to open its details. Use the checkbox for done/undo. Use the separate **＋ Liên kết goal** / goal-name button to save a link immediately, or choose inside the task editor and save with **Lưu thay đổi**. The themed picker becomes a bottom sheet on mobile. Only active goals allow new links; archived/achieved links remain visible as History and can be changed or removed. Milestone progress and completed-task counts are independent.
+
+Click a goal to see its milestones and linked tasks grouped into **Chưa xong / Đã xong**. The default filter follows the planner’s selected Monday–Sunday week, including when navigating backward. **Tất cả** includes undated tasks. Counts use the scheduled task date and its current done state, not historical completion events. Milestone percentage is independent of this filter. Each group initially shows 20 tasks, ordered by date, session, planning order, and title. Task editing returns to the originating goal detail without losing the selected filter.
 
 ### API additions
 
