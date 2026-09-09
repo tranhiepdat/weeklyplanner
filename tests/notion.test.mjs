@@ -12,7 +12,8 @@ test("Notion 429 obeys Retry-After and queued writes are rate limited", async ()
   const client=createNotionClient({ now:()=>now, interval:350, sleep:async ms=>{ sleeps.push(ms); now+=ms; }, fetcher:async()=>{
     calls++; return new Response(JSON.stringify(calls===1 ? { message:"limited" } : { ok:true }), { status:calls===1 ? 429:200, headers:{ "Retry-After":"2" } });
   } });
-  await Promise.all([client("/pages/a",{method:"PATCH",body:{}}),client("/pages/b",{method:"PATCH",body:{}})]);
+  await client("/pages/a",{method:"PATCH",body:{}});
+  await client("/pages/b",{method:"PATCH",body:{}});
   assert.equal(calls,3); assert.deepEqual(sleeps,[2000,350]);
 });
 
@@ -91,4 +92,36 @@ test("an open milestone text draft preserves a remote done toggle and a remote a
   const merged=mergeMilestoneDraft([{...baseline[0],text:"After"}],baseline,latest);
   assert.deepEqual(merged,[{id:"a",text:"After",done:true},latest[1]]);
   assert.throws(()=>mergeMilestoneDraft([{...baseline[0],text:"After"}],baseline,[]),/Milestone/);
+});
+
+
+test("slow Notion reads do not block writes and concurrency is bounded", async () => {
+  const releases = []; let active = 0, peak = 0;
+  const client = createNotionClient({ interval: 0, fetcher: async () => {
+    active++; peak = Math.max(peak, active);
+    await new Promise(resolve => releases.push(resolve));
+    active--; return new Response('{}');
+  } });
+  const requests = Array.from({ length: 4 }, (_, i) => client(`/pages/${i}`, { method: i ? 'PATCH' : 'GET' }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(releases.length, 3);
+  releases[1](); await requests[1];
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(releases.length, 4);
+  releases[0](); releases[2](); releases[3]();
+  await Promise.all(requests);
+  assert.equal(peak, 3);
+});
+
+
+test("overlapping Notion requests still space their start times", async () => {
+  let now = 0; const starts = [];
+  const client = createNotionClient({ now: () => now, interval: 350,
+    sleep: async ms => { now += ms; },
+    fetcher: async () => { starts.push(now); return new Response('{}'); }
+  });
+  await Promise.all([client('/pages/a'), client('/pages/b'), client('/pages/c')]);
+  assert.equal(starts.length, 3);
+  assert.ok(starts[1] - starts[0] >= 350);
+  assert.ok(starts[2] - starts[1] >= 350);
 });
