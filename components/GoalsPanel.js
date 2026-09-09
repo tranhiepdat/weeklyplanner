@@ -55,8 +55,8 @@ function blankGoal(seed = {}) {
   };
 }
 
-function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
-  const dialogRef = useDialogFocus(true, onClose);
+function Editor({ initial, activeCount, existingGoals, onClose, onSave, embedded=false }) {
+  const dialogRef = useDialogFocus(!embedded, onClose);
   const editing = !!initial?.id;
   const [mode, setMode] = useState(editing ? "manual" : "ai");
   const [draft, setDraft] = useState(() => blankGoal(initial || {}));
@@ -130,8 +130,8 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
     }
   };
 
-  return <div className="wp-goal-overlay" onMouseDown={e => e.currentTarget === e.target && onClose()}>
-    <div ref={dialogRef} tabIndex={-1} aria-label="Sửa Goal" className="wp-goal-sheet wp-goal-editor" role="dialog" aria-modal="true">
+  return <div className={embedded ? "goal-editor-inline" : "wp-goal-overlay"} onMouseDown={e => !embedded && e.currentTarget === e.target && onClose()}>
+    <div ref={dialogRef} tabIndex={-1} aria-label="Sửa Goal" className="wp-goal-sheet wp-goal-editor" role={embedded ? undefined : "dialog"} aria-modal={embedded ? undefined : true}>
       <div className="wp-goal-sheet-head">
         <div>
           <span className="eyebrow">{editing ? "EDIT GOAL" : "NEW 90-DAY GOAL"}</span>
@@ -208,107 +208,41 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave }) {
   </div>;
 }
 
-function Manager({ goals, statsForGoal, onClose, onEdit, onCreate, onPatch, onDetail, active: isActive }) {
-  const dialogRef = useDialogFocus(isActive, onClose);
-  const [tab, setTab] = useState("active");
-  const active = goals.filter(g => g.status === "active");
-  const history = goals
-    .filter(g => g.status !== "active")
-    .sort((a, b) => String(b.achievedAt || b.archivedAt || b.updatedAt || "")
-      .localeCompare(String(a.achievedAt || a.archivedAt || a.updatedAt || "")));
-
-  return <div className="wp-goal-overlay" onMouseDown={e => e.currentTarget === e.target && onClose()}>
-    <div ref={dialogRef} tabIndex={-1} aria-label="Manage Goals" className="wp-goal-sheet wp-goal-manager" role="dialog" aria-modal="true">
-      <div className="wp-goal-sheet-head manager-head">
-        <div>
-          <span className="eyebrow">NEXT 90 DAYS</span>
-          <h2>Goal progress</h2>
-        </div>
-        <div className="wp-goal-head-actions">
-          <button className={tab === "active" ? "seg on" : "seg"} onClick={() => setTab("active")}>Active</button>
-          <button className={tab === "history" ? "seg on" : "seg"} onClick={() => setTab("history")}>History</button>
-          {tab === "active" && <button className="new" disabled={active.length >= ACTIVE_LIMIT} onClick={() => onCreate()}>＋ New goal</button>}
-          <button className="round" onClick={onClose}>×</button>
-        </div>
-      </div>
-
-      <div className="wp-goal-manager-body">
-        {tab === "active" ? <div className="wp-goal-manager-grid">
-          {active.map((g, i) => {
-            const s = statsForGoal(g);
-            return <div className="wp-goal-full" key={g.id} style={{ "--delay": `${i * 55}ms` }}>
-              <div className="wp-goal-full-top">
-                <span className="num">0{i + 1}</span>
-                <span className="ico">{g.emoji || "🎯"}</span>
-                <span className={s.days != null && s.days <= 14 ? "deadline soon" : "deadline"}>
-                  {s.days == null ? "No date" : s.days < 0 ? `${Math.abs(s.days)}d overdue` : `${s.days}d left`}
-                </span>
-              </div>
-              <h3><button onClick={() => onDetail(g)}>{g.title}</button></h3>
-
-              <div className="wp-goal-manager-metrics">
-                <div><b>{s.tasksDone}/{s.tasksTotal}</b><span>tasks done</span></div>
-                <div><b>{s.ms.done}/{s.ms.total}</b><span>milestones</span></div>
-                <div><b>{s.weekDone}/{s.weekTotal}</b><span>this week</span></div>
-              </div>
-
-              <div className="wp-goal-progress"><i style={{ width: `${s.progress}%` }}/><b>{s.progress}%</b></div>
-
-              <div className="wp-goal-next">
-                <span>{s.ms.complete ? "READY" : `MILESTONE ${s.ms.currentIndex + 1}/${s.ms.total}`}</span>
-                <b>{s.ms.complete ? "Tất cả milestones đã xong — có thể Mark achieved." : s.ms.current?.text || "Chưa có milestone"}</b>
-              </div>
-
-              <div className="wp-goal-week">
-                <span>THIS WEEK</span>
-                <b>{g.weeklyOutcome || "Chưa chọn outcome tuần này"}</b>
-              </div>
-
-              <div className="wp-goal-checklist">
-                {g.milestones?.map(m => <label key={m.id}>
-                  <input
-                    type="checkbox"
-                    checked={!!m.done}
-                    onChange={() => onPatch(g, {
-                      milestone: { id: m.id, done: !m.done },
-                    })}
-                  />
-                  <span>{m.text}</span>
-                </label>)}
-              </div>
-
-              <div className="wp-goal-card-actions">
-                <button onClick={() => onEdit(g)}>Edit</button>
-                <button onClick={() => onPatch(g, { status: "archived", archivedAt: localIso() })}>Archive</button>
-                <button className="achieved" disabled={!s.ms.complete} onClick={() => onPatch(g, { status: "achieved", achievedAt: localIso() })}>✓ Achieved</button>
-              </div>
-            </div>;
-          })}
-          {Array.from({ length: ACTIVE_LIMIT - active.length }).map((_, i) =>
-            <button className="wp-goal-manager-empty" key={i} onClick={() => onCreate()}>
-              <span>＋</span><b>New goal</b><small>AI or manual</small>
-            </button>
-          )}
-        </div> : <div className="wp-goal-history-list">
-          {!history.length && <div className="wp-goal-history-empty">Chưa có goal cũ.</div>}
-          {history.map(g => <div className="wp-goal-history-row" key={g.id}>
-            <div>
-              <span>{g.emoji || "🎯"}</span>
-              <p>
-                <b><button onClick={() => onDetail(g)}>{g.title}</button></b>
-                <small>{g.status === "achieved" ? `Achieved ${g.achievedAt || ""}` : `Archived ${g.archivedAt || ""}`}</small>
-              </p>
-            </div>
-            <div>
-              {g.status === "archived"
-                ? <button disabled={active.length >= ACTIVE_LIMIT} onClick={() => onPatch(g, { status: "active", archivedAt: null })}>↩ Restore</button>
-                : <button disabled={active.length >= ACTIVE_LIMIT} onClick={() => onCreate(g)}>＋ Follow-up</button>}
-            </div>
-          </div>)}
-        </div>}
-      </div>
-    </div>
-  </div>;
+function Manager({entry,active:isActive,onClose}) {
+  const p=usePlanner(),ref=useDialogFocus(isActive,onClose);
+  const [selected,setSelected]=useState(entry.goalId||p.goals.find(g=>g.status==='active')?.uid);
+  const [filter,setFilter]=useState(p.goals.find(g=>g.uid===entry.goalId)?.status==='active'||!entry.goalId?'active':'history');
+  const [draft,setDraft]=useState(entry.kind==='createGoal'||entry.kind==='goalEditor'?blankGoal(entry.goal||{}):null);
+  const [failure,setFailure]=useState('');
+  const goal=p.goals.find(g=>g.uid===selected), active=p.goals.filter(g=>g.status==='active');
+  const list=p.goals.filter(g=>filter==='active'?g.status==='active':g.status!=='active');
+  const save=async g=>{
+    if(draft?.id&&!p.goals.some(x=>x.id===draft.id)){setFailure('Goal không còn khả dụng.');return false;}
+    let input=g;
+    if(draft?.id){input={id:draft.id};for(const field of ['title','emoji','deadline','weeklyOutcome','milestones'])if(JSON.stringify(g[field])!==JSON.stringify(draft[field]))input[field]=g[field];if(input.milestones)input.milestoneBase=draft.milestones;}
+    const ok=await p.saveGoal(input);
+    if(ok){setSelected(g.uid);setDraft(null);}return ok;
+  };
+  const patch=async changes=>{setFailure('');if(!await p.saveGoal({id:goal.id,...changes}))setFailure('Chưa lưu được. Vui lòng thử lại.');};
+  return <div className="wp-goal-overlay"><section ref={ref} role="dialog" aria-modal="true" aria-label="Quản lý Goals" tabIndex={-1} className="wp-goal-sheet goal-management">
+    <header className="wp-goal-sheet-head"><div><span className="eyebrow">90 NGÀY</span><h2>Quản lý Goals</h2></div><button aria-label="Đóng" onClick={onClose}>×</button></header>
+    <PlannerSyncNotice/>
+    <div className="goal-management-layout"><aside>
+      <nav aria-label="Trạng thái Goals"><button disabled={!!draft} aria-pressed={filter==='active'} onClick={()=>setFilter('active')}>Đang theo đuổi</button><button disabled={!!draft} aria-pressed={filter==='history'} onClick={()=>setFilter('history')}>History</button></nav>
+      <div className="goal-management-list">{list.map(g=><button key={g.uid} disabled={!!draft} aria-pressed={selected===g.uid&&!draft} onClick={()=>{setSelected(g.uid);setDraft(null);setFailure('');}}><span>{g.emoji||'🎯'}</span><span><b>{g.title}</b><small>{milestoneProgress(g)}% · {g.status==='active'?'Đang theo đuổi':'History'}</small></span></button>)}</div>
+      {!list.length&&<p>Chưa có Goal trong nhóm này.</p>}
+      <button disabled={!!draft||active.length>=3||!!p.goalsError} onClick={()=>setDraft(blankGoal())}>＋ Tạo Goal</button>
+    </aside><main>
+      {draft?<Editor key={draft.uid} embedded initial={draft} activeCount={active.length} existingGoals={p.goals} onClose={()=>setDraft(null)} onSave={save}/>:
+      goal?<><header className="goal-selected-heading"><span>{goal.emoji||'🎯'}</span><h2>{goal.title}</h2></header>
+        <div className="goal-management-actions"><button onClick={()=>setDraft(blankGoal(goal))}>Sửa Goal</button>
+        {goal.status==='active'?<><button onClick={()=>patch({status:'archived',archivedAt:localIso()})}>Archive</button><button disabled={!milestoneState(goal).complete} onClick={()=>patch({status:'achieved',achievedAt:localIso()})}>✓ Hoàn thành Goal</button></>:<button disabled={active.length>=3} onClick={()=>patch({status:'active',archivedAt:null,achievedAt:null})}>Khôi phục</button>}</div>
+        {failure&&<p role="alert">{failure}</p>}
+        <div className="goal-management-checks">{goal.milestones?.map(m=><label key={m.id}><input type="checkbox" checked={!!m.done} onChange={()=>patch({milestone:{id:m.id,done:!m.done}})}/><span>{m.text}</span></label>)}</div>
+        <GoalDetail embedded key={goal.uid} entry={{goalId:goal.uid}} active={isActive}/>
+      </>:<p>Chọn một Goal hoặc tạo Goal mới.</p>}
+    </main></div>
+  </section></div>;
 }
 
 export default function GoalsPanel() {
@@ -515,38 +449,10 @@ export default function GoalsPanel() {
   return <>
     <GoalDialogStyles />
     {typeof document !== "undefined" && createPortal(<div className={modalClass}>
-      {dialogs.filter(d => d.kind === "goal").map(d => <GoalDetail key={d.goalId} entry={d} active={top === d} />)}
+      {dialogs.filter(d => ['goal','manage','goalEditor','createGoal'].includes(d.kind)).map((d,i)=><div key={i} style={{display:top===d?'contents':'none'}}><Manager entry={d} active={top===d} onClose={closeDialog}/></div>)}
       {top?.kind === "picker" && <GoalPicker entry={top} />}
     </div>, document.body)}
     {host && createPortal(board, host)}
-
-    {manager && typeof document !== "undefined" && createPortal(
-      <div className={modalClass} style={{display: top?.kind === "manage" ? "contents" : "none"}}>
-        <Manager active={top?.kind === "manage"}
-          goals={goals}
-          statsForGoal={statsForGoal}
-          onClose={() => setManager(false)}
-          onDetail={g => openDialog({kind:"goal",goalId:g.uid})}
-          onEdit={g => setEditor(g)}
-          onCreate={g => openCreate(g)}
-          onPatch={patch}
-        />
-      </div>,
-      document.body
-    )}
-
-    {editor && (top?.kind === "goalEditor" || top?.kind === "createGoal") && typeof document !== "undefined" && createPortal(
-      <div className={modalClass}>
-        <Editor
-          initial={editor?.id ? editor : null}
-          activeCount={active.length}
-          existingGoals={goals}
-          onClose={() => setEditor(null)}
-          onSave={g => persist(g, true)}
-        />
-      </div>,
-      document.body
-    )}
 
     {toast && typeof document !== "undefined" && createPortal(
       <div className={`${modalClass} wp-goal-toast`}>✦ {toast}</div>,
@@ -577,6 +483,9 @@ export default function GoalsPanel() {
       @media(max-width:600px){.wp-goal-board-head{align-items:flex-start}.wp-goal-board-title small{max-width:220px}.wp-goal-board-actions button:first-of-type{display:inline-flex}.wp-goal-row{grid-template-columns:1fr;padding:10px 5px}.wp-goal-cell.milestone,.wp-goal-cell.tasks,.wp-goal-cell.progress{padding-left:31px}.wp-goal-cell.tasks{justify-content:flex-start}.wp-goal-cell.progress{padding-right:4px}.wp-goal-empty{align-items:flex-start;flex-wrap:wrap}.wp-goal-empty button{margin-left:34px}.wp-goal-overlay{align-items:flex-end;padding:0}.wp-goal-sheet{border-radius:20px 20px 0 0;max-height:92vh}.wp-goal-sheet-head{padding:15px}.wp-goal-head-actions .seg{display:none}.wp-goal-form-grid{grid-template-columns:1fr}.wp-goal-ai-foot{align-items:flex-start;flex-direction:column}.wp-goal-ai-foot button{width:100%}.wp-goal-manager-metrics{grid-template-columns:repeat(3,1fr)}}
       @media(prefers-reduced-motion:reduce){.wp-goal-board,.wp-goal-row,.wp-goal-sheet,.wp-goal-toast{animation:none!important}.wp-goal-row,.progress-track i{transition:none!important}}
       @keyframes wpGoalBoardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}@keyframes wpGoalRowIn{from{opacity:0;transform:translateY(7px) scale(.99)}to{opacity:1;transform:none}}@keyframes wpGoalBackdrop{from{opacity:0}to{opacity:1}}@keyframes wpGoalSheetIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}@keyframes wpGoalToast{from{opacity:0;transform:translate(-50%,8px) scale(.95)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+      .wp-goal-sheet.goal-management{width:min(1060px,95vw);max-height:92dvh;overflow:auto}.goal-management-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:28px}.goal-management-layout main{min-width:0}.goal-management-layout aside{min-width:0;border-right:1px solid var(--g-border);padding-right:20px}.goal-management nav{display:flex;gap:6px;margin-bottom:16px}.goal-management button{font:inherit;color:inherit;border:1px solid var(--g-border);background:var(--g-surface);border-radius:10px;padding:8px 12px;cursor:pointer}.goal-management button:disabled{opacity:.45;cursor:default}.goal-management button[aria-pressed=true]{background:color-mix(in srgb,var(--g-a) 15%,var(--g-bg));border-color:var(--g-a)}.goal-management-list{display:grid;gap:8px;margin-bottom:16px}.goal-management-list button{display:flex;gap:10px;text-align:left;width:100%;align-items:flex-start}.goal-management-list b{font-size:.88rem;line-height:1.45;overflow-wrap:anywhere}.goal-management-list small{display:block;opacity:.65;margin-top:5px}.goal-selected-heading{display:flex;align-items:flex-start;gap:12px}.goal-selected-heading>span{font-size:2rem}.goal-selected-heading h2{font-size:1.4rem;line-height:1.4;margin:0;overflow-wrap:anywhere}.goal-management-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.goal-management-checks{display:grid;gap:10px;margin:20px 0}.goal-management-checks label{display:flex;gap:10px;align-items:flex-start;font-size:.85rem;line-height:1.5}.goal-management-checks input{width:18px;height:18px;flex-shrink:0;accent-color:var(--g-a)}.goal-editor-inline .wp-goal-sheet{width:100%;max-height:none;box-shadow:none;border:0;padding:0}.goal-inline .goal-milestones{display:none}.wp-goal-cell.goal .copy b{font-size:.95rem;line-height:1.45;overflow-wrap:anywhere}
+      @media(max-width:640px){.wp-goal-sheet.goal-management{width:100%;max-height:94dvh;border-radius:22px 22px 0 0;padding:20px}.goal-management-layout{grid-template-columns:1fr;gap:20px}.goal-management-layout aside{min-width:0;border-right:0;border-bottom:1px solid var(--g-border);padding:0 0 16px}.goal-management-list{display:flex;overflow-x:auto}.goal-management-list button{min-width:190px;max-width:240px}.goal-selected-heading h2{font-size:1.2rem}}
+      .goal-management>.wp-goal-sheet-head{padding:0 0 20px}.wp-goal-sheet.goal-management{padding:24px;box-sizing:border-box}.goal-inline>p{margin:10px 0;line-height:1.6}.goal-dialog.goal-inline{padding:0;max-height:none;border:0;box-shadow:none;background:transparent}.goal-management-list button>span:last-child{min-width:0}.goal-management button:focus-visible{outline:3px solid var(--g-a);outline-offset:2px}
     `}</style>
   </>;
 }

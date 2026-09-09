@@ -1,4 +1,4 @@
-import { GoalLinkButton, useDialogFocus } from "../components/GoalDialogs";
+import { GoalTag, GoalLinkButton, useDialogFocus } from "../components/GoalDialogs";
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { usePlanner, PlannerSyncNotice } from "../components/PlannerProvider";
@@ -797,14 +797,14 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             {task.priority?.map(p => <span key={p} className="tag" style={p.toLowerCase().includes("urgent") ? { background: "#fee2e2", color: "#dc2626" } : { background: "#fef9c3", color: "#ca8a04" }}>{p}</span>)}
             {task.project?.map(p => <span key={p} className="tag" style={{ background: "#e0f2fe", color: "#0369a1" }}>{p}</span>)}
           </div>
-        </div>
-        <GoalLinkButton task={task} /></div>
+        </div><GoalTag task={task}/></div>
         {onMove && task.date && (
           <>
             <button onClick={guardBtn(() => onMove(task, -1))} style={moveBtn} title="Dời sang hôm trước">‹</button>
             <button onClick={guardBtn(() => onMove(task, 1))} style={moveBtn} title="Dời sang hôm sau">›</button>
           </>
         )}
+        <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
         <button aria-label={`Sửa ${task.name}`} disabled={temporary} onClick={guardBtn(() => onEdit(task))} style={{
           flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: "none",
           background: "transparent", color: "var(--c-muted2)", cursor: "pointer", fontSize: "1rem",
@@ -812,7 +812,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
         }} title="Sửa">⋯</button>
         {onTogglePriority && (
           <button onClick={guardBtn(() => onTogglePriority(task.id))} title={isMust ? "Bỏ ưu tiên" : "Đánh ưu tiên"} style={{
-            position: "absolute", bottom: 5, right: 7, zIndex: 3,
+            position: "relative",
             width: 30, height: 24, borderRadius: 7, border: "none",
             background: isMust ? "color-mix(in srgb, var(--c2) 24%, transparent)" : "transparent",
             cursor: "pointer", fontSize: ".95rem", lineHeight: 1, opacity: isMust ? 1 : .3,
@@ -820,6 +820,7 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
             transform: isMust ? "scale(1.05)" : "scale(1)", transition: "opacity .2s, background .2s, transform .2s",
           }}>🔥</button>
         )}
+        </div>
       </div>
       {(celebrating || settling) && (
         <Particles width={dims.w} height={dims.h} onDone={() => setPhase(p => (p === "celebrating" ? (reduceMotion ? "done" : "settling") : p))} />

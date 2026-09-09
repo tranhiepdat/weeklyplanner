@@ -31,6 +31,12 @@ function Dialog({title,onClose,children,active=true}) {
     </section>
   </div>;
 }
+export function GoalTag({task}) {
+  const p=usePlanner(),goal=p.goals.find(g=>g.uid===task.goalId);
+  if(!task.goalId)return null;
+  const hue=[...task.goalId].reduce((n,c)=>(n*31+c.charCodeAt(0))%360,0);
+  return <span className="goal-tag" title={goal?.title||'Goal'} style={{'--goal-hue':hue}} onClick={e=>e.stopPropagation()}>{goal?.emoji||'🎯'} {goal?.title||'Goal'}{goal&&goal.status!=='active'?' · History':''}</span>;
+}
 export function GoalLinkButton({task,onSelect,disabled=false,editor=false}) {
   const p=usePlanner(),goal=p.goals.find(g=>g.uid===task.goalId);
   return <button type="button" className="goal-link-button" data-testid={task.goalId?'task-goal':'task-goal-empty'}
@@ -66,7 +72,7 @@ export function GoalPicker({entry}) {
     {failure && <p role="alert">{failure.message} <button disabled={saving||!task} onClick={()=>choose(failure.id)}>Thử lại</button></p>}
   </Dialog>;
 }
-export function GoalDetail({entry,active}) {
+export function GoalDetail({entry,active,embedded=false}) {
   const p=usePlanner(),[filter,setFilter]=useState('week'),[limits,setLimits]=useState([20,20]),[failure,setFailure]=useState(null);
   const goal=p.goals.find(g=>g.uid===entry.goalId),[start,end]=selectedWeekBounds(p.weekMonday);
   useEffect(()=>setLimits([20,20]),[filter,start,entry.goalId]);
@@ -74,10 +80,11 @@ export function GoalDetail({entry,active}) {
   const all=p.tasks.filter(t=>t.goalId===goal.uid),visible=linkedTasks(p.tasks,goal.uid,p.weekMonday,filter);
   const toggle=async(id,done)=>{setFailure(null);if(!await p.toggleTask(id,done))setFailure({id,done});};
   const milestones=goal.milestones||[],percent=milestones.length?Math.round(100*milestones.filter(m=>m.done).length/milestones.length):0;
-  return <Dialog active={active} title={`${goal.emoji||'🎯'} ${goal.title}`} onClose={p.closeDialog}>
+  const Shell=embedded?'div':Dialog;
+  return <Shell {...(embedded?{className:"goal-dialog goal-inline"}:{active,title:`${goal.emoji||'🎯'} ${goal.title}`,onClose:p.closeDialog})}>
     <p>{goal.status!=='active'?'History · ':''}{goal.deadline?`Hạn ${goal.deadline}`:''}</p>
     {goal.weeklyOutcome && <p>{goal.weeklyOutcome}</p>}
-    <h3>Milestones · {percent}%</h3><ul className="goal-milestones">{milestones.map(m=><li key={m.id}>{m.done?'✓':'○'} {m.text}</li>)}</ul>
+    <p>Milestones · {percent}%</p>{!embedded&&<ul className="goal-milestones">{milestones.map(m=><li key={m.id}>{m.done?'✓':'○'} {m.text}</li>)}</ul>}
     <p><b>Tổng liên kết: {all.length}</b> · {all.filter(t=>t.done).length} đã xong</p>
     <p>Tuần đang xem · {start} – {end}</p>
     <nav aria-label="Lọc task liên kết"><button aria-pressed={filter==='week'} onClick={()=>setFilter('week')}>Tuần đang xem</button><button aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>Tất cả</button></nav>
@@ -87,15 +94,15 @@ export function GoalDetail({entry,active}) {
       {!group.length && <p>Không có task trong nhóm này.</p>}
       {group.slice(0,limits[index]).map(t=><div className="goal-task-item" key={t.id}>
         <input type="checkbox" checked={!!t.done} aria-label={`Hoàn thành ${t.name}`} onChange={e=>toggle(t.id,e.target.checked)}/>
-        <div><button className="goal-task-title" aria-label={`${t.done?'Bỏ hoàn thành':'Hoàn thành'} ${t.name}`} onClick={()=>toggle(t.id,!t.done)}>{t.name}</button><small>{t.date||'Chưa có ngày'} · {t.session||'Chưa chọn buổi'}</small><GoalLinkButton task={t}/></div>
+        <div><button className="goal-task-title" aria-label={`${t.done?'Bỏ hoàn thành':'Hoàn thành'} ${t.name}`} onClick={()=>toggle(t.id,!t.done)}>{t.name}</button><small>{t.date||'Chưa có ngày'} · {t.session||'Chưa chọn buổi'}</small></div>
         <button className="goal-task-edit" aria-label={`Sửa ${t.name}`} onClick={()=>p.setEditTask(t)}>⋯</button>
       </div>)}
       {group.length>limits[index] && <button onClick={()=>setLimits(v=>v.map((n,i)=>i===index?n+20:n))}>Xem thêm</button>}
     </section>;})}
-  </Dialog>;
+  </Shell>;
 }
 export function GoalDialogStyles(){return <style jsx global>{`
-.goal-link-button{font:inherit;font-size:.75rem;color:var(--c-wine,var(--c-ink));background:var(--c-surface);border:1px solid var(--c-border);border-radius:9px;min-height:32px;padding:5px 9px;margin-top:5px;max-width:100%;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.goal-tag{display:block;width:fit-content;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;line-height:1.5;padding:2px 7px;margin-top:4px;border-radius:6px;color:var(--c-ink);background:hsl(var(--goal-hue) 65% 55% / .18);border:1px solid hsl(var(--goal-hue) 65% 50% / .35)}.goal-inline{border:0;box-shadow:none;max-height:none;max-width:none;padding:0;background:transparent}.goal-link-button{font:inherit;font-size:.75rem;color:var(--c-wine,var(--c-ink));background:var(--c-surface);border:1px solid var(--c-border);border-radius:9px;min-height:32px;padding:5px 9px;margin-top:5px;max-width:100%;text-align:left;cursor:pointer;overflow-wrap:anywhere}
 .goal-dialog-backdrop{position:fixed;inset:0;z-index:120;background:#201b2566;backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:24px}
 .goal-dialog{background:var(--c-bg,#fff);color:var(--c-ink,#292524);border:1px solid var(--c-border,#ddd);border-radius:22px;max-width:620px;width:100%;max-height:88dvh;overflow:auto;padding:24px;box-shadow:0 20px 80px #0003;font-family:inherit;box-sizing:border-box}
 .goal-dialog header{display:flex;align-items:center;justify-content:space-between;gap:12px}.goal-dialog h2{font-size:1.3rem;margin:0}.goal-dialog h3{font-size:.95rem}.goal-dialog p,.goal-dialog small{font-size:.82rem;line-height:1.5}.goal-dialog button{font:inherit;cursor:pointer;border:1px solid var(--c-border,#ddd);background:var(--c-surface,#fafafa);color:inherit;border-radius:10px;padding:9px 12px;min-height:40px}.goal-dialog button:disabled{opacity:.55;cursor:wait}.goal-dialog button:focus-visible,.goal-link-button:focus-visible{outline:3px solid var(--c-wine,#9a6678);outline-offset:2px}.goal-dialog button[aria-pressed=true]{border-color:var(--c-wine,#9a6678);background:color-mix(in srgb,var(--c-ink,#292524) 8%,var(--c-bg,#fff))}.goal-dialog nav{display:flex;gap:8px}.goal-dialog .goal-option{display:flex;width:100%;align-items:center;gap:12px;margin:8px 0;padding:14px;text-align:left;box-sizing:border-box}.goal-option>span:first-child{font-size:1.5rem}.goal-option>span:nth-child(2){flex:1;min-width:0}.goal-option b,.goal-option small{display:block;overflow-wrap:anywhere}.goal-option small{opacity:.7;margin-top:4px}.goal-option.history{border:1px dashed var(--c-border,#ccc);border-radius:10px}.goal-task-item{display:flex;align-items:flex-start;gap:12px;border-top:1px solid var(--c-border,#ddd);padding:12px 0}.goal-task-item>div{min-width:0;flex:1}.goal-task-item input{width:22px;height:22px;margin-top:9px;flex-shrink:0;accent-color:var(--c-wine,#9a6678)}.goal-dialog .goal-task-title{display:block;text-align:left;border:0;background:none;padding:5px 0;overflow-wrap:anywhere;width:100%}.goal-dialog .goal-task-edit{flex:0 0 40px;padding:4px;font-size:1.1rem}.goal-task-item small{display:block;opacity:.7}.goal-milestones{padding-left:0;list-style:none;font-size:.85rem;line-height:1.8}.goal-task-group{margin-top:24px}
