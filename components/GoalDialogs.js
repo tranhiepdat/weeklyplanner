@@ -74,12 +74,35 @@ export function GoalPicker({entry}) {
 }
 export function GoalDetail({entry,active,embedded=false}) {
   const p=usePlanner(),[filter,setFilter]=useState('week'),[limit,setLimit]=useState(20),[day,setDay]=useState(0),[failure,setFailure]=useState(null);
+  const [motion,setMotion]=useState({}), rowsRef=useRef(null), actions=useRef(new Map()), timers=useRef(new Map()), focusAfterMove=useRef(null);
   const goal=p.goals.find(g=>g.uid===entry.goalId),[start,end]=selectedWeekBounds(p.weekMonday);
   useEffect(()=>{setLimit(20);setDay(0);},[filter,start,entry.goalId]);
+  useEffect(()=>()=>{for(const timer of timers.current.values())clearTimeout(timer);},[]);
+  useEffect(()=>{
+    const target=focusAfterMove.current;
+    if(!target)return;
+    focusAfterMove.current=null;
+    // Moving between groups remounts the row. Keep keyboard focus on its control.
+    if(document.activeElement!==document.body&&document.activeElement?.isConnected)return;
+    const row=[...rowsRef.current?.querySelectorAll('[data-goal-task]')||[]].find(el=>el.dataset.goalTask===target.id);
+    row?.querySelector(target.control)?.focus({preventScroll:true});
+  },[p.tasks,motion]);
   if(!goal)return <p>Goal không còn khả dụng.</p>;
   const all=p.tasks.filter(t=>t.goalId===goal.uid),visible=linkedTasks(p.tasks,goal.uid,p.weekMonday,filter);
   const dates=Array.from({length:7},(_,i)=>{const d=new Date(start+'T12:00:00');d.setDate(d.getDate()+i);return calendarDay(d);});
-  const toggle=async(id,done)=>{setFailure(null);if(!await p.toggleTask(id,done))setFailure({id,done});};
+  const toggle=async(id,done)=>{
+    const action=(actions.current.get(id)||0)+1;actions.current.set(id,action);
+    const focused=document.activeElement;
+    if(focused?.closest('[data-goal-task]')?.dataset.goalTask===id)focusAfterMove.current={id,control:focused.matches('input')?'input':'.goal-task-title'};
+    setFailure(null);setMotion(current=>({...current,[id]:done?'done':'undo'}));
+    clearTimeout(timers.current.get(id));
+    timers.current.set(id,setTimeout(()=>{
+      setMotion(current=>{const next={...current};delete next[id];return next;});timers.current.delete(id);
+    },460));
+    // Animation is only feedback; the existing optimistic queue starts immediately.
+    const ok=await p.toggleTask(id,done);
+    if(!ok&&actions.current.get(id)===action)setFailure({id,done});
+  };
   const displayed=filter==='all'?visible.slice(0,limit):visible;
   const groups=filter==='week'?dates:[...new Set(displayed.map(t=>t.date||''))];
   const label=d=>d?d.split('-').reverse().slice(0,2).join('/'):'Chưa có ngày';
@@ -90,17 +113,20 @@ export function GoalDetail({entry,active,embedded=false}) {
     <p>{visible.length} task · {visible.filter(t=>t.done).length} đã xong</p>
     {failure&&<p role="alert">Chưa lưu được trạng thái task. <button onClick={()=>toggle(failure.id,failure.done)}>Thử lại</button></p>}
     {filter==='week'&&<nav className="goal-days" aria-label="Chọn ngày">{dates.map((d,i)=><button key={d} aria-pressed={day===i} onClick={()=>setDay(i)}>{i===6?'CN':`T${i+2}`}<small>{label(d)} · {visible.filter(t=>t.date===d).length}</small></button>)}</nav>}
-    <div className={filter==='week'?'goal-week-columns':'goal-all-days'}>{groups.map((d,i)=>{
+    <div ref={rowsRef} className={filter==='week'?'goal-week-columns':'goal-all-days'}>{groups.map((d,i)=>{
       const tasks=displayed.filter(t=>(t.date||'')===d);
       return <section key={d} className={`goal-day-column ${day===i?'selected-day':''}`}><header><b>{filter==='week'?(i===6?'Chủ nhật':`Thứ ${i+2}`):''} {label(d)}</b><small>{tasks.filter(t=>t.done).length}/{tasks.length} đã xong</small></header>
-      {[false,true].map(done=>{const group=tasks.filter(t=>!!t.done===done);return <div key={String(done)} className="goal-task-group"><h4>{done?'Đã xong':'Chưa xong'} · {group.length}</h4>{!group.length&&<p className="goal-day-empty">{done?'Chưa có task hoàn thành':'Không có task'}</p>}{group.map(t=><div className="goal-task-item" key={t.id}>
-        <input type="checkbox" checked={!!t.done} aria-label={`Hoàn thành ${t.name}`} onChange={e=>toggle(t.id,e.target.checked)}/><div><button className="goal-task-title" aria-label={`${t.done?'Bỏ hoàn thành':'Hoàn thành'} ${t.name}`} onClick={()=>toggle(t.id,!t.done)}>{t.name}</button><small>{t.session||'Chưa chọn buổi'}</small></div><button className="goal-task-edit" aria-label={`Sửa ${t.name}`} onClick={()=>p.setEditTask(t)}>⋯</button>
+      {[false,true].map(done=>{const group=tasks.filter(t=>!!t.done===done);return <div key={String(done)} className="goal-task-group"><h4>{done?'Đã xong':'Chưa xong'} · {group.length}</h4>{!group.length&&<p className="goal-day-empty">{done?'Chưa có task hoàn thành':'Không có task'}</p>}{group.map(t=><div className={`goal-task-item${t.done?' is-complete':''}`} data-goal-task={t.id} data-motion={motion[t.id]} key={t.id}>
+        <input type="checkbox" checked={!!t.done} aria-label={`Hoàn thành ${t.name}`} onChange={e=>toggle(t.id,e.target.checked)}/><div><button type="button" className="goal-task-title" aria-pressed={!!t.done} title={t.done?'Bấm để bỏ hoàn thành':'Bấm để hoàn thành'} aria-label={`${t.done?'Bỏ hoàn thành':'Hoàn thành'} ${t.name}`} onClick={()=>toggle(t.id,!t.done)}>{t.name}</button><small>{t.session||'Chưa chọn buổi'}</small></div><button type="button" className="goal-task-edit" title="Chỉnh sửa task" aria-label={`Sửa ${t.name}`} onClick={()=>p.setEditTask(t)}>⋯</button>
       </div>)}</div>;})}</section>;
     })}</div>
     {!visible.length&&<p>Chưa có task trong khoảng này.</p>}
     {filter==='all'&&visible.length>limit&&<button onClick={()=>setLimit(n=>n+20)}>Xem thêm</button>}
     <style jsx global>{`
-.goal-calendar>header{align-items:center;flex-wrap:wrap}.goal-week-columns{display:grid;grid-template-columns:repeat(7,minmax(180px,1fr));gap:10px;overflow-x:auto;padding-bottom:12px}.goal-day-column{background:var(--g-bg,var(--c-bg));border:1px solid var(--g-border,var(--c-border));border-radius:14px;padding:12px;min-width:0}.goal-day-column>header{display:block;border-bottom:1px solid var(--g-border,var(--c-border));padding-bottom:12px}.goal-day-column>header small{display:block;margin-top:5px}.goal-calendar .goal-task-group{margin-top:16px}.goal-task-group h4{font-size:.72rem;color:var(--g-muted,var(--c-muted));margin:0 0 8px}.goal-calendar .goal-task-item{background:var(--g-surface,var(--c-surface));border:1px solid var(--g-border,var(--c-border));border-radius:10px;padding:8px;margin-bottom:6px;gap:5px;flex-wrap:wrap}.goal-calendar .goal-task-item>div{flex-basis:85px}.goal-calendar .goal-task-item input{width:17px;height:17px;margin-top:8px}.goal-calendar .goal-task-edit{flex:0 0 28px;min-height:32px;font-size:.9rem}.goal-calendar .goal-task-title{font-size:.82rem;line-height:1.5}.goal-calendar .goal-task-item small{font-size:.65rem}.goal-day-empty{opacity:.55;font-size:.75rem!important}.goal-calendar .goal-days{display:none}.goal-all-days{display:grid;gap:12px}.goal-all-days .goal-task-item{flex-wrap:nowrap}.goal-all-days .goal-task-item>div{flex:1}
+.goal-calendar>header{align-items:center;flex-wrap:wrap}.goal-week-columns{display:grid;grid-template-columns:repeat(7,minmax(180px,1fr));gap:10px;overflow-x:auto;padding-bottom:12px}.goal-day-column{background:var(--g-bg,var(--c-bg));border:1px solid var(--g-border,var(--c-border));border-radius:14px;padding:12px;min-width:0}.goal-day-column>header{display:block;border-bottom:1px solid var(--g-border,var(--c-border));padding-bottom:12px}.goal-day-column>header small{display:block;margin-top:5px}.goal-calendar .goal-task-group{margin-top:16px}.goal-task-group h4{font-size:.72rem;color:var(--g-muted,var(--c-muted));margin:0 0 8px}.goal-calendar .goal-task-item{background:var(--g-surface,var(--c-surface));border:1px solid var(--g-border,var(--c-border));border-radius:10px;padding:8px;margin-bottom:6px;gap:5px;flex-wrap:wrap}.goal-calendar .goal-task-item>div{flex-basis:85px}.goal-calendar .goal-task-item input{width:17px;height:17px;margin-top:8px}.goal-calendar.goal-dialog .goal-task-edit{flex:0 0 28px;min-height:32px;font-size:.9rem}.goal-calendar.goal-dialog .goal-task-title{font-size:.82rem;line-height:1.5}.goal-calendar .goal-task-item small{font-size:.65rem}.goal-day-empty{opacity:.55;font-size:.75rem!important}.goal-calendar .goal-days{display:none}.goal-all-days{display:grid;gap:12px}.goal-all-days .goal-task-item{flex-wrap:nowrap}.goal-all-days .goal-task-item>div{flex:1}
+.goal-calendar .goal-task-item{transition:background .2s,border-color .2s}.goal-calendar .goal-task-item.is-complete{border-color:color-mix(in srgb,var(--g-a,var(--c-wine)) 24%,var(--g-border,var(--c-border)));background:color-mix(in srgb,var(--g-a,var(--c-wine)) 4%,var(--g-surface,var(--c-surface)))}.goal-calendar .goal-task-item input{cursor:pointer;accent-color:var(--g-a,var(--c-wine));border-radius:5px}.goal-calendar .goal-task-item input:focus-visible{outline:2px solid var(--g-a,var(--c-wine));outline-offset:3px}.goal-calendar.goal-dialog .goal-task-title{min-height:32px;padding:5px 6px;text-align:left;font-weight:600;border:1px solid var(--g-border,var(--c-border));border-radius:7px;background:var(--g-bg,var(--c-bg));transition:background .15s,border-color .15s}.goal-calendar.goal-dialog .goal-task-title:hover{background:var(--g-track,var(--c-surface));border-color:var(--g-a,var(--c-wine));box-shadow:none}.goal-calendar.goal-dialog .goal-task-title[aria-pressed=true]{color:var(--g-muted,var(--c-muted));text-decoration:line-through;text-decoration-thickness:1px;border-color:transparent;background:transparent}.goal-calendar.goal-dialog .goal-task-edit{align-self:flex-start;min-width:28px;border:1px solid var(--g-border,var(--c-border));background:var(--g-bg,var(--c-bg));color:var(--g-a,var(--c-wine));font-weight:800;letter-spacing:1px}.goal-calendar .goal-task-item small{margin-top:4px;padding-left:6px}.goal-calendar .goal-task-item[data-motion=done]{animation:goalTaskDone .42s cubic-bezier(.2,.8,.2,1)}.goal-calendar .goal-task-item[data-motion=undo]{animation:goalTaskUndo .42s cubic-bezier(.2,.8,.2,1)}.goal-calendar .goal-task-item[data-motion] input{animation:goalTaskCheck .38s ease-out}
+@keyframes goalTaskDone{0%{transform:translateY(-7px) scale(.98);box-shadow:0 0 0 3px color-mix(in srgb,var(--g-a,var(--c-wine)) 28%,transparent);opacity:.7}60%{transform:translateY(1px) scale(1)}100%{transform:none;box-shadow:0 0 0 0 transparent;opacity:1}}@keyframes goalTaskUndo{0%{transform:translateY(7px) scale(.98);box-shadow:0 0 0 3px color-mix(in srgb,var(--g-a,var(--c-wine)) 18%,transparent);opacity:.7}100%{transform:none;box-shadow:0 0 0 0 transparent;opacity:1}}@keyframes goalTaskCheck{0%{transform:scale(.8)}55%{transform:scale(1.2)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.goal-calendar .goal-task-item,.goal-calendar .goal-task-item[data-motion],.goal-calendar .goal-task-item[data-motion] input,.goal-calendar.goal-dialog .goal-task-title{animation:none;transition:none}}
 @media(max-width:700px){.goal-calendar .goal-days{display:flex;overflow:auto;gap:4px;margin-bottom:12px}.goal-days button{min-width:62px;padding:7px!important}.goal-days small{display:block;font-size:.6rem}.goal-week-columns{display:block;overflow:visible}.goal-week-columns>.goal-day-column{display:none}.goal-week-columns>.selected-day{display:block}.goal-calendar .goal-task-item{flex-wrap:nowrap}.goal-calendar .goal-task-item>div{flex:1}}
 `}</style>
   </div>;

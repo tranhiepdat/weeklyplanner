@@ -144,7 +144,7 @@ test('goal detail follows selected week, includes current done state, and all da
  await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
  await expect(dialog.getByText(/Tổng liên kết: 24/)).toBeVisible();
  await expect(dialog.getByRole('button',{name:/Past 00/,exact:true})).toHaveCount(0);
- await dialog.getByRole('button',{name:'Tất cả',exact:true}).click();
+ await dialog.getByRole('navigation',{name:'Lọc task liên kết'}).getByRole('button',{name:'Tất cả',exact:true}).click();
  await expect(dialog.locator('.goal-task-item')).toHaveCount(20);
  await dialog.getByRole('button',{name:'Xem thêm',exact:true}).click();
  await expect(dialog.locator('.goal-task-item')).toHaveCount(24);
@@ -333,15 +333,18 @@ test('chat retries only failed creation without asking AI or duplicating success
 });
 
 
-test('Manage shows every goal and its metrics together with styled edit actions',async({browser})=>{
+test('Manage defaults to active goals with compact cards and explicit actions',async({browser})=>{
  const s=fixture();s.goals.push({...s.goals[0],id:'history',uid:'history',title:'Accomplished',status:'achieved',achievedAt:'2026-09-01',milestones:[{id:'hm',text:'Finished step',done:true}]});
  const d=await device(browser,s),p=d.page;
  await p.getByRole('button',{name:'Manage',exact:true}).click();
  const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
- await expect(m.locator('.goal-summary-card')).toHaveCount(3);
- await expect(m.getByRole('progressbar')).toHaveCount(3);
- await expect(m.locator('.summary-metrics')).toHaveCount(3);
- await expect(m.getByText('Finished step',{exact:true})).toBeVisible();
+ await expect(m.locator('.goal-summary-card')).toHaveCount(2);
+ await expect(m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'Đang theo đuổi',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(m.getByRole('progressbar')).toHaveCount(2);
+ await expect(m.locator('.summary-metrics')).toHaveCount(2);
+ expect((await m.boundingBox()).width).toBeLessThanOrEqual(800);
+ expect((await m.boundingBox()).height).toBeLessThan(760);
+ await expect(m.getByText('Accomplished',{exact:true})).toHaveCount(0);
  await p.screenshot({animations:'disabled',path:'test-results/all-goals-desktop.png'});
  await p.setViewportSize({width:390,height:844});
  await p.screenshot({animations:'disabled',path:'test-results/all-goals-mobile.png'});
@@ -350,9 +353,39 @@ test('Manage shows every goal and its metrics together with styled edit actions'
  await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft');
  await m.getByRole('button',{name:'▦ Tổng quan Goals',exact:true}).click();
  await m.getByRole('button',{name:'Bỏ thay đổi',exact:true}).click();
- await expect(m.locator('.goal-summary-card')).toHaveCount(3);
+ await expect(m.locator('.goal-summary-card')).toHaveCount(2);
  expect(s.goals[0].title).toBe('Learn');
  await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'History',exact:true}).click();
  await expect(m.locator('.goal-summary-card')).toHaveCount(1);
+ await m.locator('summary').click();
+ await expect(m.getByText('Finished step',{exact:true})).toBeVisible();
+ await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'Tất cả',exact:true}).click();
+ await expect(m.locator('.goal-summary-card')).toHaveCount(3);
  expect(d.errors).toEqual([]);await d.context.close();
+});
+
+
+test('Goal task done and undo animate immediately, keep focus and respect reduced motion',async({browser})=>{
+ const s=fixture(),d=await device(browser,s),p=d.page;
+ await p.locator('.wp-goal-row').first().click();
+ const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+ const row=m.locator('[data-goal-task="task-a"]');
+ const checkbox=m.getByRole('checkbox',{name:'Hoàn thành Review proposal',exact:true});
+ await expect(row.locator('.goal-task-title')).toHaveCSS('border-top-style','solid');
+ await expect(row.locator('.goal-task-edit')).toHaveCSS('cursor','pointer');
+ let release;s.delayedWrite=new Promise(r=>release=r);
+ await checkbox.focus();await checkbox.press('Space');
+ await expect(row).toHaveAttribute('data-motion','done');
+ await expect(checkbox).toBeChecked();await expect(checkbox).toBeFocused();
+ expect(s.tasks[0].done).toBe(false);
+ await checkbox.press('Space');
+ await expect(row).toHaveAttribute('data-motion','undo');await expect(checkbox).not.toBeChecked();
+ release();await expect.poll(()=>s.requests.filter(r=>r.path==='/api/update').length).toBe(2);
+ await p.clock.fastForward(500);await expect(row).not.toHaveAttribute('data-motion',/done|undo/);
+ await p.emulateMedia({reducedMotion:'reduce'});await checkbox.check();
+ await expect(row).toHaveCSS('animation-name','none');
+ await expect.poll(()=>s.tasks[0].done).toBe(true);
+ await m.getByRole('button',{name:'Sửa Review proposal',exact:true}).click();
+ await expect(p.getByRole('dialog',{name:'Chi tiết task',exact:true})).toBeVisible();
+ expect(s.tasks[0].done).toBe(true);expect(d.errors).toEqual([]);await d.context.close();
 });
