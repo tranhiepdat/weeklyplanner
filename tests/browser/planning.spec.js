@@ -234,9 +234,9 @@ test('one management screen edits goals inline and preserves drafts during polli
  await expect(p.getByRole('dialog')).toHaveCount(1);
  await manager.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
  await expect(manager.getByRole('textbox',{name:'Tên Goal',exact:true})).toBeVisible();
- await p.screenshot({path:'test-results/goal-management-desktop.png'});
+ await p.screenshot({animations:'disabled',path:'test-results/goal-management-desktop.png'});
  await p.setViewportSize({width:390,height:844});
- await p.screenshot({path:'test-results/goal-management-mobile.png'});
+ await p.screenshot({animations:'disabled',path:'test-results/goal-management-mobile.png'});
  await manager.getByRole('button',{name:'＋ Tạo Goal',exact:true}).click();
  await manager.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('New Goal');
  await manager.getByRole('textbox',{name:'Milestone 1',exact:true}).fill('First step');
@@ -270,7 +270,7 @@ test('goal draft guard, milestone progress, achievement and mobile days',async({
  await expect(m.locator('.goal-week-columns>.goal-day-column:visible')).toHaveCount(1);
  await m.getByRole('navigation',{name:'Chọn ngày'}).getByRole('button').nth(1).click();
  await expect(m.locator('.selected-day')).toContainText('Thứ 3');
- await p.screenshot({path:'test-results/goal-achieved-mobile.png'});
+ await p.screenshot({animations:'disabled',path:'test-results/goal-achieved-mobile.png'});
  await d.context.close();
 });
 
@@ -299,7 +299,7 @@ test('workspace themes and task save bar fit mobile viewport',async({browser})=>
   await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft title');
   const box=await m.boundingBox();expect(box.width).toBeLessThanOrEqual(390);
   await expect(m.getByRole('button',{name:'Lưu thay đổi',exact:true})).toBeInViewport();
-  await p.screenshot({path:`test-results/goals-${key}-mobile.png`});
+  await p.screenshot({animations:'disabled',path:`test-results/goals-${key}-mobile.png`});
   await m.getByRole('button',{name:'Hủy',exact:true}).click();await m.getByRole('button',{name:'Đóng',exact:true}).click();
  }
  await p.getByRole('button',{name:'📋 Kế hoạch',exact:true}).click();
@@ -308,6 +308,24 @@ test('workspace themes and task save bar fit mobile viewport',async({browser})=>
  await expect(t.getByRole('button',{name:'Đóng',exact:true})).toBeInViewport();
  await p.setViewportSize({width:390,height:500});await p.clock.fastForward(500);
  await expect(t.getByRole('button',{name:'Đóng',exact:true})).toBeInViewport();
- await p.screenshot({path:'test-results/task-small-viewport.png'});
+ await p.screenshot({animations:'disabled',path:'test-results/task-small-viewport.png'});
+ await d.context.close();
+});
+
+test('chat retries only failed creation without asking AI or duplicating successful tasks',async({browser})=>{
+ const s=fixture(),d=await device(browser,s),p=d.page;let failed=true;const creates=[];
+ await d.context.route('**/api/chat',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({reply:'OK',tasks:[{name:'First',date:'2026-09-07'},{name:'Second',date:'2026-09-07'}]})}));
+ await d.context.route('**/api/create',async route=>{
+  const body=route.request().postDataJSON();creates.push(body);
+  if(body.name==='First'&&failed)return route.fulfill({status:503,contentType:'application/json',body:'{"error":"Save unavailable"}'});
+  const t={...s.tasks[0],...body,id:body.name};s.tasks.push(t);
+  return route.fulfill({contentType:'application/json',body:JSON.stringify({id:t.id,task:t})});
+ });
+ await p.getByTitle('Chat tạo việc với AI',{exact:true}).click();await p.getByPlaceholder('Nói việc cần thêm…').fill('Two tasks');await p.getByRole('button',{name:'Gửi',exact:true}).click();
+ await expect(p.getByText(/Một số thay đổi chưa lưu được/)).toBeVisible();
+ expect(s.tasks.filter(t=>t.name==='Second')).toHaveLength(1);expect(s.tasks.filter(t=>t.name==='First')).toHaveLength(0);
+ failed=false;await p.getByRole('button',{name:'Thử lưu lại',exact:true}).last().click();
+ await expect.poll(()=>s.tasks.filter(t=>t.name==='First').length).toBe(1);
+ expect(creates.map(t=>t.name)).toEqual(['First','Second','First']);expect(creates[0].clientRequestId).toBe(creates[2].clientRequestId);
  await d.context.close();
 });

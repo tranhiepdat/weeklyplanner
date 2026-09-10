@@ -3533,7 +3533,7 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
         {/* Handle bar */}
         <div style={{ width: 40, height: 4, background: "var(--c-border)", borderRadius: 2, margin: "0 auto 18px" }} />
 
-        <header style={{flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:12}}><b>Chi tiết task</b><button aria-label="Đóng chi tiết task" disabled={saving} onClick={()=>requestClose(onClose)}>×</button></header>
+        <header style={{flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:12}}><b>Chi tiết task</b><button style={{width:36,height:36,borderRadius:10,border:"1px solid var(--c-border)",background:"var(--c-surface)",color:"var(--c-ink)",cursor:"pointer"}} aria-label="Đóng chi tiết task" disabled={saving} onClick={()=>requestClose(onClose)}>×</button></header>
         <div style={{overflowY:"auto",minHeight:0,flex:1,paddingRight:4}}>
         {/* Name */}
         <div style={{ marginBottom: 18 }}>
