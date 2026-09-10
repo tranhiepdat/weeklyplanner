@@ -74,10 +74,10 @@ export function GoalPicker({entry}) {
   </Dialog>;
 }
 export function GoalDetail({entry,active,embedded=false}) {
-  const p=usePlanner(),[filter,setFilter]=useState('week'),[limit,setLimit]=useState(20),[day,setDay]=useState(0),[failure,setFailure]=useState(null);
+  const p=usePlanner(),[filter,setFilter]=useState('week'),[limit,setLimit]=useState(20),[day,setDay]=useState(-1),[failure,setFailure]=useState(null);
   const [motion,setMotion]=useState({}), rowsRef=useRef(null), actions=useRef(new Map()), timers=useRef(new Map()), focusAfterMove=useRef(null);
   const goal=p.goals.find(g=>g.uid===entry.goalId),[start,end]=selectedWeekBounds(p.weekMonday);
-  useEffect(()=>{setLimit(20);setDay(0);},[filter,start,entry.goalId]);
+  useEffect(()=>{setLimit(20);setDay(-1);},[filter,start,entry.goalId]);
   useEffect(()=>()=>{for(const timer of timers.current.values())clearTimeout(timer);},[]);
   useEffect(()=>{
     const target=focusAfterMove.current;
@@ -113,10 +113,10 @@ export function GoalDetail({entry,active,embedded=false}) {
     <header><h3>Task liên kết</h3><small>Tổng liên kết: {all.length} · {all.filter(t=>t.done).length} đã xong</small></header>
     <div className="goal-task-toolbar"><span>Tuần đang xem · {start} – {end}</span>
     <nav aria-label="Lọc task liên kết"><button aria-pressed={filter==='week'} onClick={()=>setFilter('week')}>Tuần đang xem</button><button aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>Tất cả</button></nav>
-    <span>{visible.length} task · {visible.filter(t=>t.done).length} đã xong</span></div>
+    <span>{visible.length} task · {visible.filter(t=>!t.done).length} chưa xong · {visible.filter(t=>t.done).length} đã xong</span></div>
     {failure&&<p role="alert">Chưa lưu được trạng thái task. <button onClick={()=>toggle(failure.id,failure.done)}>Thử lại</button></p>}
-    {filter==='week'&&<nav className="goal-days" aria-label="Chọn ngày">{dates.map((d,i)=><button key={d} aria-pressed={day===i} onClick={()=>setDay(i)}>{i===6?'CN':`T${i+2}`}<small>{label(d)} · {visible.filter(t=>t.date===d).length}</small></button>)}</nav>}
-    <div ref={rowsRef} className={filter==='week'?'goal-week-columns':'goal-all-days'}>{groups.map((d,i)=>{
+    {filter==='week'&&<nav className="goal-days" aria-label="Chọn ngày"><button aria-pressed={day===-1} onClick={()=>setDay(-1)}>Cả tuần<small>{visible.filter(t=>!t.done).length} chưa xong</small></button>{dates.map((d,i)=><button key={d} aria-pressed={day===i} onClick={()=>setDay(i)}>{i===6?'CN':`T${i+2}`}<small>{label(d)} · {visible.filter(t=>t.date===d).length}</small></button>)}</nav>}
+    <div ref={rowsRef} className={filter==='week'?`goal-week-columns${day===-1?' show-whole-week':''}`:'goal-all-days'}>{groups.map((d,i)=>{
       const tasks=displayed.filter(t=>(t.date||'')===d);
       return <section key={d} className={`goal-day-column ${day===i?'selected-day':''}`}><header><b>{filter==='week'?(i===6?'Chủ nhật':`Thứ ${i+2}`):''} {label(d)}</b><small>{tasks.filter(t=>t.done).length}/{tasks.length} đã xong</small></header>
       {!tasks.length&&<p className="goal-day-empty">Chưa có task</p>}{[false,true].map(done=>{const group=tasks.filter(t=>!!t.done===done);if(!group.length)return null;return <div key={String(done)} className="goal-task-group"><h4>{done?'Đã xong':'Chưa xong'} · {group.length}</h4>{!group.length&&<p className="goal-day-empty">{done?'Chưa có task hoàn thành':'Không có task'}</p>}{group.map(t=><div className={`goal-task-item task-row ${reduced?'':motion[t.id]==='done'?'task-rainbow':motion[t.id]==='settling'?'task-settle':motion[t.id]==='undo'?'task-unpop':''}${t.done?' is-complete':''}`} data-goal-task={t.id} data-motion={motion[t.id]} key={t.id}>
@@ -130,7 +130,7 @@ export function GoalDetail({entry,active,embedded=false}) {
 .goal-calendar .goal-task-item{transition:background .2s,border-color .2s}.goal-calendar .goal-task-item.is-complete{border-color:color-mix(in srgb,var(--g-a,var(--c-wine)) 24%,var(--g-border,var(--c-border)));background:color-mix(in srgb,var(--g-a,var(--c-wine)) 4%,var(--g-surface,var(--c-surface)))}.goal-calendar .goal-task-item input{cursor:pointer;accent-color:var(--g-a,var(--c-wine));border-radius:5px}.goal-calendar .goal-task-item input:focus-visible{outline:2px solid var(--g-a,var(--c-wine));outline-offset:3px}.goal-calendar.goal-dialog .goal-task-title{min-height:32px;padding:5px 6px;text-align:left;font-weight:600;border:1px solid var(--g-border,var(--c-border));border-radius:7px;background:var(--g-bg,var(--c-bg));transition:background .15s,border-color .15s}.goal-calendar.goal-dialog .goal-task-title:hover{background:var(--g-track,var(--c-surface));border-color:var(--g-a,var(--c-wine));box-shadow:none}.goal-calendar.goal-dialog .goal-task-title[aria-pressed=true]{color:var(--g-muted,var(--c-muted));text-decoration:line-through;text-decoration-thickness:1px;border-color:transparent;background:transparent}.goal-calendar.goal-dialog .goal-task-edit{align-self:flex-start;min-width:28px;border:1px solid var(--g-border,var(--c-border));background:var(--g-bg,var(--c-bg));color:var(--g-a,var(--c-wine));font-weight:800;letter-spacing:1px}.goal-calendar .goal-task-item small{margin-top:4px;padding-left:6px}
 .goal-calendar .goal-task-item>.check{flex:0 0 18px;min-width:18px;margin:6px 3px 0 0;cursor:pointer}.goal-calendar .check:focus-visible{outline:2px solid var(--g-a);outline-offset:3px}.goal-calendar.goal-dialog .goal-task-title{background:transparent;border-color:transparent;box-shadow:none;padding:3px 0}.goal-calendar .task-rainbow .goal-task-title{text-decoration:none}.goal-calendar .task-rainbow::before{pointer-events:none}
 @media(prefers-reduced-motion:reduce){.goal-calendar .task-row,.goal-calendar .task-row::before{animation:none!important;transition:none!important}.goal-calendar .task-rainbow::before{display:none}}
-@media(max-width:700px){.goal-calendar .goal-days{display:flex;overflow:auto;gap:4px;margin-bottom:12px}.goal-days button{min-width:62px;padding:7px!important}.goal-days small{display:block;font-size:.6rem}.goal-week-columns{display:block;overflow:visible}.goal-week-columns>.goal-day-column{display:none}.goal-week-columns>.selected-day{display:block}.goal-calendar .goal-task-item{flex-wrap:nowrap}.goal-calendar .goal-task-item>div{flex:1}}
+@media(max-width:700px){.goal-calendar .goal-days{display:flex;overflow:auto;gap:4px;margin-bottom:12px}.goal-days button{min-width:62px;padding:7px!important}.goal-days small{display:block;font-size:.6rem}.goal-week-columns{display:block;overflow:visible}.goal-week-columns>.goal-day-column{display:none}.goal-week-columns>.selected-day,.goal-week-columns.show-whole-week>.goal-day-column{display:block}.goal-week-columns.show-whole-week{display:grid;gap:10px}.goal-calendar .goal-task-item{flex-wrap:nowrap}.goal-calendar .goal-task-item>div{flex:1}}
 `}</style>
   </div>;
 }

@@ -82,6 +82,6 @@ export default function GoalWorkspaceStyles() {
 }
 
 .goal-workspace .goal-task-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:8px 0 12px;font-size:.72rem;color:var(--g-muted)}.goal-workspace .goal-task-toolbar nav{order:-1;margin:0}.goal-workspace .goal-task-toolbar>span:last-child{margin-left:auto}.goal-workspace .goal-week-columns{align-items:start}.goal-workspace .goal-day-empty{margin:10px 0 2px}
-@media(prefers-reduced-motion:reduce){.goal-workspace button,.goal-workspace .milestone-track i{transition:none}.goal-achievement.celebrate{animation:none}}
+@media(prefers-reduced-motion:reduce){.goal-workspace summary{animation:none!important;transition:none!important}.goal-workspace button,.goal-workspace .milestone-track i{transition:none}.goal-achievement.celebrate{animation:none}}
 `}</style>;
 }

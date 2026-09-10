@@ -2304,9 +2304,9 @@ export default function Home() {
   // a timeout fallback (hover animations can preempt the press animation entirely).
   useEffect(() => {
     const onDown = (e) => {
-      const el = e.target.closest && e.target.closest("button, .check");
-      if (!el || el.disabled) return;
-      if (el.tagName === "BUTTON") playClick(el.dataset.sfx || "tick"); // .check plays its own toggle sound
+      const el = e.target.closest && e.target.closest("button, .check, summary, [role=button]");
+      if (!el || el.disabled || el.getAttribute("aria-disabled")==="true") return;
+      if (!el.matches(".check")) playClick(el.dataset.sfx || "tick"); // .check plays its own toggle sound
       el.classList.remove("btn-press");
       // force reflow so the animation can retrigger on rapid taps
       void el.offsetWidth;
@@ -2323,7 +2323,9 @@ export default function Home() {
       el.addEventListener("animationcancel", done);
       tid = setTimeout(() => done(), 700);
     };
-    document.addEventListener("pointerdown", onDown);
+    const onKey = e => { if (!e.repeat && (e.key === "Enter" || e.key === " ")) onDown(e); };
+    document.addEventListener("pointerdown", onDown, true);
+    document.addEventListener("keydown", onKey);
     // hover whisper — desktop only; play once per control entered (not per child)
     const canHover = typeof window.matchMedia === "function" && window.matchMedia("(hover:hover) and (pointer:fine)").matches;
     const onOver = (e) => {
@@ -2336,7 +2338,8 @@ export default function Home() {
     };
     if (canHover) document.addEventListener("pointerover", onOver);
     return () => {
-      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("keydown", onKey);
       if (canHover) document.removeEventListener("pointerover", onOver);
     };
   }, []);

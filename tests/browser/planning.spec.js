@@ -267,9 +267,9 @@ test('goal draft guard, milestone progress, achievement and mobile days',async({
  expect(s.goals[0].status).toBe('achieved');
  await expect(m.locator('.goal-day-column')).toHaveCount(7);
  await p.setViewportSize({width:390,height:844});
- await expect(m.locator('.goal-week-columns>.goal-day-column:visible')).toHaveCount(1);
- await m.getByRole('navigation',{name:'Chọn ngày'}).getByRole('button').nth(1).click();
- await expect(m.locator('.selected-day')).toContainText('Thứ 3');
+ await expect(m.locator('.goal-week-columns>.goal-day-column:visible')).toHaveCount(7);
+ await m.getByRole('navigation',{name:'Chọn ngày'}).getByRole('button').nth(2).click();
+ await expect(m.locator('.selected-day')).toContainText('Thứ 3');await expect(m.locator('.goal-week-columns>.goal-day-column:visible')).toHaveCount(1);
  await p.screenshot({animations:'disabled',path:'test-results/goal-achieved-mobile.png'});
  await d.context.close();
 });
@@ -395,4 +395,25 @@ test('Goal task done and undo animate immediately, keep focus and respect reduce
  await m.getByRole('button',{name:'Sửa Review proposal',exact:true}).click();
  await expect(p.getByRole('dialog',{name:'Chi tiết task',exact:true})).toBeVisible();
  expect(s.tasks[0].done).toBe(true);expect(d.errors).toEqual([]);await d.context.close();
+});
+
+
+test('mobile Manage shows unfinished tasks across the week and themed keyboard feedback',async({browser})=>{
+ const s=fixture();s.tasks.push({...s.tasks[0],id:'friday',name:'Friday unfinished',date:'2026-09-11',done:false},{...s.tasks[0],id:'sunday',name:'Sunday finished',date:'2026-09-13',done:true});
+ const d=await device(browser,s,true),p=d.page;
+ await p.getByTitle('Đổi giao diện',{exact:true}).click();await p.getByRole('button',{name:/🧸 Cozy/}).click();await p.clock.fastForward(1000);
+ await p.getByRole('button',{name:'📊 Biểu đồ',exact:true}).click();await p.locator('.wp-goal-row').first().click();
+ const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+ await expect(m.getByRole('button',{name:/Cả tuần/})).toHaveAttribute('aria-pressed','true');
+ await expect(m.getByRole('button',{name:'Hoàn thành Friday unfinished',exact:true})).toBeVisible();
+ await expect(m.getByRole('button',{name:'Bỏ hoàn thành Sunday finished',exact:true})).toBeVisible();
+ await expect(m.locator('.goal-task-toolbar')).toContainText('3 task · 2 chưa xong · 1 đã xong');
+ const week=m.getByRole('navigation',{name:'Lọc task liên kết'}).getByRole('button',{name:'Tuần đang xem',exact:true});
+ await week.focus();await week.press('Enter');await expect(week).toHaveClass(/btn-press/);await expect(week).toHaveCSS('animation-name','doughPress');
+ await p.clock.fastForward(800);await expect(week).not.toHaveClass(/btn-press/);
+ await m.getByRole('button',{name:'▦ Tổng quan Goals',exact:true}).click();
+ const disclosure=m.locator('summary').first();await disclosure.focus();await disclosure.press('Enter');
+ await expect(disclosure).toHaveClass(/btn-press/);await expect(disclosure).toHaveCSS('animation-name','doughPress');
+ await p.emulateMedia({reducedMotion:'reduce'});await disclosure.press('Enter');await expect(disclosure).toHaveCSS('animation-name','none');
+ expect(d.errors).toEqual([]);await d.context.close();
 });
