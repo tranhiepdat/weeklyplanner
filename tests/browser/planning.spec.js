@@ -33,6 +33,7 @@ function fixture() {
     else if(path==='/api/chat')data={reply:'Added',tasks:[{name:'New chat task',date:'2026-09-07',tier:'must'}]};
     else if(path==='/api/goal-link')data={matches:[{goalId:'g1',confidence:.9}]};
     else if(path==='/api/create'){
+      if(delayedWrite)await delayedWrite;
       const t={...tasks[0],...body,id:'chat-new',done:false};tasks.push(t);data={id:t.id,task:clone(t)};
     }
     else if(path==='/api/delete'){const index=tasks.findIndex(t=>t.id===body.id);if(index>=0)tasks.splice(index,1);data={ok:true};}
@@ -141,13 +142,13 @@ test('goal detail follows selected week, includes current done state, and all da
  await p.locator('.wp-goal-row').first().click();
  const dialog=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
  await expect(dialog.getByRole('heading',{name:'Chưa xong · 1',exact:true})).toBeVisible();
- await expect(dialog.getByText('Tổng liên kết: 24',{exact:true})).toBeVisible();
+ await expect(dialog.getByText(/Tổng liên kết: 24/)).toBeVisible();
  await expect(dialog.getByRole('button',{name:/Past 00/,exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'Tất cả',exact:true}).click();
- await expect(dialog.getByRole('button',{name:'Hoàn thành No date',exact:true})).toBeVisible();
- await expect(dialog.locator('.goal-task-item')).toHaveCount(22);
+ await expect(dialog.locator('.goal-task-item')).toHaveCount(20);
  await dialog.getByRole('button',{name:'Xem thêm',exact:true}).click();
  await expect(dialog.locator('.goal-task-item')).toHaveCount(24);
+ await expect(dialog.getByRole('button',{name:'Hoàn thành No date',exact:true})).toBeVisible();
  await dialog.getByRole('button',{name:'Đóng',exact:true}).click();
  await p.getByTitle('Tuần trước',{exact:true}).first().click();
  await expect(p.locator('.wp-goal-row').first()).toContainText('2026-08-31 – 2026-09-06: 22/22');
@@ -227,26 +228,86 @@ test('one management screen edits goals inline and preserves drafts during polli
  const s=fixture(),d=await device(browser,s),p=d.page;
  await p.locator('.wp-goal-row').first().click();
  const manager=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
- await manager.getByRole('button',{name:'Sửa Goal',exact:true}).click();
- await manager.getByPlaceholder('Lấy bằng C1').fill('Learn updated');
+ await manager.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Learn updated');
  await p.clock.fastForward(15001);
- await expect(manager.getByPlaceholder('Lấy bằng C1')).toHaveValue('Learn updated');
+ await expect(manager.getByRole('textbox',{name:'Tên Goal',exact:true})).toHaveValue('Learn updated');
  await expect(p.getByRole('dialog')).toHaveCount(1);
  await manager.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
- await expect(manager.getByRole('heading',{name:'Learn updated',exact:true})).toBeVisible();
+ await expect(manager.getByRole('textbox',{name:'Tên Goal',exact:true})).toBeVisible();
  await p.screenshot({path:'test-results/goal-management-desktop.png'});
  await p.setViewportSize({width:390,height:844});
  await p.screenshot({path:'test-results/goal-management-mobile.png'});
  await manager.getByRole('button',{name:'＋ Tạo Goal',exact:true}).click();
- await manager.getByRole('button',{name:'Manual',exact:true}).click();
- await manager.getByPlaceholder('Lấy bằng C1').fill('New Goal');
- await manager.getByPlaceholder('Milestone 1',{exact:true}).fill('First step');
- await manager.getByRole('button',{name:'Tạo goal',exact:true}).click();
- await expect(manager.getByRole('heading',{name:'New Goal',exact:true})).toBeVisible();
+ await manager.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('New Goal');
+ await manager.getByRole('textbox',{name:'Milestone 1',exact:true}).fill('First step');
+ await manager.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
+ await expect(manager.getByRole('textbox',{name:'Tên Goal',exact:true})).toBeVisible();
  await expect(p.getByRole('dialog')).toHaveCount(1);
  expect(s.goals[0].title).toBe('Learn updated');
  await manager.getByRole('button',{name:'Đóng',exact:true}).click();
  await expect(p.locator('.goal-tag').first()).toContainText('Learn updated');
  await p.locator('.goal-tag').first().click();expect(s.tasks[0].done).toBe(false);
  expect(d.errors).toEqual([]);await d.context.close();
+});
+
+
+test('goal draft guard, milestone progress, achievement and mobile days',async({browser})=>{
+ const s=fixture(),d=await device(browser,s),p=d.page;
+ await p.locator('.wp-goal-row').first().click();
+ const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+ await m.getByRole('checkbox',{name:'Hoàn thành milestone 1',exact:true}).check();
+ await expect(m.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
+ expect(s.goals[0].milestones[0].done).toBe(false);
+ await m.getByRole('button',{name:'Đóng',exact:true}).click();
+ await m.getByRole('button',{name:'Ở lại',exact:true}).click();
+ await m.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
+ await expect(m.getByRole('button',{name:'Đánh dấu đạt Goal',exact:true})).toBeVisible();
+ await m.getByRole('button',{name:'Đánh dấu đạt Goal',exact:true}).click();
+ await expect(m.getByText('🏆 Bạn đã làm được!',{exact:true})).toBeVisible();
+ expect(s.goals[0].status).toBe('achieved');
+ await expect(m.locator('.goal-day-column')).toHaveCount(7);
+ await p.setViewportSize({width:390,height:844});
+ await expect(m.locator('.goal-week-columns>.goal-day-column:visible')).toHaveCount(1);
+ await m.getByRole('navigation',{name:'Chọn ngày'}).getByRole('button').nth(1).click();
+ await expect(m.locator('.selected-day')).toContainText('Thứ 3');
+ await p.screenshot({path:'test-results/goal-achieved-mobile.png'});
+ await d.context.close();
+});
+
+
+test('chat shows pending response before Notion finishes and sends compact context',async({browser})=>{
+ const s=fixture(),d=await device(browser,s),p=d.page;
+ let release; s.delayedWrite=new Promise(r=>release=r);
+ await p.getByTitle('Chat tạo việc với AI',{exact:true}).click();
+ await p.getByPlaceholder('Nói việc cần thêm…').fill('Add for Build');
+ await p.getByRole('button',{name:'Gửi',exact:true}).click();
+ await expect(p.getByText(/Đã hiểu yêu cầu. Đang lưu…/)).toBeVisible();
+ expect(s.tasks).toHaveLength(1);
+ const request=s.requests.find(r=>r.path==='/api/chat');
+ expect(request.body.tasks).toBeUndefined();expect(request.body.context.version).toBe(1);
+ release();await expect(p.getByText(/✅ Đã thêm 1 việc/)).toBeVisible();
+ expect(s.tasks).toHaveLength(2);await d.context.close();
+});
+
+test('workspace themes and task save bar fit mobile viewport',async({browser})=>{
+ const s=fixture(),d=await device(browser,s,true),p=d.page;
+ await p.getByRole('button',{name:'📊 Biểu đồ',exact:true}).click();
+ for(const [key,label] of [['light','✝️ Sacred'],['dark','🕹️ Cyber'],['cozy','🧸 Cozy'],['cutie','🎨 Cutie'],['nature','🌿 Nature']]){
+  await p.getByTitle('Đổi giao diện',{exact:true}).click();await p.getByRole('button',{name:new RegExp(label)}).click();await p.clock.fastForward(1000);
+  await p.locator('.wp-goal-row').first().click();
+  const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+  await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft title');
+  const box=await m.boundingBox();expect(box.width).toBeLessThanOrEqual(390);
+  await expect(m.getByRole('button',{name:'Lưu thay đổi',exact:true})).toBeInViewport();
+  await p.screenshot({path:`test-results/goals-${key}-mobile.png`});
+  await m.getByRole('button',{name:'Hủy',exact:true}).click();await m.getByRole('button',{name:'Đóng',exact:true}).click();
+ }
+ await p.getByRole('button',{name:'📋 Kế hoạch',exact:true}).click();
+ await detail(p);
+ const t=p.getByRole('dialog',{name:'Chi tiết task',exact:true});
+ await expect(t.getByRole('button',{name:'Đóng',exact:true})).toBeInViewport();
+ await p.setViewportSize({width:390,height:500});await p.clock.fastForward(500);
+ await expect(t.getByRole('button',{name:'Đóng',exact:true})).toBeInViewport();
+ await p.screenshot({path:'test-results/task-small-viewport.png'});
+ await d.context.close();
 });

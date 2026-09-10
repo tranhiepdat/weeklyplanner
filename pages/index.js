@@ -1,3 +1,4 @@
+import { compactChatContext } from "../lib/chat-context";
 import { GoalTag, GoalLinkButton, useDialogFocus } from "../components/GoalDialogs";
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
@@ -1810,13 +1811,14 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
     if (!text || busy) return;
     const next = [...msgs, { role: "user", content: text }];
     setMsgs(next); setInput(""); setBusy(true);
+    const timingStart=performance.now();
+    let pendingMessage;
     try {
       const r = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: next, today, weekDays,
-          // send existing tasks so the AI learns tag patterns + can reschedule by reference
-          tasks: (tasks || []).map(t => ({ id: t.id, name: t.name, date: t.date, taskType: t.taskType, project: t.project, done: t.done, tier: (taskTier || {})[t.id] === "must" ? "must" : undefined })),
+          context: compactChatContext(tasks, today, taskTier),
         }),
       });
       const d = await r.json();
@@ -1825,10 +1827,19 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
       const moved = Array.isArray(d.moves) ? d.moves : [];
       const doneItems = Array.isArray(d.dones) ? d.dones : [];
       const tierItems = Array.isArray(d.tiers) ? d.tiers : [];
-      if (created.length) await onCreateTasks(created);
-      if (moved.length && onMoveTasks && !await onMoveTasks(moved)) throw new Error("Một số việc chưa dời được. Dùng nút Thử lưu lại bên dưới.");
-      if (doneItems.length && onSetDone && !await onSetDone(doneItems)) throw new Error("Một số checkbox chưa lưu được. Dùng nút Thử lưu lại bên dưới.");
-      if (tierItems.length && onSetTier && !await onSetTier(tierItems)) throw new Error("Một số ưu tiên chưa lưu được. Dùng nút Thử lưu lại bên dưới.");
+      const hasActions=created.length||moved.length||doneItems.length||tierItems.length;
+      const aiMs=Math.round(performance.now()-timingStart), saveStarted=performance.now();
+      pendingMessage=crypto.randomUUID();
+      setMsgs(m=>[...m,{id:pendingMessage,role:"assistant",content:hasActions?"Đã hiểu yêu cầu. Đang lưu…\n"+[created.length?`Thêm: ${created.map(t=>t.name).join(", ")}`:"",moved.length?`Dời: ${moved.map(t=>t.name).join(", ")}`:"",doneItems.length?`Cập nhật hoàn thành: ${doneItems.map(t=>t.name).join(", ")}`:"",tierItems.length?`Ưu tiên: ${tierItems.map(t=>t.name).join(", ")}`:""].filter(Boolean).join("\n"):d.reply||"Bạn muốn mình giúp gì?",timing:{aiMs}}]);
+      const operations=[
+        created.length?()=>onCreateTasks(created):null,
+        moved.length&&onMoveTasks?()=>onMoveTasks(moved):null,
+        doneItems.length&&onSetDone?()=>onSetDone(doneItems):null,
+        tierItems.length&&onSetTier?()=>onSetTier(tierItems):null,
+      ].filter(Boolean);
+      let failed=false,linkMs=0;
+      for(const operation of operations){try{const result=await operation();if(result===false)failed=true;linkMs+=result?.linkMs||0;}catch{failed=true;}}
+      if(failed)throw new Error("Một số thay đổi chưa lưu được. Chỉ thử lại phần lỗi bằng nút Thử lưu lại bên dưới.");
       const parts = [];
       if (created.length) parts.push(`✅ Đã thêm ${created.length} việc: ${created.map(t => (t.tier === "must" ? "🔥 " : "") + t.name).join(", ")}`);
       if (moved.length) parts.push(`🔀 Đã dời ${moved.length} việc: ${moved.map(m => m.name).join(", ")}`);
@@ -1839,9 +1850,9 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
       if (musts.length) parts.push(`🔥 Đã đặt ưu tiên: ${musts.map(x => x.name).join(", ")}`);
       if (lows.length) parts.push(`💤 Đã hạ ưu tiên: ${lows.map(x => x.name).join(", ")}`);
       const note = parts.length ? "\n\n" + parts.join("\n") : "";
-      setMsgs(m => [...m, { role: "assistant", content: (d.reply || "Đã xong!") + note }]);
+      setMsgs(m => m.map(x=>x.id===pendingMessage?{...x,content:(d.reply||"Đã xong!")+note+(hasActions?"\nĐã lưu":""),timing:{aiMs,saveMs:Math.round(performance.now()-saveStarted-linkMs),linkMs:Math.round(linkMs)}}:x));
     } catch (e) {
-      setMsgs(m => [...m, { role: "assistant", content: e.message || "Có lỗi kết nối, thử lại nhé!" }]);
+      setMsgs(m => pendingMessage?m.map(x=>x.id===pendingMessage?{...x,content:e.message||"Chưa lưu được. Thử lại bên dưới."}:x):[...m,{role:"assistant",content:e.message||"Có lỗi kết nối, thử lại nhé!"}]);
     }
     setBusy(false);
   };
@@ -1855,8 +1866,9 @@ function ChatSheet({ onClose, onCreateTasks, onMoveTasks, onSetDone, onSetTier, 
         </div>
         <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
           {msgs.map((m, i) => (
-            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "82%", padding: "9px 13px", borderRadius: 14, whiteSpace: "pre-wrap", lineHeight: 1.45, fontSize: ".88rem", background: m.role === "user" ? wine : "var(--c-surface)", color: m.role === "user" ? "var(--c-on-accent)" : "var(--c-ink)", border: m.role === "user" ? "none" : "1px solid var(--c-border)" }}>
-              {m.content}
+            <div key={i} data-ai-ms={m.timing?.aiMs} data-save-ms={m.timing?.saveMs} data-goal-link-ms={m.timing?.linkMs} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "82%", padding: "9px 13px", borderRadius: 14, whiteSpace: "pre-wrap", lineHeight: 1.45, fontSize: ".88rem", background: m.role === "user" ? wine : "var(--c-surface)", color: m.role === "user" ? "var(--c-on-accent)" : "var(--c-ink)", border: m.role === "user" ? "none" : "1px solid var(--c-border)" }}>
+              <span>{m.content}</span>
+
             </div>
           ))}
           {busy && <div style={{ alignSelf: "flex-start", color: "var(--c-muted)", fontSize: ".85rem", fontStyle: "italic" }}>đang soạn…</div>}
@@ -3395,6 +3407,7 @@ export default function Home() {
           <ChatSheet
             onClose={() => setShowChat(false)}
             onCreateTasks={async items => {
+              const linkStarted=performance.now();
               let matches = [];
               const activeGoals = goals.filter(g => g.status === "active");
               if (activeGoals.length) {
@@ -3403,11 +3416,15 @@ export default function Home() {
                   if (response.ok) matches = (await response.json()).matches || [];
                 } catch {}
               }
+              const linkMs=performance.now()-linkStarted;
+              let failed=false;
               for (const [i, draft] of items.entries()) {
                 const goalId = matches[i]?.goalId;
                 const id = await createTask({ ...draft, ...(goalId ? { goalId } : {}), ...(draft.tier ? { planTier: draft.tier } : {}) });
-                if (!id) throw new Error("Chưa lưu được task. Hãy dùng nút thử lưu lại.");
+                if (!id) failed=true;
               }
+              if(failed)throw new Error("Chưa lưu được task. Hãy dùng nút thử lưu lại.");
+              return {linkMs};
             }}
             onMoveTasks={async moves => (await Promise.all(moves.map(m => updateTask(m.id, { date: m.date })))).every(Boolean)}
             onSetDone={async items => (await Promise.all(items.map(x => toggle(x.id, x.done !== false)))).every(Boolean)}
@@ -3446,6 +3463,14 @@ export default function Home() {
 }
 
 function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDelete, goals, goalsUnavailable }) {
+  const [viewportHeight,setViewportHeight]=useState(null);
+  useEffect(()=>{
+    const viewport=window.visualViewport;
+    const resize=()=>setViewportHeight(Math.min(window.innerHeight*.94,viewport?.height||window.innerHeight*.94));
+    resize();viewport?.addEventListener('resize',resize);window.addEventListener('resize',resize);
+    return()=>{viewport?.removeEventListener('resize',resize);window.removeEventListener('resize',resize);};
+  },[]);
+
   const planner = usePlanner();
   const deleted = planner.serverLoaded && !planner.tasks.some(t => t.id === task.id);
   const [goalId, setGoalId] = useState(task.goalId || "");
@@ -3502,12 +3527,14 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
     }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Chi tiết task" tabIndex={-1} onClick={e => e.stopPropagation()} className={`sheet ${closing ? "closing" : ""}`} style={{
         background: "var(--c-bg)", borderRadius: "20px 20px 0 0", padding: "20px 20px 28px",
-        width: "100%", maxWidth: 480, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
-        maxHeight: "85vh", overflowY: "auto",
+        width: "100%", maxWidth: 560, boxShadow: "0 -8px 30px rgba(122,74,74,.2)",
+        height: viewportHeight||"94dvh", maxHeight: "94dvh", overflow: "hidden", display:"flex", flexDirection:"column", padding:"16px 20px", boxSizing:"border-box",
       }}>
         {/* Handle bar */}
         <div style={{ width: 40, height: 4, background: "var(--c-border)", borderRadius: 2, margin: "0 auto 18px" }} />
 
+        <header style={{flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:12}}><b>Chi tiết task</b><button aria-label="Đóng chi tiết task" disabled={saving} onClick={()=>requestClose(onClose)}>×</button></header>
+        <div style={{overflowY:"auto",minHeight:0,flex:1,paddingRight:4}}>
         {/* Name */}
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -3647,23 +3674,6 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
         </div>
         {deleted && <p role="alert">Task đã bị xóa từ thiết bị khác. Đóng form để cập nhật danh sách.</p>}
         {saveError && <div role="alert" style={{ color: "#b45309", marginBottom: 12 }}>{saveError}</div>}
-        {/* Actions */}
-        <div style={{ display: "flex", gap: 10 }}>
-          <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
-            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
-            background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
-          }}>Hủy</button>
-          <button disabled={saving || deleted} data-sfx="confirm" onClick={async () => {
-            if (!dirty) { requestClose(onClose); return; }
-            setSaving(true); setSaveError("");
-            const ok = await onSave(patch);
-            if (!ok) { setSaveError("Chưa lưu được. Dữ liệu đang sửa vẫn được giữ; hãy thử lại."); setSaving(false); }
-          }} style={{
-            flex: 2, padding: "12px", borderRadius: 12, border: "none",
-            background: dirty ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
-          }}>{saving ? "Đang lưu…" : dirty ? "Lưu thay đổi" : "Đóng"}</button>
-        </div>
-
         {/* Delete */}
         <div style={{ marginTop: 12, textAlign: "center" }}>
           {!confirmDel ? (
@@ -3685,6 +3695,26 @@ function EditModal({ active, task, currentTier, weekDays, onClose, onSave, onDel
             </div>
           )}
         </div>
+        </div>
+        <footer style={{flexShrink:0,paddingTop:12,paddingBottom:"env(safe-area-inset-bottom)",borderTop:"1px solid var(--c-border)"}}>
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button data-sfx="soft" onClick={() => requestClose(onClose)} style={{
+            flex: 1, padding: "12px", borderRadius: 12, border: "1px solid var(--c-border)",
+            background: "var(--c-surface)", color: "var(--c-muted)", cursor: "pointer", fontWeight: 600, fontSize: ".9rem",
+          }}>Hủy</button>
+          <button disabled={saving || deleted} data-sfx="confirm" onClick={async () => {
+            if (!dirty) { requestClose(onClose); return; }
+            setSaving(true); setSaveError("");
+            const ok = await onSave(patch);
+            if (!ok) { setSaveError("Chưa lưu được. Dữ liệu đang sửa vẫn được giữ; hãy thử lại."); setSaving(false); }
+          }} style={{
+            flex: 2, padding: "12px", borderRadius: 12, border: "none",
+            background: dirty ? wine : "var(--c-muted2)", color: "var(--c-on-accent)", cursor: "pointer", fontWeight: 700, fontSize: ".9rem",
+          }}>{saving ? "Đang lưu…" : dirty ? "Lưu thay đổi" : "Đóng"}</button>
+        </div>
+
+        </footer>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { compactChatContext } from "../../lib/chat-context.js";
 // Chat-to-create-task assistant.
 // Model is overridable via AI_MODEL env. Default Claude Sonnet 4.6 — one tier
 // below Opus: noticeably cheaper/fewer tokens while staying very accurate at
@@ -61,20 +62,11 @@ export default async function handler(req, res) {
   }
 
   // Learn Dat's tagging patterns from existing tasks + list tasks the AI can reschedule
-  const distinct = (arr, cap) => [...new Set(arr)].slice(0, cap);
-  const byType = {}, byProj = {};
-  (tasks || []).forEach(t => {
-    if (!t || !t.name) return;
-    if (t.taskType) (byType[t.taskType] = byType[t.taskType] || []).push(t.name);
-    (Array.isArray(t.project) ? t.project : []).forEach(p => (byProj[p] = byProj[p] || []).push(t.name));
-  });
-  const typeHints = Object.entries(byType).map(([k, v]) => `  ${k}: ${distinct(v, 6).join(", ")}`).join("\n");
-  const projHints = Object.entries(byProj).map(([k, v]) => `  ${k}: ${distinct(v, 5).join(", ")}`).join("\n");
-  const lo = addDays(today, -7), hi = addDays(today, 14);
-  const movable = (tasks || [])
-    .filter(t => t && t.id && t.name && t.date && t.date >= lo && t.date <= hi)
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-    .slice(0, 40);
+  const context = req.body?.context?.version === 1 && req.body.context.today === today
+    ? req.body.context : compactChatContext(tasks, today);
+  const typeHints = Object.entries(context.byType || {}).map(([k,v])=>`  ${k}: ${Array.isArray(v)?v.slice(0,6).join(", "):""}`).join("\n");
+  const projHints = Object.entries(context.byProj || {}).map(([k,v])=>`  ${k}: ${Array.isArray(v)?v.slice(0,5).join(", "):""}`).join("\n");
+  const movable = Array.isArray(context.refs) ? context.refs.slice(0,40) : [];
   const refList = movable.map((t, i) => `  #${i + 1} ${t.name} — ${t.date}${t.tier === "must" ? " 🔥đang ưu tiên" : ""}${t.done ? " (đã xong)" : ""}`).join("\n");
 
   const sys = `Bạn là trợ lý lập kế hoạch thân thiện, tích cực, đồng hành theo tinh thần Công giáo, trò chuyện tiếng Việt với Dat (Matthew) — một người làm VFX/animation.
@@ -134,8 +126,10 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
   if (!anthropicMessages.length) return res.status(200).json({ reply: "Bạn muốn thêm việc gì nào? 😊", tasks: [] });
 
   try {
+    const aiStarted = performance.now();
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(30000),
       headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({ model: MODEL, max_tokens: 1500, system: sys, messages: anthropicMessages }),
     });
@@ -150,9 +144,17 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
       });
     }
     const data = await r.json();
+    res.setHeader("Server-Timing", `ai;dur=${Math.round(performance.now()-aiStarted)}`);
     const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
     const obj = extractJson(text);
-    if (obj) {
+    const validDate = d => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d));
+    const validRef = x => x && Number.isInteger(Number(x.ref)) && Number(x.ref)>=1 && Number(x.ref)<=movable.length;
+    const valid = obj && ["tasks","moves","dones","tiers"].every(k=>obj[k]===undefined||Array.isArray(obj[k]))
+      && (obj.tasks||[]).every(t=>t&&typeof t.name==="string"&&t.name.trim()&&validDate(t.date))
+      && (obj.moves||[]).every(t=>validRef(t)&&validDate(t.date))
+      && (obj.dones||[]).every(t=>validRef(t)&&(t.done===undefined||typeof t.done==="boolean"))
+      && (obj.tiers||[]).every(t=>validRef(t)&&["must","optional"].includes(t.tier));
+    if (valid && data.stop_reason !== "max_tokens") {
       const outTasks = (obj.needsClarification ? [] : (Array.isArray(obj.tasks) ? obj.tasks : []))
         // keep only tasks that at least have a name + a date
         .filter(t => t && t.name && t.date)
@@ -179,7 +181,7 @@ CHỈ trả về DUY NHẤT một JSON hợp lệ (KHÔNG markdown, KHÔNG chữ
       const did = outTasks.length || moves.length || dones.length || tiers.length;
       return res.status(200).json({ reply: obj.reply || (did ? "Đã xong!" : "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!"), tasks: outTasks, moves, dones, tiers, needsClarification: !!obj.needsClarification });
     }
-    return res.status(200).json({ reply: text || "Mình chưa rõ ý bạn lắm, nói lại giúp mình nha!", tasks: [] });
+    return res.status(200).json({ reply: "AI chưa trả về kết quả hợp lệ. Hãy thử lại; chưa có thay đổi nào được lưu.", tasks: [] });
   } catch (e) {
     return res.status(200).json({ reply: "Có lỗi kết nối tới AI. Thử lại nhé!", tasks: [], error: String(e).slice(0, 160) });
   }

@@ -1,3 +1,4 @@
+import Manager from "./GoalWorkspace";
 import { GoalDetail, GoalPicker, GoalDialogStyles, useDialogFocus } from "./GoalDialogs";
 import { selectedWeekBounds } from "../lib/goal-view.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -206,43 +207,6 @@ function Editor({ initial, activeCount, existingGoals, onClose, onSave, embedded
       </div>}
     </div>
   </div>;
-}
-
-function Manager({entry,active:isActive,onClose}) {
-  const p=usePlanner(),ref=useDialogFocus(isActive,onClose);
-  const [selected,setSelected]=useState(entry.goalId||p.goals.find(g=>g.status==='active')?.uid);
-  const [filter,setFilter]=useState(p.goals.find(g=>g.uid===entry.goalId)?.status==='active'||!entry.goalId?'active':'history');
-  const [draft,setDraft]=useState(entry.kind==='createGoal'||entry.kind==='goalEditor'?blankGoal(entry.goal||{}):null);
-  const [failure,setFailure]=useState('');
-  const goal=p.goals.find(g=>g.uid===selected), active=p.goals.filter(g=>g.status==='active');
-  const list=p.goals.filter(g=>filter==='active'?g.status==='active':g.status!=='active');
-  const save=async g=>{
-    if(draft?.id&&!p.goals.some(x=>x.id===draft.id)){setFailure('Goal không còn khả dụng.');return false;}
-    let input=g;
-    if(draft?.id){input={id:draft.id};for(const field of ['title','emoji','deadline','weeklyOutcome','milestones'])if(JSON.stringify(g[field])!==JSON.stringify(draft[field]))input[field]=g[field];if(input.milestones)input.milestoneBase=draft.milestones;}
-    const ok=await p.saveGoal(input);
-    if(ok){setSelected(g.uid);setDraft(null);}return ok;
-  };
-  const patch=async changes=>{setFailure('');if(!await p.saveGoal({id:goal.id,...changes}))setFailure('Chưa lưu được. Vui lòng thử lại.');};
-  return <div className="wp-goal-overlay"><section ref={ref} role="dialog" aria-modal="true" aria-label="Quản lý Goals" tabIndex={-1} className="wp-goal-sheet goal-management">
-    <header className="wp-goal-sheet-head"><div><span className="eyebrow">90 NGÀY</span><h2>Quản lý Goals</h2></div><button aria-label="Đóng" onClick={onClose}>×</button></header>
-    <PlannerSyncNotice/>
-    <div className="goal-management-layout"><aside>
-      <nav aria-label="Trạng thái Goals"><button disabled={!!draft} aria-pressed={filter==='active'} onClick={()=>setFilter('active')}>Đang theo đuổi</button><button disabled={!!draft} aria-pressed={filter==='history'} onClick={()=>setFilter('history')}>History</button></nav>
-      <div className="goal-management-list">{list.map(g=><button key={g.uid} disabled={!!draft} aria-pressed={selected===g.uid&&!draft} onClick={()=>{setSelected(g.uid);setDraft(null);setFailure('');}}><span>{g.emoji||'🎯'}</span><span><b>{g.title}</b><small>{milestoneProgress(g)}% · {g.status==='active'?'Đang theo đuổi':'History'}</small></span></button>)}</div>
-      {!list.length&&<p>Chưa có Goal trong nhóm này.</p>}
-      <button disabled={!!draft||active.length>=3||!!p.goalsError} onClick={()=>setDraft(blankGoal())}>＋ Tạo Goal</button>
-    </aside><main>
-      {draft?<Editor key={draft.uid} embedded initial={draft} activeCount={active.length} existingGoals={p.goals} onClose={()=>setDraft(null)} onSave={save}/>:
-      goal?<><header className="goal-selected-heading"><span>{goal.emoji||'🎯'}</span><h2>{goal.title}</h2></header>
-        <div className="goal-management-actions"><button onClick={()=>setDraft(blankGoal(goal))}>Sửa Goal</button>
-        {goal.status==='active'?<><button onClick={()=>patch({status:'archived',archivedAt:localIso()})}>Archive</button><button disabled={!milestoneState(goal).complete} onClick={()=>patch({status:'achieved',achievedAt:localIso()})}>✓ Hoàn thành Goal</button></>:<button disabled={active.length>=3} onClick={()=>patch({status:'active',archivedAt:null,achievedAt:null})}>Khôi phục</button>}</div>
-        {failure&&<p role="alert">{failure}</p>}
-        <div className="goal-management-checks">{goal.milestones?.map(m=><label key={m.id}><input type="checkbox" checked={!!m.done} onChange={()=>patch({milestone:{id:m.id,done:!m.done}})}/><span>{m.text}</span></label>)}</div>
-        <GoalDetail embedded key={goal.uid} entry={{goalId:goal.uid}} active={isActive}/>
-      </>:<p>Chọn một Goal hoặc tạo Goal mới.</p>}
-    </main></div>
-  </section></div>;
 }
 
 export default function GoalsPanel() {
