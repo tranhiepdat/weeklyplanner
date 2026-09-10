@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { usePlanner, PlannerSyncNotice } from './PlannerProvider';
 import { GoalDetail, useDialogFocus } from './GoalDialogs';
 import { calendarDay, selectedWeekBounds } from '../lib/goal-view';
+const pendingDrafts = new Map();
+const editable = g => JSON.stringify([g?.title||'',g?.emoji||'',g?.deadline||'',g?.weeklyOutcome||'',g?.milestones||[]]);
 const dateLabel = d => d ? d.split('-').reverse().join('/') : 'Chưa đặt hạn';
 const fresh = () => ({uid:crypto.randomUUID(),title:'',emoji:'🎯',status:'active',deadline:calendarDay(new Date(Date.now()+90*86400000)),weeklyOutcome:'',milestones:[{id:crypto.randomUUID(),text:'',done:false}]});
 function EditableText(props) {
@@ -22,27 +24,42 @@ export default function GoalWorkspace({entry,active,onClose}) {
   const [weekStart,weekEnd]=selectedWeekBounds(p.weekMonday);
   const [selected,select]=useState(entry.goalId||p.goals.find(g=>g.status==='active')?.uid);
   const [filter,setFilter]=useState(!entry.goalId&&entry.kind!=='createGoal'?'active':p.goals.find(g=>g.uid===entry.goalId)?.status==='active'||!entry.goalId?'active':'history');
-  const [draft,setDraft]=useState(entry.kind==='createGoal'?fresh():null),[base,setBase]=useState(null);
-  const [saving,setSaving]=useState(false),[error,setError]=useState(''),[leave,setLeave]=useState(null),[celebrate,setCelebrate]=useState(false);
+  const [draft,setDraft]=useState(entry.kind==='createGoal'?(pendingDrafts.get('new')?.draft||fresh()):entry.goalId?pendingDrafts.get(entry.goalId)?.draft||null:null),[base,setBase]=useState(pendingDrafts.get(entry.goalId)?.base||null);
+  const [saving,setSaving]=useState(false),[error,setError]=useState(''),[celebrate,setCelebrate]=useState(false);
   const goal=p.goals.find(g=>g.uid===selected),shown=draft||goal;
-  const dirty=!!draft;
-  const navigate=action=>{if(saving)return;if(dirty)setLeave(()=>action);else action();};
+  const [aiPrompt,setAiPrompt]=useState(pendingDrafts.get('new')?.prompt||''),[aiBusy,setAiBusy]=useState(false);
+  const aiRequest=useRef(null);
+  useEffect(()=>()=>aiRequest.current?.abort(),[]);
+  const dirty=!!draft&&(draft.id?editable(draft)!==editable(base):!!(draft.title.trim()||draft.weeklyOutcome.trim()||draft.milestones.some(m=>m.text.trim())));
+  const draftKey=draft?.id?draft.uid:'new';
+  const navigate=action=>{if(saving)return;aiRequest.current?.abort();setAiBusy(false);if(draft){if(dirty||!draft.id)pendingDrafts.set(draftKey,{draft,base,prompt:aiPrompt});else pendingDrafts.delete(draftKey);}setDraft(null);setBase(null);setError('');action();};
+  const startCreate=()=>navigate(()=>{setOverview(false);select(undefined);setDraft(pendingDrafts.get('new')?.draft||fresh());setAiPrompt(pendingDrafts.get('new')?.prompt||'');});
+  const buildAi=async()=>{
+    if(!aiPrompt.trim()||aiBusy)return;
+    const controller=new AbortController();aiRequest.current=controller;setAiBusy(true);setError('');
+    try{
+      const r=await fetch('/api/goals-ai',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({prompt:aiPrompt.trim(),activeGoals:p.goals.filter(g=>g.status==='active').map(g=>({title:g.title,deadline:g.deadline}))})});
+      const data=await r.json();if(!r.ok||!data.goal?.title||!Array.isArray(data.goal.milestones)||!data.goal.milestones.length)throw new Error(data.error||'AI chưa tạo được Goal. Thử lại nhé.');
+      if(controller.signal.aborted)return;
+      const g=data.goal;setDraft({...fresh(),title:g.title,emoji:g.emoji||'🎯',deadline:g.deadline||fresh().deadline,weeklyOutcome:g.weeklyOutcome||'',milestones:g.milestones.slice(0,5).map(m=>({id:crypto.randomUUID(),text:typeof m==='string'?m:m.text||'',done:false}))});
+    }catch(e){if(!controller.signal.aborted)setError(e.message||'Chưa kết nối được AI. Thử lại nhé.');}finally{if(!controller.signal.aborted)setAiBusy(false);}
+  };
   const ref=useDialogFocus(active,()=>navigate(onClose));
   const edit=patch=>{if(saving)return;if(!draft)setBase(goal);setDraft(d=>({...d||goal,...patch}));};
   const save=async()=>{
-    if(!draft)return true;
+    if(!draft||!dirty)return true;
     if(!draft.title.trim()||!draft.deadline||!draft.milestones.length||draft.milestones.some(m=>!m.text.trim())){setError('Điền tên, deadline và nội dung milestones trước khi lưu.');return false;}
     if(draft.id&&!p.goals.some(g=>g.id===draft.id)){setError('Goal đã bị xóa từ thiết bị khác.');return false;}
     const input=draft.id?{id:draft.id}:draft;
     if(draft.id){for(const k of ['title','emoji','deadline','weeklyOutcome','milestones'])if(JSON.stringify(draft[k])!==JSON.stringify(base[k]))input[k]=draft[k];if(input.milestones)input.milestoneBase=base.milestones;}
     setSaving(true);setError('');const ok=await p.saveGoal(input);setSaving(false);
-    if(ok){select(draft.uid);setDraft(null);setBase(null);}else setError('Chưa lưu được. Bản nháp vẫn được giữ; hãy thử lại.');return ok;
+    if(ok){pendingDrafts.delete(draftKey);select(draft.uid);setDraft(null);setBase(null);}else setError('Chưa lưu được. Bản nháp vẫn được giữ; hãy thử lại.');return ok;
   };
   const status=async value=>{setSaving(true);setError('');const ok=await p.saveGoal({id:goal.id,status:value,achievedAt:value==='achieved'?calendarDay(new Date()):null,archivedAt:value==='archived'?calendarDay(new Date()):null});setSaving(false);if(ok){setFilter(value==='active'?'active':'history');setCelebrate(value==='achieved');}else setError('Chưa lưu được trạng thái Goal. Hãy thử lại.');};
   const list=p.goals.filter(g=>filter==='all'||(filter==='active'?g.status==='active':g.status!=='active'));
   useEffect(()=>{if(!selected&&!draft&&list.length)select(list[0].uid);},[selected,draft,p.goals,filter]);
-  const choose=uid=>navigate(()=>{setOverview(false);select(uid);setCelebrate(false);setError('');});
-  const changeFilter=value=>navigate(()=>{setFilter(value);select(p.goals.find(g=>value==='all'||(value==='active'?g.status==='active':g.status!=='active'))?.uid);});
+  const choose=uid=>navigate(()=>{setOverview(false);select(uid);const cached=pendingDrafts.get(uid);setDraft(cached?.draft||null);setBase(cached?.base||null);setCelebrate(false);});
+  const changeFilter=value=>navigate(()=>{setOverview(true);setFilter(value);});
   const ms=shown?.milestones||[],done=ms.filter(m=>m.done).length,percent=ms.length?Math.round(done/ms.length*100):0;
   const days=shown?.deadline?Math.round((new Date(shown.deadline+'T12:00:00')-new Date(calendarDay(new Date())+'T12:00:00'))/86400000):null;
   const updateMilestone=(id,patch)=>edit({milestones:ms.map(m=>m.id===id?{...m,...patch}:m)});
@@ -53,7 +70,7 @@ export default function GoalWorkspace({entry,active,onClose}) {
       {!overview&&<button className="all-goals-button" aria-label="▦ Tổng quan Goals" onClick={()=>navigate(()=>setOverview(true))}>▦ Tổng quan</button>}
       <select className="mobile-goal-select" aria-label="Chọn Goal" value={selected||''} onChange={e=>choose(e.target.value)}><option value="" disabled>Chọn Goal</option>{list.map(g=><option key={g.uid} value={g.uid}>{g.emoji} {g.title}{g.status==='achieved'?' · 🏆 Đã đạt':''}</option>)}</select>
       <div className="goal-management-list">{list.map(g=><button key={g.uid} aria-pressed={g.uid===selected} onClick={()=>choose(g.uid)}><span>{g.emoji}</span><span><b>{g.title}</b><small>{g.status==='achieved'?'🏆 Đã đạt':g.status==='archived'?'Đã lưu trữ':`${g.milestones.filter(m=>m.done).length}/${g.milestones.length} milestones`}</small></span></button>)}</div>
-      {!list.length&&<p>Chưa có Goal trong nhóm này.</p>}<button disabled={saving||p.goals.filter(g=>g.status==='active').length>=3||!!p.goalsError} onClick={()=>navigate(()=>{setOverview(false);setDraft(fresh());setBase(null);})}>＋ Tạo Goal</button>
+      {!list.length&&<p>Chưa có Goal trong nhóm này.</p>}<button disabled={saving||p.goals.filter(g=>g.status==='active').length>=3||!!p.goalsError} onClick={startCreate}>＋ Tạo Goal</button>
     </aside><main>{overview?<>
       <div className="overview-intro"><strong>{list.length} mục tiêu{filter==='active'?' đang theo đuổi':''}</strong><span>Tuần {dateLabel(weekStart)} – {dateLabel(weekEnd)}</span></div>
       <div className="all-goal-cards">{list.map(g=>{
@@ -73,6 +90,8 @@ export default function GoalWorkspace({entry,active,onClose}) {
         </article>;
       })}</div>{!list.length&&<div className="workspace-empty">Chưa có Goal trong nhóm này.</div>}
     </>:shown?<>
+      {draft&&!draft.id&&<section className="goal-ai-create"><h3>✨ Tạo Goal bằng AI</h3><label>Mô tả điều bạn muốn đạt<textarea aria-label="Mô tả Goal cho AI" value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} placeholder="Ví dụ: đạt IELTS 7.0 trong 3 tháng" disabled={aiBusy}/></label><div><small>AI tạo bản nháp để bạn chỉnh sửa và lưu.</small><button className="workspace-primary" onClick={buildAi} disabled={aiBusy||!aiPrompt.trim()}>{aiBusy?'Đang tạo bản nháp…':'✨ Tạo bản nháp bằng AI'}</button></div></section>}
+
       <div className="goal-editor-grid"><section className="goal-info-card"><header className="editor-section-heading"><h3>Thông tin Goal</h3><span>Sửa trực tiếp trong các ô</span></header>
       <div className="goal-status">{shown.status==='achieved'?'🏆 Đã đạt Goal':shown.status==='archived'?'Đã lưu trữ':'● Đang theo đuổi'}</div>
       <div className="inline-goal-title"><label className="emoji-field"><span>Biểu tượng</span><input aria-label="Emoji Goal" value={shown.emoji} onChange={e=>edit({emoji:e.target.value})} disabled={saving}/></label><label className="title-field"><span>Tên Goal <i aria-hidden="true">✎</i></span><EditableText aria-label="Tên Goal" placeholder="Tên Goal của bạn" value={shown.title} onChange={e=>edit({title:e.target.value})} disabled={saving}/></label></div>
@@ -86,7 +105,7 @@ export default function GoalWorkspace({entry,active,onClose}) {
       {goal&&(!draft||draft.id)&&<GoalDetail embedded key={goal.uid} entry={{goalId:goal.uid}} active={active}/>}
     </>:<div className="workspace-empty">🎯<h3>Bắt đầu với điều có ý nghĩa với bạn.</h3><p>Chọn một Goal hoặc tạo Goal mới.</p></div>}</main></div></div>
     {error&&<p className="workspace-error" role="alert">{error}</p>}
-    {leave?<footer className="workspace-save" role="alert"><span>Bạn có thay đổi chưa lưu.</span><button disabled={saving} onClick={()=>setLeave(null)}>Ở lại</button><button disabled={saving} onClick={()=>{const action=leave;setLeave(null);setDraft(null);setBase(null);action();}}>Bỏ thay đổi</button><button className="workspace-primary" disabled={saving} onClick={async()=>{if(await save()){const action=leave;setLeave(null);action();}}}>Lưu và tiếp tục</button></footer>:dirty&&<footer className="workspace-save"><span>{saving?'Đang lưu…':'Có thay đổi chưa lưu'}</span><button disabled={saving} onClick={()=>{setDraft(null);setBase(null);setError('');}}>Hủy</button><button className="workspace-primary" disabled={saving} onClick={save}>Lưu thay đổi</button></footer>}
+    {dirty&&<footer className="workspace-save"><span>{saving?'Đang lưu…':'Có thay đổi chưa lưu · nháp được giữ khi đóng'}</span><button disabled={saving} onClick={()=>{pendingDrafts.delete(draftKey);setDraft(draft.id?null:fresh());setBase(null);setError('');}}>Hủy</button><button className="workspace-primary" disabled={saving||aiBusy} onClick={save}>Lưu thay đổi</button></footer>}
     <GoalWorkspaceStyles/>
 
   </section></div>;

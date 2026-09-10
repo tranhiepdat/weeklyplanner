@@ -82,6 +82,8 @@ export default function GoalWorkspaceStyles() {
 }
 
 .goal-workspace .goal-task-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:8px 0 12px;font-size:.72rem;color:var(--g-muted)}.goal-workspace .goal-task-toolbar nav{order:-1;margin:0}.goal-workspace .goal-task-toolbar>span:last-child{margin-left:auto}.goal-workspace .goal-week-columns{align-items:start}.goal-workspace .goal-day-empty{margin:10px 0 2px}
+
+.goal-workspace .goal-ai-create{padding:14px;margin-bottom:14px;border:1px var(--editor-border) var(--g-border);border-radius:var(--editor-radius);background:var(--g-bg)}.goal-workspace .goal-ai-create h3{font-size:1rem;margin:0 0 10px}.goal-workspace .goal-ai-create label{display:block;font-size:.8rem}.goal-workspace .goal-ai-create textarea{display:block;width:100%;min-height:72px;margin:6px 0 10px}.goal-workspace .goal-ai-create>div{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.goal-workspace .goal-ai-create small{font-size:.72rem;color:var(--g-muted)}
 @media(prefers-reduced-motion:reduce){.goal-workspace summary{animation:none!important;transition:none!important}.goal-workspace button,.goal-workspace .milestone-track i{transition:none}.goal-achievement.celebrate{animation:none}}
 `}</style>;
 }

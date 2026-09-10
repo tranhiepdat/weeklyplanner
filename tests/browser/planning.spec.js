@@ -251,7 +251,7 @@ test('one management screen edits goals inline and preserves drafts during polli
 });
 
 
-test('goal draft guard, milestone progress, achievement and mobile days',async({browser})=>{
+test('goal draft survives closing, milestone progress, achievement and mobile days',async({browser})=>{
  const s=fixture(),d=await device(browser,s),p=d.page;
  await p.locator('.wp-goal-row').first().click();
  const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
@@ -259,7 +259,7 @@ test('goal draft guard, milestone progress, achievement and mobile days',async({
  await expect(m.getByRole('progressbar')).toHaveAttribute('aria-valuenow','100');
  expect(s.goals[0].milestones[0].done).toBe(false);
  await m.getByRole('button',{name:'Đóng',exact:true}).click();
- await m.getByRole('button',{name:'Ở lại',exact:true}).click();
+ await expect(m).toHaveCount(0);await p.locator('.wp-goal-row').first().click();await expect(m.getByRole('checkbox',{name:'Hoàn thành milestone 1',exact:true})).toBeChecked();
  await m.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();
  await expect(m.getByRole('button',{name:'Đánh dấu đạt Goal',exact:true})).toBeVisible();
  await m.getByRole('button',{name:'Đánh dấu đạt Goal',exact:true}).click();
@@ -359,7 +359,7 @@ test('Manage defaults to active goals with compact cards and explicit actions',a
  await expect(m.getByRole('textbox',{name:'Tên Goal',exact:true})).toBeVisible();
  await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft');
  await m.getByRole('button',{name:'▦ Tổng quan Goals',exact:true}).click();
- await m.getByRole('button',{name:'Bỏ thay đổi',exact:true}).click();
+
  await expect(m.locator('.goal-summary-card')).toHaveCount(2);
  expect(s.goals[0].title).toBe('Learn');
  await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'History',exact:true}).click();
@@ -415,5 +415,27 @@ test('mobile Manage shows unfinished tasks across the week and themed keyboard f
  const disclosure=m.locator('summary').first();await disclosure.focus();await disclosure.press('Enter');
  await expect(disclosure).toHaveClass(/btn-press/);await expect(disclosure).toHaveCSS('animation-name','doughPress');
  await p.emulateMedia({reducedMotion:'reduce'});await disclosure.press('Enter');await expect(disclosure).toHaveCSS('animation-name','none');
+ expect(d.errors).toEqual([]);await d.context.close();
+});
+
+
+test('Goal navigation keeps drafts, X closes directly, and AI creation is reviewable',async({browser})=>{
+ const s=fixture();s.goals.push({...s.goals[0],id:'archived',uid:'archived',title:'Past goal',status:'archived'});
+ const d=await device(browser,s),p=d.page;await p.locator('.wp-goal-row').first().click();
+ const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true}),title=m.getByRole('textbox',{name:'Tên Goal',exact:true});
+ await title.fill('Draft kept');
+ await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'History',exact:true}).click();
+ await expect(m.locator('.goal-summary-card')).toContainText('Past goal');
+ await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'Tất cả',exact:true}).click();
+ await m.getByRole('button',{name:'Mở Goal Learn',exact:true}).click();await expect(title).toHaveValue('Draft kept');
+ await m.getByRole('button',{name:'Đóng',exact:true}).click();await expect(m).toHaveCount(0);expect(s.goals[0].title).toBe('Learn');
+ await p.locator('.wp-goal-row').first().click();await expect(title).toHaveValue('Draft kept');await title.fill('Learn');
+ await expect(m.getByRole('button',{name:'Lưu thay đổi',exact:true})).toHaveCount(0);
+ await m.getByRole('button',{name:'＋ Tạo Goal',exact:true}).click();
+ let fail=true;await d.context.route('**/api/goals-ai',route=>route.fulfill({status:fail?503:200,contentType:'application/json',body:JSON.stringify(fail?{error:'AI unavailable'}:{goal:{title:'AI Goal',deadline:'2026-12-01',emoji:'🎯',weeklyOutcome:'First result',milestones:[{text:'First AI step'}]}})}));
+ await m.getByRole('textbox',{name:'Mô tả Goal cho AI'}).fill('Learn a new skill');
+ await m.getByRole('button',{name:'✨ Tạo bản nháp bằng AI',exact:true}).click();await expect(m.getByRole('alert')).toContainText('AI unavailable');
+ fail=false;await m.getByRole('button',{name:'✨ Tạo bản nháp bằng AI',exact:true}).click();await expect(title).toHaveValue('AI Goal');expect(s.goals).toHaveLength(3);
+ await m.getByRole('button',{name:'Lưu thay đổi',exact:true}).click();await expect.poll(()=>s.goals.some(g=>g.title==='AI Goal')).toBe(true);
  expect(d.errors).toEqual([]);await d.context.close();
 });
