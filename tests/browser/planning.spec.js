@@ -296,7 +296,9 @@ test('workspace themes and task save bar fit mobile viewport',async({browser})=>
   await p.getByTitle('Đổi giao diện',{exact:true}).click();await p.getByRole('button',{name:new RegExp(label)}).click();await p.clock.fastForward(1000);
   await p.locator('.wp-goal-row').first().click();
   const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
-  await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft title');
+  await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Tên Goal dài để kiểm tra nội dung được xuống dòng đầy đủ trên điện thoại');
+  await m.getByRole('textbox',{name:'Milestone 1',exact:true}).fill('Một milestone dài cần hiển thị đầy đủ để đọc và chỉnh sửa thuận tiện trên màn hình điện thoại nhỏ');
+  expect(await m.getByRole('textbox',{name:'Milestone 1',exact:true}).evaluate(el=>el.scrollHeight<=el.clientHeight+2)).toBe(true);
   const box=await m.boundingBox();expect(box.width).toBeLessThanOrEqual(390);
   await expect(m.getByRole('button',{name:'Lưu thay đổi',exact:true})).toBeInViewport();
   await p.screenshot({animations:'disabled',path:`test-results/goals-${key}-mobile.png`});
