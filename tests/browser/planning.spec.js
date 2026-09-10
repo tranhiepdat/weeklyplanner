@@ -331,3 +331,28 @@ test('chat retries only failed creation without asking AI or duplicating success
  expect(creates.map(t=>t.name)).toEqual(['First','Second','First']);expect(creates[0].clientRequestId).toBe(creates[2].clientRequestId);
  await d.context.close();
 });
+
+
+test('Manage shows every goal and its metrics together with styled edit actions',async({browser})=>{
+ const s=fixture();s.goals.push({...s.goals[0],id:'history',uid:'history',title:'Accomplished',status:'achieved',achievedAt:'2026-09-01',milestones:[{id:'hm',text:'Finished step',done:true}]});
+ const d=await device(browser,s),p=d.page;
+ await p.getByRole('button',{name:'Manage',exact:true}).click();
+ const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+ await expect(m.locator('.goal-summary-card')).toHaveCount(3);
+ await expect(m.getByRole('progressbar')).toHaveCount(3);
+ await expect(m.locator('.summary-metrics')).toHaveCount(3);
+ await expect(m.getByText('Finished step',{exact:true})).toBeVisible();
+ await p.screenshot({animations:'disabled',path:'test-results/all-goals-desktop.png'});
+ await p.setViewportSize({width:390,height:844});
+ await p.screenshot({animations:'disabled',path:'test-results/all-goals-mobile.png'});
+ await m.getByRole('button',{name:'Mở Goal Learn',exact:true}).click();
+ await expect(m.getByRole('textbox',{name:'Tên Goal',exact:true})).toBeVisible();
+ await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Draft');
+ await m.getByRole('button',{name:'▦ Tổng quan Goals',exact:true}).click();
+ await m.getByRole('button',{name:'Bỏ thay đổi',exact:true}).click();
+ await expect(m.locator('.goal-summary-card')).toHaveCount(3);
+ expect(s.goals[0].title).toBe('Learn');
+ await m.getByRole('navigation',{name:'Trạng thái Goals'}).getByRole('button',{name:'History',exact:true}).click();
+ await expect(m.locator('.goal-summary-card')).toHaveCount(1);
+ expect(d.errors).toEqual([]);await d.context.close();
+});
