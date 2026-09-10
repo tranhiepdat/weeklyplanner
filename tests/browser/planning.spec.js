@@ -294,8 +294,15 @@ test('workspace themes and task save bar fit mobile viewport',async({browser})=>
  await p.getByRole('button',{name:'📊 Biểu đồ',exact:true}).click();
  for(const [key,label] of [['light','✝️ Sacred'],['dark','🕹️ Cyber'],['cozy','🧸 Cozy'],['cutie','🎨 Cutie'],['nature','🌿 Nature']]){
   await p.getByTitle('Đổi giao diện',{exact:true}).click();await p.getByRole('button',{name:new RegExp(label)}).click();await p.clock.fastForward(1000);
+  const checkStyle=el=>{const s=getComputedStyle(el);return [s.borderRadius,s.borderTopStyle,s.borderTopWidth,s.backgroundColor];};
+  const plannerCheck=await p.locator('.task-row .check:not(.on)').first().evaluate(checkStyle);
   await p.locator('.wp-goal-row').first().click();
   const m=p.getByRole('dialog',{name:'Quản lý Goals',exact:true});
+  expect(await m.locator('.goal-task-item .check:not(.on)').first().evaluate(checkStyle)).toEqual(plannerCheck);
+  expect(await m.locator('.milestone-step .check:not(.on)').first().evaluate(checkStyle)).toEqual(plannerCheck);
+  await p.setViewportSize({width:1440,height:1000});
+  await p.screenshot({animations:'disabled',path:`test-results/goals-${key}-desktop.png`});
+  await p.setViewportSize({width:390,height:844});
   await m.getByRole('textbox',{name:'Tên Goal',exact:true}).fill('Tên Goal dài để kiểm tra nội dung được xuống dòng đầy đủ trên điện thoại');
   await m.getByRole('textbox',{name:'Milestone 1',exact:true}).fill('Một milestone dài cần hiển thị đầy đủ để đọc và chỉnh sửa thuận tiện trên màn hình điện thoại nhỏ');
   expect(await m.getByRole('textbox',{name:'Milestone 1',exact:true}).evaluate(el=>el.scrollHeight<=el.clientHeight+2)).toBe(true);
@@ -375,15 +382,15 @@ test('Goal task done and undo animate immediately, keep focus and respect reduce
  await expect(row.locator('.goal-task-edit')).toHaveCSS('cursor','pointer');
  let release;s.delayedWrite=new Promise(r=>release=r);
  await checkbox.focus();await checkbox.press('Space');
- await expect(row).toHaveAttribute('data-motion','done');
+ await expect(row).toHaveAttribute('data-motion','done');await expect(row).toHaveClass(/task-rainbow/);
  await expect(checkbox).toBeChecked();await expect(checkbox).toBeFocused();
  expect(s.tasks[0].done).toBe(false);
  await checkbox.press('Space');
- await expect(row).toHaveAttribute('data-motion','undo');await expect(checkbox).not.toBeChecked();
+ await expect(row).toHaveAttribute('data-motion','undo');await expect(row).toHaveClass(/task-unpop/);await expect(checkbox).not.toBeChecked();
  release();await expect.poll(()=>s.requests.filter(r=>r.path==='/api/update').length).toBe(2);
  await p.clock.fastForward(500);await expect(row).not.toHaveAttribute('data-motion',/done|undo/);
  await p.emulateMedia({reducedMotion:'reduce'});await checkbox.check();
- await expect(row).toHaveCSS('animation-name','none');
+ await expect(row).toHaveCSS('animation-name','none');await expect(row).not.toHaveClass(/task-rainbow|task-settle/);
  await expect.poll(()=>s.tasks[0].done).toBe(true);
  await m.getByRole('button',{name:'Sửa Review proposal',exact:true}).click();
  await expect(p.getByRole('dialog',{name:'Chi tiết task',exact:true})).toBeVisible();

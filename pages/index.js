@@ -1,3 +1,4 @@
+import TaskCheck from "../components/TaskCheck";
 import { compactChatContext } from "../lib/chat-context";
 import { GoalTag, GoalLinkButton, useDialogFocus } from "../components/GoalDialogs";
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
@@ -781,13 +782,9 @@ function TaskRow({ task, tier, onToggle, onEdit, onDelete, removing, justDone, j
           transition: dragRef.current.active ? "none" : `transform .26s cubic-bezier(.22,1,.36,1), opacity ${settling ? "1s cubic-bezier(.16,1,.3,1)" : ".5s cubic-bezier(.22,1,.36,1)"}, background .5s cubic-bezier(.22,1,.36,1), box-shadow .45s cubic-bezier(.22,1,.36,1)`,
           touchAction: "pan-y",
         }}>
-        <div role="checkbox" aria-checked={task.done} aria-label={`Hoàn thành ${task.name}`} tabIndex={temporary ? -1 : 0}
-          onKeyDown={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!temporary) onToggle(task.id, !task.done); } }}
-          className={`check ${task.done ? "on" : ""}`}
-          onClick={guardTap(() => onToggle(task.id, !task.done))}
-          style={!task.done ? { borderColor: accent } : undefined}>
-          {task.done ? "✓" : ""}
-        </div>
+        <TaskCheck checked={task.done} label={`Hoàn thành ${task.name}`} disabled={temporary}
+          onChange={guardTap(() => onToggle(task.id, !task.done))}
+          style={!task.done ? { borderColor: accent } : undefined}/>
         <div style={{flex:1,minWidth:0}}><div role="button" aria-label={`${task.done ? "Bỏ hoàn thành" : "Hoàn thành"} ${task.name}`} tabIndex={temporary ? -1 : 0} style={{ flex: 1, cursor: "pointer" }} onClick={guardTap(() => onToggle(task.id, !task.done))}
           onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!temporary) onToggle(task.id, !task.done); } }}>
           <div className="task-name-text" style={{ fontSize: ".9rem", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>

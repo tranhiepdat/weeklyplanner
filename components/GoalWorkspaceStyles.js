@@ -51,6 +51,37 @@ export default function GoalWorkspaceStyles() {
  .goal-workspace .goal-management-layout{grid-template-columns:1fr;gap:14px}.goal-workspace aside{padding:0 0 12px;border-right:0;border-bottom:1px solid var(--g-border)}.goal-workspace .goal-management-list{display:none}.goal-workspace .mobile-goal-select{display:block;width:100%;margin-bottom:10px}.goal-workspace .overview-layout>aside{flex-wrap:wrap;gap:8px;margin-bottom:10px}.goal-workspace .overview-layout nav{flex:1;flex-wrap:nowrap;min-width:0;gap:0}.goal-workspace .overview-layout nav button{padding:6px 8px;font-size:.72rem}.goal-workspace .overview-layout>aside>button:last-child{font-size:.75rem;padding:8px 10px}
  .goal-workspace .overview-intro{align-items:flex-start;flex-direction:column;gap:3px;margin-bottom:10px;font-size:.7rem}.goal-workspace .all-goal-cards{grid-template-columns:1fr;gap:10px}.goal-workspace .goal-summary-card{padding:13px}.goal-workspace .goal-overview{grid-template-columns:1fr}.goal-workspace .title-field textarea{font-size:1.05rem}.goal-workspace .workspace-save{padding:10px 14px calc(10px + env(safe-area-inset-bottom));flex-wrap:wrap}.goal-workspace .workspace-save>span{flex-basis:100%}.goal-workspace .workspace-save button{flex:1}.goal-workspace .goal-ready{flex-direction:column;align-items:flex-start}
 }
+
+/* Detail is an editor with a compact navigation rail and three clear sections. */
+.wp-goal-sheet.goal-management.goal-workspace.is-detail{width:min(1060px,94vw);height:auto}
+.goal-workspace.is-detail .goal-management-layout{display:block}
+.goal-workspace.is-detail .goal-management-layout>aside{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:0 0 12px;margin:0 0 14px;border:0;border-bottom:1px solid var(--g-border)}
+.goal-workspace.is-detail aside nav{margin:0;gap:2px}.goal-workspace.is-detail .goal-management-list{display:none}
+.goal-workspace.is-detail .mobile-goal-select{display:block;flex:1;min-width:150px;max-width:280px;margin:0;min-height:36px}
+.goal-workspace.is-detail .all-goals-button{width:auto;margin:0;font-size:.72rem}.goal-workspace.is-detail aside>button:last-child{margin-left:auto}
+.goal-workspace .goal-editor-grid{display:grid;grid-template-columns:minmax(260px,.85fr) minmax(320px,1.15fr);gap:14px;align-items:start;margin-bottom:18px}
+.goal-workspace{--editor-radius:12px;--editor-border:solid;--editor-shadow:none}
+.goal-workspace .goal-info-card,.goal-workspace .goal-steps-card{padding:14px;border:1px var(--editor-border) var(--g-border);border-radius:var(--editor-radius);background:var(--g-bg);box-shadow:var(--editor-shadow);min-width:0}
+.goal-workspace .editor-section-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:12px;padding-bottom:9px;border-bottom:1px var(--editor-border) var(--g-border)}
+.goal-workspace .editor-section-heading h3{font-size:.95rem;margin:0;font-weight:800}.goal-workspace .editor-section-heading span{font-size:.68rem;color:var(--g-muted)}
+.goal-workspace .goal-overview{grid-template-columns:1fr}.goal-workspace .inline-goal-title{gap:8px;margin-bottom:10px}.goal-workspace .title-field textarea{font-size:1rem}.goal-workspace .goal-status{margin-bottom:10px;font-size:.68rem}
+.goal-workspace .outcome-card textarea{min-height:58px}.goal-workspace .deadline-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px}.goal-workspace .deadline-card>span{grid-column:1/-1}.goal-workspace .deadline-card input{width:100%;min-width:0}.goal-workspace .deadline-card strong{font-size:.7rem}
+.goal-workspace .milestone-section{margin:0}.goal-workspace .milestone-section>header{padding-bottom:9px;border-bottom:1px var(--editor-border) var(--g-border)}
+.goal-workspace .milestone-steps{gap:6px;margin:10px 0}.goal-workspace .milestone-step{padding:5px 0 5px 8px}.goal-workspace .milestone-step>.check{flex:0 0 18px;min-width:18px;cursor:pointer}.goal-workspace .check:focus-visible{outline:2px solid var(--g-a);outline-offset:3px}.goal-workspace .check[aria-disabled=true]{opacity:.5;cursor:default}
+.goal-workspace .milestone-step textarea{padding:6px 8px;font-size:.81rem}.goal-workspace .milestone-step small{margin-bottom:2px}.goal-workspace .goal-management-actions{border-top:1px var(--editor-border) var(--g-border);padding-top:10px;margin:12px 0 0}
+.goal-workspace .goal-calendar{padding-top:14px;border-top:1px var(--editor-border) var(--g-border)}.goal-workspace .goal-calendar>header h3{font-weight:800;margin:0}.goal-workspace .goal-calendar>p{font-size:.72rem;margin:6px 0}.goal-workspace .goal-calendar>nav{margin:8px 0}
+.goal-workspace .goal-day-column{padding:10px;border-style:var(--editor-border);border-radius:var(--editor-radius)}.goal-workspace .goal-day-column>header{padding-bottom:8px}.goal-workspace .goal-task-group{margin-top:10px}.goal-workspace .goal-calendar .goal-task-item{margin-bottom:5px;padding:6px}
+.theme-cozy .goal-workspace{--editor-border:dashed;--editor-radius:12px;--editor-shadow:3px 3px 0 rgba(160,92,44,.13)}
+.theme-cozy .goal-workspace .goal-info-card,.theme-cozy .goal-workspace .goal-steps-card,.theme-cozy .goal-workspace .goal-summary-card{background:#fffaf2;border:1.5px dashed #d8b48c;box-shadow:var(--editor-shadow)}
+.theme-cozy .goal-workspace input,.theme-cozy .goal-workspace textarea,.theme-cozy .goal-workspace select{border-style:dashed}.theme-cozy .goal-workspace button{box-shadow:2px 2px 0 rgba(160,92,44,.18)}
+.theme-cutie .goal-workspace{--editor-radius:20px;--editor-shadow:0 4px 0 rgba(232,155,184,.16)}.theme-nature .goal-workspace{--editor-radius:18px;--editor-shadow:0 3px 0 rgba(111,158,87,.12)}.theme-dark .goal-workspace{--editor-radius:7px;--editor-shadow:inset 0 0 14px rgba(0,255,156,.025)}
+@media(max-width:700px){
+ .wp-goal-sheet.goal-management.goal-workspace.is-detail{width:100%;height:auto}.goal-workspace .goal-editor-grid{grid-template-columns:1fr;gap:10px;margin-bottom:12px}.goal-workspace .goal-info-card,.goal-workspace .goal-steps-card{padding:12px}
+ .goal-workspace.is-detail aside nav{flex:1 0 100%}.goal-workspace.is-detail .mobile-goal-select{max-width:none;flex:1;min-width:120px}.goal-workspace.is-detail .all-goals-button{font-size:.72rem;padding:6px 9px}.goal-workspace.is-detail aside>button:last-child{font-size:.72rem;padding:8px}
+ .goal-workspace .goal-calendar>header{gap:3px}.goal-workspace .goal-calendar>header small{font-size:.7rem}
+}
+
+.goal-workspace .goal-task-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:8px 0 12px;font-size:.72rem;color:var(--g-muted)}.goal-workspace .goal-task-toolbar nav{order:-1;margin:0}.goal-workspace .goal-task-toolbar>span:last-child{margin-left:auto}.goal-workspace .goal-week-columns{align-items:start}.goal-workspace .goal-day-empty{margin:10px 0 2px}
 @media(prefers-reduced-motion:reduce){.goal-workspace button,.goal-workspace .milestone-track i{transition:none}.goal-achievement.celebrate{animation:none}}
 `}</style>;
 }
